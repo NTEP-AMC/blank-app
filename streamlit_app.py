@@ -28,17 +28,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIN ---
-if "auth" not in st.session_state: st.session_state.auth = False
-if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center; color: #1f618d; margin-top: 50px;'>🏥 AMC NTEP Secure Login</h2>", unsafe_allow_html=True)
-    pwd = st.text_input("Password", type="password")
-    if st.button("Access Dashboard", use_container_width=True):
-        if pwd == "AMC@2026": st.session_state.auth = True; st.rerun()
-        else: st.error("Incorrect Password")
-    st.stop()
-
-# --- HEADER (WITH SAFETY FALLBACKS) ---
+# --- HEADER (NO PASSWORD) ---
 def img_to_b64(path):
     try:
         with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
@@ -84,20 +74,18 @@ try:
         df_zone.columns = ['PHI_Map', 'ZONE']
 except: pass
 
-tab1, tab2 = st.tabs(["📊 Master Dashboard", "🔄 Comparison Tracker"])
+tab1, tab2 = st.tabs(["📊 Master Dashboard (Local GitHub Data)", "🔄 Comparison Tracker (Google Drive Data)"])
 
 # ==========================================
-# TAB 1: MASTER
+# TAB 1: MASTER (LOCAL GITHUB DATA)
 # ==========================================
 with tab1:
     files = glob.glob("data/*.xlsx")
     all_data = []
     counts = {"Lab Pending": 0, "Notification": 0, "Co-morbidity": 0, "PMTBMBA": 0}
 
-    # SAFETY NET: Check if data files actually exist
     if not files:
-        st.error("🚨 **CRITICAL ERROR:** No Excel files found! The cloud server cannot find your `data/` folder.")
-        st.info("💡 **How to fix:** You need to upload your `data` folder and `images` folder to your GitHub repository.")
+        st.warning("No Excel files found in your GitHub 'data/' folder. Please upload them to see the Master List.")
     else:
         for f in files:
             if "~$" in f or "zone" in f.lower(): continue
@@ -128,8 +116,7 @@ with tab1:
                     counts["Co-morbidity"] += len(temp)
                 else: continue
                 all_data.append(temp)
-            except Exception as e:
-                st.warning(f"Could not read {f}: {e}")
+            except Exception as e: pass
 
         if all_data:
             df_m = pd.concat(all_data).drop_duplicates()
@@ -150,11 +137,11 @@ with tab1:
             st.dataframe(df_m[cols], use_container_width=True, hide_index=True)
 
 # ==========================================
-# TAB 2: COMPARISON (SMART LATEST ONLY)
+# TAB 2: COMPARISON (GOOGLE DRIVE DATA)
 # ==========================================
 with tab2:
-    st.info("Click the button below to fetch and compare daily data from Google Drive.")
-    if st.button("🔄 Check Latest Drive Upload & Compare", use_container_width=True):
+    st.info("This tracker securely reads your daily Google Drive folders to find new and resolved patients.")
+    if st.button("🔄 Fetch & Compare Drive Data", use_container_width=True):
         if "gcp_service_account" not in st.secrets:
             st.error("🚨 Google Drive Secrets are missing! Please add them in Streamlit App Settings -> Secrets.")
         else:
@@ -208,4 +195,4 @@ with tab2:
                 else: st.error("Need 2 date folders in Drive (Old vs New).")
             except Exception as e: st.error(f"Error connecting to Google Drive: {e}")
 
-st.markdown("<div style='text-align: center; font-size: 11px; margin-top: 30px; color: #888;'>District TB Center AMC | Monitoring Portal v4.2</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 11px; margin-top: 30px; color: #888;'>District TB Center AMC | Monitoring Portal v5.0</div>", unsafe_allow_html=True)
