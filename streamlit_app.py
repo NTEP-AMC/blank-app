@@ -93,7 +93,6 @@ def process_data():
 
         base_cols = ['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
         
-        # --- OUTCOME ADDED TO FUNCTION ---
         def finalize_df(filtered_df, id_let, name_let, tu_let, phi_let, type_let, diag_let, init_let, out_let, tr_out_let=None):
             if filtered_df.empty: return pd.DataFrame(columns=base_cols)
             
@@ -122,25 +121,34 @@ def process_data():
             site_c = get_col(df, 'F').str.lower()
             is_pulm = site_c.str.contains("pulmonary", na=False) & ~site_c.str.contains("extra", na=False)
             is_udst = is_pulm & is_blank(get_col(df, 'AQ')) & is_blank(get_col(df, 'AU')) & is_blank(get_col(df, 'BC'))
-            df_udst = finalize_df(df[is_udst], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE') # AE added
+            df_udst = finalize_df(df[is_udst], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE')
 
             has_rif = get_col(df, 'AR').str.lower().str.contains("rif resistance detected", na=False) | \
                       get_col(df, 'AZ').str.lower().str.contains("rif resistance detected", na=False) | \
                       get_col(df, 'BD').str.lower().str.contains("rif resistance detected", na=False)
             has_inh = get_col(df, 'DO').str.lower().str.contains("inh resistance", na=False)
             is_slpa = is_pulm & (has_rif | has_inh) & is_blank(get_col(df, 'BH'))
-            df_slpa = finalize_df(df[is_slpa], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE') # AE added
+            df_slpa = finalize_df(df[is_slpa], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE')
 
         elif file_type == "NOTIF":
             out_c = get_col(df, 'BK')
             init_c = get_col(df, 'BM')
+            
+            # --- AUTO DATE LOGIC FOR OUTCOME PENDING ---
+            out_date_c = pd.to_datetime(get_col(df, 'CB'), errors='coerce') 
+            today_date = pd.Timestamp(date.today()) # આ કોડ રોજ આપોઆપ આજની તારીખ લઇ લેશે
+            
             reg_c = pd.Series([""] * len(df))
             for col in df.columns:
                 if "regimen" in str(col).lower():
                     reg_c = df[col].astype(str).str.upper().str.replace(" ", "")
                     break
-            df_npo = finalize_df(df[is_blank(init_c) & is_blank(out_c)], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK') # BK added
-            df_op = finalize_df(df[is_blank(out_c) & (reg_c == "2HRZE/4HRE")], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK') # BK added
+                    
+            df_npo = finalize_df(df[is_blank(init_c) & is_blank(out_c)], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK')
+            
+            # Condition: Outcome is Blank + Regimen matches + Date is between Lowest and Today (<= Today)
+            condition_op = is_blank(out_c) & (reg_c == "2HRZE/4HRE") & (out_date_c <= today_date)
+            df_op = finalize_df(df[condition_op], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK')
 
         elif file_type == "CONSENT":
             df_cp = finalize_df(df[is_blank(get_col(df, 'Y'))], 'I', 'J', 'V', 'W', 'X', 'G', None, None, None)
@@ -150,11 +158,11 @@ def process_data():
             al, ak, ai = get_col(df, 'AL').str.strip(), get_col(df, 'AK').str.strip(), get_col(df, 'AI').str.strip()
             is_hiv_reactive = ah.isin(["reactive", "positive"])
 
-            df_adt = finalize_df(df[(am == "diabetic") & is_blank(an)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
-            df_rbs = finalize_df(df[am.isin(["unknown", ""]) | is_blank(am)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
-            df_art = finalize_df(df[is_hiv_reactive & is_blank(al)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
-            df_cpt = finalize_df(df[is_hiv_reactive & is_blank(ak)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
-            df_hiv = finalize_df(df[is_blank(ai)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
+            df_adt = finalize_df(df[(am == "diabetic") & is_blank(an)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U')
+            df_rbs = finalize_df(df[am.isin(["unknown", ""]) | is_blank(am)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U')
+            df_art = finalize_df(df[is_hiv_reactive & is_blank(al)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U')
+            df_cpt = finalize_df(df[is_hiv_reactive & is_blank(ak)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U')
+            df_hiv = finalize_df(df[is_blank(ai)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U')
 
     all_raw_dfs = [df_slpa, df_udst, df_npo, df_op, df_cp, df_adt, df_rbs, df_art, df_cpt, df_hiv]
     for d in all_raw_dfs:
@@ -193,7 +201,7 @@ if pieces:
     df_master = all_pendencies.groupby('Episode ID').agg({
         'Patient Name': 'first', 'ZONE': 'first', 'TB Unit': 'first', 'PHI': 'first',
         'Facility Type': 'first', 'Diagnosis Date': 'first', 'Initiation Date': 'first', 'Outcome Date': 'first',
-        'Treatment Outcome': 'first', # Outcome aggregated
+        'Treatment Outcome': 'first',
         'Pending Status': lambda x: " + ".join(x.unique())
     }).reset_index()
 else:
