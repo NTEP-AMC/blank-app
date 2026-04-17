@@ -1,14 +1,10 @@
 import streamlit as st
 import pandas as pd
-import json
-import io
+import glob
+import os
+import base64
 
-# --- GOOGLE DRIVE TOOLS ---
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-
-st.set_page_config(page_title="AMC NTEP", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AMC NTEP Master Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -16,155 +12,137 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
-    .block-container { padding-top: 1rem; max-width: 1200px; }
-    .big-font { font-size: 18px !important; font-weight: bold; color: #333; }
-    .report-mini-box { background-color: #eaf2f8; border-left: 5px solid #1f618d; padding: 8px 15px; border-radius: 5px; margin: 5px; text-align: center; display: inline-block; min-width: 120px; font-size: 14px; font-weight: bold; color: #1f618d; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1100px; }
+    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-weight: bold; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { background-color: #f0f2f6; border-radius: 5px 5px 0 0; padding: 10px 20px; font-weight: bold; }
+    .stTabs [aria-selected="true"] { background-color: #1f618d !important; color: white !important; }
+    .login-box { border: 1px solid #ddd; padding: 30px; border-radius: 10px; background-color: #f9f9f9; text-align: center; margin-top: 50px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h2 style='text-align: center; color: #1f618d; border-bottom: 2px solid #1f618d; padding-bottom: 10px;'>🏥 AMC NTEP | Unified Monitoring Dashboard</h2>", unsafe_allow_html=True)
+# --- LOGIN SCREEN ---
+if "auth" not in st.session_state: st.session_state.auth = False
 
-# --- UTILS & CARDS ---
-def draw_card(title, value, color):
+if not st.session_state.auth:
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color: #1f618d;'>🏥 AMC NTEP Login</h2>", unsafe_allow_html=True)
+        pwd = st.text_input("Enter Dashboard Password", type="password")
+        if st.button("Login", use_container_width=True):
+            if pwd == "AMC@2026": 
+                st.session_state.auth = True
+                st.rerun()
+            else: 
+                st.error("Incorrect Password")
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+# --- HEADER & IMAGES ---
+def img_to_b64(img_path):
+    try:
+        with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
+    except: return ""
+
+src_amc = f"data:image/png;base64,{img_to_b64('images/amc.png')}"
+src_ntep = f"data:image/jpeg;base64,{img_to_b64('images/ntep.jpg')}"
+src_h1 = f"data:image/jpeg;base64,{img_to_b64('images/h1.jpg')}"
+src_h2 = f"data:image/jpeg;base64,{img_to_b64('images/h2.jpg')}"
+
+st.markdown(f"""
+<div style='display: flex; justify-content: space-between; align-items: center; padding: 0 10px;'>
+    <img src='{src_amc}' height='70'>
+    <h3 style='margin:0; color:#333; font-weight:900;'>AMC <span style='color:#ccc;'>|</span> NTEP</h3>
+    <img src='{src_ntep}' height='70'>
+</div>
+<div style='background-color: #1f618d; color: white; text-align: center; padding: 10px; font-weight: bold; border-radius: 5px; margin: 15px 0;'>
+   TB Monitoring Dashboard - Ahmedabad
+</div>
+<div style='display: flex; gap: 8px; margin-bottom: 20px;'>
+    <img src='{src_h1}' style='width: 50%; height: 120px; object-fit: cover; border-radius: 5px;'>
+    <img src='{src_h2}' style='width: 50%; height: 120px; object-fit: cover; border-radius: 5px;'>
+</div>
+""", unsafe_allow_html=True)
+
+# --- HELPERS ---
+def cx(col_letter):
+    num = 0
+    for c in col_letter.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
+    return num - 1
+
+def draw_card(title, value, color, icon):
     return f"""
-    <div style="background-color: {color}; border-radius: 5px; padding: 15px; color: white; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-        <div style="font-size: 14px; font-weight: bold; text-transform: uppercase;">{title}</div>
-        <div style="font-size: 36px; font-weight: 900; margin-top: 5px;">{value}</div>
+    <div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 20px;">{icon}</div>
+        <div style="font-size: 11px; font-weight: bold; text-transform: uppercase;">{title}</div>
+        <div style="font-size: 28px; font-weight: 900; margin-top: 5px;">{value}</div>
     </div>
     """
 
-def get_credentials():
-    secret_val = st.secrets["gcp_service_account"]
-    if isinstance(secret_val, str):
-        cleaned_str = secret_val.replace("'", '"')
-        return json.loads(cleaned_str)
-    return dict(secret_val)
+tab1, tab2 = st.tabs(["📊 Master Dashboard (Local)", "🔄 Daily Comparison (Coming Soon)"])
 
-# --- SMART COLUMN EXTRACTOR ---
-# This searches for keywords in the header instead of relying on column letters
-def safe_extract(df, keywords):
-    for kw in keywords:
-        matches = [col for col in df.columns if kw.lower() in str(col).lower()]
-        if matches: return df[matches[0]].astype(str).replace('nan', '')
-    return pd.Series([""] * len(df))
-
-@st.cache_data(ttl=43200, show_spinner=False)
-def get_drive_data(f_id, _creds_info):
-    creds = service_account.Credentials.from_service_account_info(_creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly'])
-    service = build('drive', 'v3', credentials=creds)
-    
-    items = service.files().list(q=f"'{f_id}' in parents and name contains '.xlsx'", fields="files(id, name)").execute().get('files', [])
+# ==========================================
+# TAB 1: MASTER DASHBOARD (OLD STABLE LOGIC)
+# ==========================================
+with tab1:
+    files = glob.glob("data/*.xlsx")
     all_rows = []
     
-    for it in items:
-        req = service.files().get_media(fileId=it['id'])
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, req)
-        done = False
-        while not done: _, done = downloader.next_chunk()
-        fh.seek(0)
-        
-        # Read excel, ensuring header is read correctly
-        df = pd.read_excel(fh)
-        
-        # Identify Report Type by width (Nikshay standard)
-        if len(df.columns) > 19: r_type = "Lab Pending"
-        elif len(df.columns) > 12: r_type = "Notification"
-        else: r_type = "Co-morbidity"
-        
-        # Smart Extraction
-        ep_id = safe_extract(df, ['episode'])
-        name = safe_extract(df, ['patient name', 'patient_name', 'name'])
-        phi = safe_extract(df, ['phi', 'health facility', 'facility'])
-        tbu = safe_extract(df, ['tbu', 'tb unit', 'unit'])
-        diag_date = safe_extract(df, ['diagnosis date', 'diagnosis_date', 'initiation'])
-        outcome = safe_extract(df, ['outcome'])
-        
-        temp_df = pd.DataFrame({
-            'EPISODE ID': ep_id, 'PATIENT NAME': name, 'PHI': phi, 
-            'TB UNIT': tbu, 'DIAGNOSIS DATE': diag_date, 'OUTCOME': outcome, 
-            'REGISTER': r_type
-        })
-        all_rows.append(temp_df)
-        
-    if all_rows:
-        return pd.concat(all_rows).drop_duplicates(subset=['EPISODE ID'])
-    return pd.DataFrame()
-
-# --- MAIN UI ---
-col_btn1, col_btn2 = st.columns([4, 1])
-with col_btn1:
-    run_btn = st.button("🚀 FETCH AND ANALYZE TODAY'S DATA", use_container_width=True, type="primary")
-with col_btn2:
-    if st.button("🗑️ Clear Cache", use_container_width=True):
-        st.cache_data.clear()
-        st.success("Memory cleared!")
-
-if run_btn:
-    try:
-        creds_info = get_credentials()
-        creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly'])
-        service = build('drive', 'v3', credentials=creds)
-        
-        res = service.files().list(q="name='AMC_NTEP_Data' and mimeType='application/vnd.google-apps.folder'", fields="files(id)").execute()
-        p_id = res.get('files', [{}])[0].get('id')
-        subs = service.files().list(q=f"'{p_id}' in parents", fields="files(id, name)", orderBy="name").execute().get('files', [])
-        
-        if len(subs) >= 2:
-            old_f, new_f = subs[-2], subs[-1]
-            
-            with st.status(f"🔄 Reading data from {new_f['name']}...", expanded=True) as status:
-                df_old = get_drive_data(old_f['id'], creds_info)
-                df_new = get_drive_data(new_f['id'], creds_info)
-                status.update(label="✅ Data mapping and comparison complete!", state="complete", expanded=False)
+    if not files:
+        st.warning("No files found in the 'data/' folder. Please upload Excel registers to your GitHub repository.")
+    else:
+        for f in files:
+            if "~$" in f or "zone" in f.lower(): continue
+            try:
+                df = pd.read_excel(f)
+                report_name = os.path.basename(f)
                 
-            # Filter logic
-            latest_registers = df_new['REGISTER'].unique()
-            df_old_filtered = df_old[df_old['REGISTER'].isin(latest_registers)]
+                # Check column count to map correctly (Morning logic)
+                if len(df.columns) > 19: # LAB
+                    for _, r in df.iterrows():
+                        all_rows.append({'Episode ID': str(r.iloc[cx('T')]), 'Patient Name': r.iloc[cx('V')], 'PHI': r.iloc[cx('Q')], 'TB Unit': r.iloc[cx('P')], 'Report Type': 'Lab Pending'})
+                elif len(df.columns) > 12: # NOTIFICATION
+                    for _, r in df.iterrows():
+                        all_rows.append({'Episode ID': str(r.iloc[cx('M')]), 'Patient Name': r.iloc[cx('N')], 'PHI': r.iloc[cx('E')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Notification'})
+                elif len(df.columns) > 10: # COMORBIDITY
+                    for _, r in df.iterrows():
+                        all_rows.append({'Episode ID': str(r.iloc[cx('K')]), 'Patient Name': r.iloc[cx('O')], 'PHI': r.iloc[cx('D')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Co-morbidity'})
+            except:
+                pass
+
+        if all_rows:
+            df_master = pd.DataFrame(all_rows).drop_duplicates(subset=['Episode ID'])
             
-            persistent = df_new[df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
-            persistent['STATUS'] = "🔴 Persistent"
+            # Top Cards
+            c1, c2 = st.columns(2)
+            with c1: st.markdown(draw_card("Total Unique Patients", len(df_master['Episode ID'].unique()), "#1f618d", "👥"), unsafe_allow_html=True)
+            with c2: st.markdown(draw_card("Total Pendency", len(df_master), "#d35400", "📝"), unsafe_allow_html=True)
+
+            # Filter Section
+            st.write("### 🔎 Filters")
+            f1, f2 = st.columns(2)
+            sel_report = f1.multiselect("Filter by Report Type", df_master['Report Type'].unique())
             
-            new_pat = df_new[~df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
-            new_pat['STATUS'] = "🔵 New Entry"
+            # Clean TB Unit list for filter
+            tbu_list = [str(t) for t in df_master['TB Unit'].unique() if str(t).strip() and str(t) != 'nan']
+            sel_tbu = f2.multiselect("Filter by TB Unit", sorted(tbu_list))
             
-            resolved = df_old_filtered[~df_old_filtered['EPISODE ID'].isin(df_new['EPISODE ID'])].copy()
-            resolved['STATUS'] = "🟢 Resolved"
+            # Apply filters
+            filtered_df = df_master.copy()
+            if sel_report: filtered_df = filtered_df[filtered_df['Report Type'].isin(sel_report)]
+            if sel_tbu: filtered_df = filtered_df[filtered_df['TB Unit'].astype(str).isin(sel_tbu)]
 
-            res_final = pd.concat([persistent, new_pat, resolved])
-            today_active = pd.concat([persistent, new_pat]) # Only active pendency for KPI
-
-            # --- KPI CARDS & MINI BOXES ---
-            c1, c2, c3 = st.columns(3)
-            with c1: st.markdown(draw_card("Total Active Pendency", len(today_active), "#1f618d"), unsafe_allow_html=True)
-            with c2: st.markdown(draw_card("New Today", len(new_pat), "#2980b9"), unsafe_allow_html=True)
-            with c3: st.markdown(draw_card("Resolved Today", len(resolved), "#27ae60"), unsafe_allow_html=True)
-
-            # Generate Report-wise Mini Boxes dynamically
-            counts = today_active['REGISTER'].value_counts().to_dict()
-            html_boxes = "".join([f"<div class='report-mini-box'>{k}: {v}</div>" for k, v in counts.items()])
-            st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'>{html_boxes}</div>", unsafe_allow_html=True)
-
-            st.write("---")
+            st.write("### Patient Line List")
+            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
             
-            # --- FILTERS ---
-            with st.expander("🔎 Filter & Sort Data", expanded=True):
-                f_col1, f_col2, f_col3 = st.columns(3)
-                sel_status = f_col1.multiselect("Filter by Status", res_final['STATUS'].unique(), default=res_final['STATUS'].unique())
-                sel_reg = f_col2.multiselect("Filter by Register", res_final['REGISTER'].unique())
-                
-                # Clean up TBU list for filter (remove blanks)
-                tbu_list = [t for t in res_final['TB UNIT'].unique() if t.strip()]
-                sel_tbu = f_col3.multiselect("Filter by TB Unit", sorted(tbu_list))
+            csv = filtered_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Filtered Data", data=csv, file_name="AMC_Pending_List.csv", mime='text/csv')
 
-            # Apply Filters
-            filtered_df = res_final[res_final['STATUS'].isin(sel_status)]
-            if sel_reg: filtered_df = filtered_df[filtered_df['REGISTER'].isin(sel_reg)]
-            if sel_tbu: filtered_df = filtered_df[filtered_df['TB UNIT'].isin(sel_tbu)]
+# ==========================================
+# TAB 2: PLACEHOLDER
+# ==========================================
+with tab2:
+    st.info("💡 Daily Comparison feature is currently under maintenance. Please use the Master Dashboard to view current pendency.")
 
-            st.write(f"### 📋 Unified Action List ({len(filtered_df)} Patients)")
-            display_cols = ['STATUS', 'TB UNIT', 'PHI', 'EPISODE ID', 'PATIENT NAME', 'DIAGNOSIS DATE', 'OUTCOME', 'REGISTER']
-            st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
-            
-        else: st.error("Need 2 folders in Google Drive to run comparison.")
-    except Exception as e: st.error(f"Error: {e}")
+st.markdown("<div class='amc-footer'>District TB Center Ahmedabad | AMC NTEP</div>", unsafe_allow_html=True)
