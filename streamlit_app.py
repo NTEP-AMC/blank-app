@@ -91,9 +91,10 @@ def process_data():
         df = df[~is_blank(df['Standard_ID'])]
         df = df.drop_duplicates(subset=['Standard_ID'], keep='last')
 
-        base_cols = ['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
+        base_cols = ['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
         
-        def finalize_df(filtered_df, id_let, name_let, tu_let, phi_let, type_let, diag_let, init_let, out_let):
+        # --- OUTCOME ADDED TO FUNCTION ---
+        def finalize_df(filtered_df, id_let, name_let, tu_let, phi_let, type_let, diag_let, init_let, out_let, tr_out_let=None):
             if filtered_df.empty: return pd.DataFrame(columns=base_cols)
             
             clean_df = pd.DataFrame({
@@ -104,7 +105,8 @@ def process_data():
                 'Facility Type': get_col(filtered_df, type_let),
                 'Diagnosis Date': get_col(filtered_df, diag_let),
                 'Initiation Date': get_col(filtered_df, init_let),
-                'Outcome Date': get_col(filtered_df, out_let)
+                'Outcome Date': get_col(filtered_df, out_let),
+                'Treatment Outcome': get_col(filtered_df, tr_out_let) if tr_out_let else ""
             })
             
             clean_df['merge_key'] = clean_df['PHI'].astype(str).str.strip().str.upper()
@@ -120,14 +122,14 @@ def process_data():
             site_c = get_col(df, 'F').str.lower()
             is_pulm = site_c.str.contains("pulmonary", na=False) & ~site_c.str.contains("extra", na=False)
             is_udst = is_pulm & is_blank(get_col(df, 'AQ')) & is_blank(get_col(df, 'AU')) & is_blank(get_col(df, 'BC'))
-            df_udst = finalize_df(df[is_udst], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF')
+            df_udst = finalize_df(df[is_udst], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE') # AE added
 
             has_rif = get_col(df, 'AR').str.lower().str.contains("rif resistance detected", na=False) | \
                       get_col(df, 'AZ').str.lower().str.contains("rif resistance detected", na=False) | \
                       get_col(df, 'BD').str.lower().str.contains("rif resistance detected", na=False)
             has_inh = get_col(df, 'DO').str.lower().str.contains("inh resistance", na=False)
             is_slpa = is_pulm & (has_rif | has_inh) & is_blank(get_col(df, 'BH'))
-            df_slpa = finalize_df(df[is_slpa], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF')
+            df_slpa = finalize_df(df[is_slpa], 'T', 'V', 'P', 'Q', 'R', 'A', 'B', 'AF', 'AE') # AE added
 
         elif file_type == "NOTIF":
             out_c = get_col(df, 'BK')
@@ -137,22 +139,22 @@ def process_data():
                 if "regimen" in str(col).lower():
                     reg_c = df[col].astype(str).str.upper().str.replace(" ", "")
                     break
-            df_npo = finalize_df(df[is_blank(init_c) & is_blank(out_c)], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB')
-            df_op = finalize_df(df[is_blank(out_c) & (reg_c == "2HRZE/4HRE")], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB')
+            df_npo = finalize_df(df[is_blank(init_c) & is_blank(out_c)], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK') # BK added
+            df_op = finalize_df(df[is_blank(out_c) & (reg_c == "2HRZE/4HRE")], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK') # BK added
 
         elif file_type == "CONSENT":
-            df_cp = finalize_df(df[is_blank(get_col(df, 'Y'))], 'I', 'J', 'V', 'W', 'X', 'G', None, None)
+            df_cp = finalize_df(df[is_blank(get_col(df, 'Y'))], 'I', 'J', 'V', 'W', 'X', 'G', None, None, None)
 
         elif file_type == "COMORB":
             am, an, ah = get_col(df, 'AM').str.strip().str.lower(), get_col(df, 'AN').str.strip(), get_col(df, 'AH').str.strip().str.lower()
             al, ak, ai = get_col(df, 'AL').str.strip(), get_col(df, 'AK').str.strip(), get_col(df, 'AI').str.strip()
             is_hiv_reactive = ah.isin(["reactive", "positive"])
 
-            df_adt = finalize_df(df[(am == "diabetic") & is_blank(an)], 'K', 'O', 'C', 'D', None, 'M', 'W', None)
-            df_rbs = finalize_df(df[am.isin(["unknown", ""]) | is_blank(am)], 'K', 'O', 'C', 'D', None, 'M', 'W', None)
-            df_art = finalize_df(df[is_hiv_reactive & is_blank(al)], 'K', 'O', 'C', 'D', None, 'M', 'W', None)
-            df_cpt = finalize_df(df[is_hiv_reactive & is_blank(ak)], 'K', 'O', 'C', 'D', None, 'M', 'W', None)
-            df_hiv = finalize_df(df[is_blank(ai)], 'K', 'O', 'C', 'D', None, 'M', 'W', None)
+            df_adt = finalize_df(df[(am == "diabetic") & is_blank(an)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
+            df_rbs = finalize_df(df[am.isin(["unknown", ""]) | is_blank(am)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
+            df_art = finalize_df(df[is_hiv_reactive & is_blank(al)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
+            df_cpt = finalize_df(df[is_hiv_reactive & is_blank(ak)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
+            df_hiv = finalize_df(df[is_blank(ai)], 'K', 'O', 'C', 'D', None, 'M', 'W', None, 'U') # U added
 
     all_raw_dfs = [df_slpa, df_udst, df_npo, df_op, df_cp, df_adt, df_rbs, df_art, df_cpt, df_hiv]
     for d in all_raw_dfs:
@@ -191,28 +193,25 @@ if pieces:
     df_master = all_pendencies.groupby('Episode ID').agg({
         'Patient Name': 'first', 'ZONE': 'first', 'TB Unit': 'first', 'PHI': 'first',
         'Facility Type': 'first', 'Diagnosis Date': 'first', 'Initiation Date': 'first', 'Outcome Date': 'first',
+        'Treatment Outcome': 'first', # Outcome aggregated
         'Pending Status': lambda x: " + ".join(x.unique())
     }).reset_index()
 else:
-    df_master = pd.DataFrame(columns=['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Pending Status'])
+    df_master = pd.DataFrame(columns=['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Pending Status'])
 
-df_master = df_master[['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Pending Status']]
+df_master = df_master[['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Pending Status']]
 
 # --- 5. NEW OFFICIAL AMC APP UI (WITH LOCAL IMAGES) ---
-
-# Read the local image files
 b64_amc = img_to_b64("images/amc.png")
 b64_ntep = img_to_b64("images/ntep.jpg")
 b64_h1 = img_to_b64("images/h1.jpg")
 b64_h2 = img_to_b64("images/h2.jpg")
 
-# Prepare Image sources (Fail-safes included just in case a file name is mistyped)
 src_amc = f"data:image/png;base64,{b64_amc}" if b64_amc else ""
 src_ntep = f"data:image/jpeg;base64,{b64_ntep}" if b64_ntep else ""
 src_h1 = f"data:image/jpeg;base64,{b64_h1}" if b64_h1 else ""
 src_h2 = f"data:image/jpeg;base64,{b64_h2}" if b64_h2 else ""
 
-# Official Logos & Banner using your exact images
 st.markdown(f"""
 <div style='display: flex; justify-content: space-between; align-items: center; padding: 0 10px;'>
     <img src='{src_amc}' height='75'>
