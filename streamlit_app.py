@@ -14,9 +14,6 @@ st.markdown("""
     footer {visibility: hidden;}
     .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1100px; }
     .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-weight: bold; }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #f0f2f6; border-radius: 5px 5px 0 0; padding: 10px 20px; font-weight: bold; }
-    .stTabs [aria-selected="true"] { background-color: #1f618d !important; color: white !important; }
     .login-box { border: 1px solid #ddd; padding: 30px; border-radius: 10px; background-color: #f9f9f9; text-align: center; margin-top: 50px; }
 </style>
 """, unsafe_allow_html=True)
@@ -80,69 +77,59 @@ def draw_card(title, value, color, icon):
     </div>
     """
 
-tab1, tab2 = st.tabs(["📊 Master Dashboard (Local)", "🔄 Daily Comparison (Coming Soon)"])
-
 # ==========================================
-# TAB 1: MASTER DASHBOARD (OLD STABLE LOGIC)
+# MASTER DASHBOARD (SINGLE VIEW)
 # ==========================================
-with tab1:
-    files = glob.glob("data/*.xlsx")
-    all_rows = []
-    
-    if not files:
-        st.warning("No files found in the 'data/' folder. Please upload Excel registers to your GitHub repository.")
-    else:
-        for f in files:
-            if "~$" in f or "zone" in f.lower(): continue
-            try:
-                df = pd.read_excel(f)
-                report_name = os.path.basename(f)
-                
-                # Check column count to map correctly (Morning logic)
-                if len(df.columns) > 19: # LAB
-                    for _, r in df.iterrows():
-                        all_rows.append({'Episode ID': str(r.iloc[cx('T')]), 'Patient Name': r.iloc[cx('V')], 'PHI': r.iloc[cx('Q')], 'TB Unit': r.iloc[cx('P')], 'Report Type': 'Lab Pending'})
-                elif len(df.columns) > 12: # NOTIFICATION
-                    for _, r in df.iterrows():
-                        all_rows.append({'Episode ID': str(r.iloc[cx('M')]), 'Patient Name': r.iloc[cx('N')], 'PHI': r.iloc[cx('E')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Notification'})
-                elif len(df.columns) > 10: # COMORBIDITY
-                    for _, r in df.iterrows():
-                        all_rows.append({'Episode ID': str(r.iloc[cx('K')]), 'Patient Name': r.iloc[cx('O')], 'PHI': r.iloc[cx('D')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Co-morbidity'})
-            except:
-                pass
+files = glob.glob("data/*.xlsx")
+all_rows = []
 
-        if all_rows:
-            df_master = pd.DataFrame(all_rows).drop_duplicates(subset=['Episode ID'])
+if not files:
+    st.warning("No files found in the 'data/' folder. Please upload Excel registers to your GitHub repository.")
+else:
+    for f in files:
+        if "~$" in f or "zone" in f.lower(): continue
+        try:
+            df = pd.read_excel(f)
             
-            # Top Cards
-            c1, c2 = st.columns(2)
-            with c1: st.markdown(draw_card("Total Unique Patients", len(df_master['Episode ID'].unique()), "#1f618d", "👥"), unsafe_allow_html=True)
-            with c2: st.markdown(draw_card("Total Pendency", len(df_master), "#d35400", "📝"), unsafe_allow_html=True)
+            # Check column count to map correctly
+            if len(df.columns) > 19: # LAB
+                for _, r in df.iterrows():
+                    all_rows.append({'Episode ID': str(r.iloc[cx('T')]), 'Patient Name': r.iloc[cx('V')], 'PHI': r.iloc[cx('Q')], 'TB Unit': r.iloc[cx('P')], 'Report Type': 'Lab Pending'})
+            elif len(df.columns) > 12: # NOTIFICATION
+                for _, r in df.iterrows():
+                    all_rows.append({'Episode ID': str(r.iloc[cx('M')]), 'Patient Name': r.iloc[cx('N')], 'PHI': r.iloc[cx('E')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Notification'})
+            elif len(df.columns) > 10: # COMORBIDITY
+                for _, r in df.iterrows():
+                    all_rows.append({'Episode ID': str(r.iloc[cx('K')]), 'Patient Name': r.iloc[cx('O')], 'PHI': r.iloc[cx('D')], 'TB Unit': r.iloc[cx('C')], 'Report Type': 'Co-morbidity'})
+        except:
+            pass
 
-            # Filter Section
-            st.write("### 🔎 Filters")
-            f1, f2 = st.columns(2)
-            sel_report = f1.multiselect("Filter by Report Type", df_master['Report Type'].unique())
-            
-            # Clean TB Unit list for filter
-            tbu_list = [str(t) for t in df_master['TB Unit'].unique() if str(t).strip() and str(t) != 'nan']
-            sel_tbu = f2.multiselect("Filter by TB Unit", sorted(tbu_list))
-            
-            # Apply filters
-            filtered_df = df_master.copy()
-            if sel_report: filtered_df = filtered_df[filtered_df['Report Type'].isin(sel_report)]
-            if sel_tbu: filtered_df = filtered_df[filtered_df['TB Unit'].astype(str).isin(sel_tbu)]
+    if all_rows:
+        df_master = pd.DataFrame(all_rows).drop_duplicates(subset=['Episode ID'])
+        
+        # Top Cards
+        c1, c2 = st.columns(2)
+        with c1: st.markdown(draw_card("Total Unique Patients", len(df_master['Episode ID'].unique()), "#1f618d", "👥"), unsafe_allow_html=True)
+        with c2: st.markdown(draw_card("Total Pendency", len(df_master), "#d35400", "📝"), unsafe_allow_html=True)
 
-            st.write("### Patient Line List")
-            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
-            
-            csv = filtered_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Filtered Data", data=csv, file_name="AMC_Pending_List.csv", mime='text/csv')
+        # Filter Section
+        st.write("### 🔎 Filters")
+        f1, f2 = st.columns(2)
+        sel_report = f1.multiselect("Filter by Report Type", df_master['Report Type'].unique())
+        
+        # Clean TB Unit list for filter
+        tbu_list = [str(t) for t in df_master['TB Unit'].unique() if str(t).strip() and str(t) != 'nan']
+        sel_tbu = f2.multiselect("Filter by TB Unit", sorted(tbu_list))
+        
+        # Apply filters
+        filtered_df = df_master.copy()
+        if sel_report: filtered_df = filtered_df[filtered_df['Report Type'].isin(sel_report)]
+        if sel_tbu: filtered_df = filtered_df[filtered_df['TB Unit'].astype(str).isin(sel_tbu)]
 
-# ==========================================
-# TAB 2: PLACEHOLDER
-# ==========================================
-with tab2:
-    st.info("💡 Daily Comparison feature is currently under maintenance. Please use the Master Dashboard to view current pendency.")
+        st.write("### 📋 Patient Line List")
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+        
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Filtered Data", data=csv, file_name="AMC_Pending_List.csv", mime='text/csv')
 
 st.markdown("<div class='amc-footer'>District TB Center Ahmedabad | AMC NTEP</div>", unsafe_allow_html=True)
