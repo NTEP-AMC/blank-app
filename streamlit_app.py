@@ -38,20 +38,23 @@ if not st.session_state.auth:
         else: st.error("Incorrect Password")
     st.stop()
 
-# --- HEADER ---
+# --- HEADER (WITH SAFETY FALLBACKS) ---
 def img_to_b64(path):
     try:
         with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
-    except: return ""
+    except: return None
 
-src_amc = f"data:image/png;base64,{img_to_b64('images/amc.png')}"
-src_ntep = f"data:image/jpeg;base64,{img_to_b64('images/ntep.jpg')}"
+b64_amc = img_to_b64('images/amc.png')
+b64_ntep = img_to_b64('images/ntep.jpg')
+
+img_amc_html = f"<img src='data:image/png;base64,{b64_amc}' height='60'>" if b64_amc else "🏢 <b>AMC</b>"
+img_ntep_html = f"<img src='data:image/jpeg;base64,{b64_ntep}' height='60'>" if b64_ntep else "🏥 <b>NTEP</b>"
 
 st.markdown(f"""
-<div style='display: flex; justify-content: space-between; align-items: center;'>
-    <img src='{src_amc}' height='60'>
+<div style='display: flex; justify-content: space-between; align-items: center; font-size: 20px;'>
+    {img_amc_html}
     <h3 style='margin:0; color:#333; font-weight:900;'>AMC <span style='color:#ccc;'>|</span> NTEP</h3>
-    <img src='{src_ntep}' height='60'>
+    {img_ntep_html}
 </div>
 <div style='background-color: #1f618d; color: white; text-align: center; padding: 8px; font-weight: bold; border-radius: 5px; margin: 10px 0;'>
    TB Monitoring Dashboard - Ahmedabad
@@ -73,7 +76,7 @@ def draw_card(title, value, color, icon):
     </div>
     """
 
-# --- ZONE MAPPING (FIXED TYPO HERE) ---
+# --- ZONE MAPPING ---
 df_zone = pd.DataFrame()
 try:
     if os.path.exists("data/zone_mapping.xlsx"):
@@ -89,108 +92,120 @@ tab1, tab2 = st.tabs(["📊 Master Dashboard", "🔄 Comparison Tracker"])
 with tab1:
     files = glob.glob("data/*.xlsx")
     all_data = []
-    # Using your specific report names
     counts = {"Lab Pending": 0, "Notification": 0, "Co-morbidity": 0, "PMTBMBA": 0}
 
-    for f in files:
-        if "~$" in f or "zone" in f.lower(): continue
-        df = pd.read_excel(f)
-        
-        # MAPPING AS PER YOUR IMAGE
-        if len(df.columns) > 19 and 'episode' in str(df.columns[cx('T')]).lower():
-            temp = pd.DataFrame({
-                'PHI': df.iloc[:, cx('Q')], 'TB UNIT': df.iloc[:, cx('P')], 'EPISODE ID': df.iloc[:, cx('T')],
-                'PATIENT NAME': df.iloc[:, cx('V')], 'DIAGNOSIS DATE': df.iloc[:, cx('A')],
-                'TREATMENT OUTCOME': df.iloc[:, cx('AE')], 'REPORT PENDING TYPE': "Lab Pending"
-            })
-            counts["Lab Pending"] += len(temp)
-        elif len(df.columns) > 12 and 'episode' in str(df.columns[cx('M')]).lower():
-            temp = pd.DataFrame({
-                'PHI': df.iloc[:, cx('E')], 'TB UNIT': df.iloc[:, cx('C')], 'EPISODE ID': df.iloc[:, cx('M')],
-                'PATIENT NAME': df.iloc[:, cx('N')], 'DIAGNOSIS DATE': df.iloc[:, cx('S')],
-                'TREATMENT OUTCOME': df.iloc[:, cx('BK')], 'REPORT PENDING TYPE': "Notification"
-            })
-            counts["Notification"] += len(temp)
-        elif len(df.columns) > 10 and 'episode' in str(df.columns[cx('K')]).lower():
-            temp = pd.DataFrame({
-                'PHI': df.iloc[:, cx('D')], 'TB UNIT': df.iloc[:, cx('C')], 'EPISODE ID': df.iloc[:, cx('K')],
-                'PATIENT NAME': df.iloc[:, cx('O')], 'DIAGNOSIS DATE': df.iloc[:, cx('M')],
-                'TREATMENT OUTCOME': df.iloc[:, cx('U')], 'REPORT PENDING TYPE': "Co-morbidity"
-            })
-            counts["Co-morbidity"] += len(temp)
-        else: continue
-        all_data.append(temp)
+    # SAFETY NET: Check if data files actually exist
+    if not files:
+        st.error("🚨 **CRITICAL ERROR:** No Excel files found! The cloud server cannot find your `data/` folder.")
+        st.info("💡 **How to fix:** You need to upload your `data` folder and `images` folder to your GitHub repository.")
+    else:
+        for f in files:
+            if "~$" in f or "zone" in f.lower(): continue
+            try:
+                df = pd.read_excel(f)
+                
+                # MAPPING AS PER YOUR IMAGE
+                if len(df.columns) > 19 and 'episode' in str(df.columns[cx('T')]).lower():
+                    temp = pd.DataFrame({
+                        'PHI': df.iloc[:, cx('Q')], 'TB UNIT': df.iloc[:, cx('P')], 'EPISODE ID': df.iloc[:, cx('T')],
+                        'PATIENT NAME': df.iloc[:, cx('V')], 'DIAGNOSIS DATE': df.iloc[:, cx('A')],
+                        'TREATMENT OUTCOME': df.iloc[:, cx('AE')], 'REPORT PENDING TYPE': "Lab Pending"
+                    })
+                    counts["Lab Pending"] += len(temp)
+                elif len(df.columns) > 12 and 'episode' in str(df.columns[cx('M')]).lower():
+                    temp = pd.DataFrame({
+                        'PHI': df.iloc[:, cx('E')], 'TB UNIT': df.iloc[:, cx('C')], 'EPISODE ID': df.iloc[:, cx('M')],
+                        'PATIENT NAME': df.iloc[:, cx('N')], 'DIAGNOSIS DATE': df.iloc[:, cx('S')],
+                        'TREATMENT OUTCOME': df.iloc[:, cx('BK')], 'REPORT PENDING TYPE': "Notification"
+                    })
+                    counts["Notification"] += len(temp)
+                elif len(df.columns) > 10 and 'episode' in str(df.columns[cx('K')]).lower():
+                    temp = pd.DataFrame({
+                        'PHI': df.iloc[:, cx('D')], 'TB UNIT': df.iloc[:, cx('C')], 'EPISODE ID': df.iloc[:, cx('K')],
+                        'PATIENT NAME': df.iloc[:, cx('O')], 'DIAGNOSIS DATE': df.iloc[:, cx('M')],
+                        'TREATMENT OUTCOME': df.iloc[:, cx('U')], 'REPORT PENDING TYPE': "Co-morbidity"
+                    })
+                    counts["Co-morbidity"] += len(temp)
+                else: continue
+                all_data.append(temp)
+            except Exception as e:
+                st.warning(f"Could not read {f}: {e}")
 
-    if all_data:
-        df_m = pd.concat(all_data).drop_duplicates()
-        if not df_zone.empty:
-            df_m = df_m.merge(df_zone, left_on='PHI', right_on='PHI_Map', how='left').drop(columns=['PHI_Map'])
-            df_m['ZONE'] = df_m['ZONE'].fillna("Unknown")
-        else: df_m['ZONE'] = "No Zone Map"
+        if all_data:
+            df_m = pd.concat(all_data).drop_duplicates()
+            if not df_zone.empty:
+                df_m = df_m.merge(df_zone, left_on='PHI', right_on='PHI_Map', how='left').drop(columns=['PHI_Map'])
+                df_m['ZONE'] = df_m['ZONE'].fillna("Unknown")
+            else: df_m['ZONE'] = "No Zone Map"
 
-        c1, c2 = st.columns(2)
-        with c1: st.markdown(draw_card("Unique Patients", len(df_m['EPISODE ID'].unique()), "#1f618d", "👥"), unsafe_allow_html=True)
-        with c2: st.markdown(draw_card("Total Pendency", len(df_m), "#d35400", "📋"), unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            with c1: st.markdown(draw_card("Unique Patients", len(df_m['EPISODE ID'].unique()), "#1f618d", "👥"), unsafe_allow_html=True)
+            with c2: st.markdown(draw_card("Total Pendency", len(df_m), "#d35400", "📋"), unsafe_allow_html=True)
 
-        # MINI BOXES (HIV: 10 style)
-        html_boxes = "".join([f"<div class='report-mini-box'>{k}: {v}</div>" for k, v in counts.items() if v > 0])
-        st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'>{html_boxes}</div>", unsafe_allow_html=True)
+            html_boxes = "".join([f"<div class='report-mini-box'>{k}: {v}</div>" for k, v in counts.items() if v > 0])
+            st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'>{html_boxes}</div>", unsafe_allow_html=True)
 
-        st.write("### Patient Master Line List")
-        cols = ['ZONE', 'TB UNIT', 'PHI', 'EPISODE ID', 'PATIENT NAME', 'DIAGNOSIS DATE', 'TREATMENT OUTCOME', 'REPORT PENDING TYPE']
-        st.dataframe(df_m[cols], use_container_width=True, hide_index=True)
+            st.write("### Patient Master Line List")
+            cols = ['ZONE', 'TB UNIT', 'PHI', 'EPISODE ID', 'PATIENT NAME', 'DIAGNOSIS DATE', 'TREATMENT OUTCOME', 'REPORT PENDING TYPE']
+            st.dataframe(df_m[cols], use_container_width=True, hide_index=True)
 
 # ==========================================
 # TAB 2: COMPARISON (SMART LATEST ONLY)
 # ==========================================
 with tab2:
+    st.info("Click the button below to fetch and compare daily data from Google Drive.")
     if st.button("🔄 Check Latest Drive Upload & Compare", use_container_width=True):
-        try:
-            creds_info = json.loads(st.secrets["gcp_service_account"])
-            creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly'])
-            service = build('drive', 'v3', credentials=creds)
-            
-            res = service.files().list(q="name='AMC_NTEP_Data' and mimeType='application/vnd.google-apps.folder'", fields="files(id)").execute()
-            p_id = res.get('files', [{}])[0].get('id')
-            subs = service.files().list(q=f"'{p_id}' in parents", fields="files(id, name)", orderBy="name").execute().get('files', [])
-            
-            if len(subs) >= 2:
-                old_f, new_f = subs[-2], subs[-1]
+        if "gcp_service_account" not in st.secrets:
+            st.error("🚨 Google Drive Secrets are missing! Please add them in Streamlit App Settings -> Secrets.")
+        else:
+            try:
+                creds_info = json.loads(st.secrets["gcp_service_account"])
+                creds = service_account.Credentials.from_service_account_info(creds_info, scopes=['https://www.googleapis.com/auth/drive.readonly'])
+                service = build('drive', 'v3', credentials=creds)
                 
-                def get_data(f_id):
-                    items = service.files().list(q=f"'{f_id}' in parents and name contains '.xlsx'", fields="files(id, name)").execute().get('files', [])
-                    rows = []
-                    for it in items:
-                        req = service.files().get_media(fileId=it['id'])
-                        fh = io.BytesIO(); MediaIoBaseDownload(fh, req).next_chunk(); fh.seek(0)
-                        df = pd.read_excel(fh)
-                        for _, r in df.iterrows():
-                            if len(df.columns) > 19: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'T', 'V', 'Q', 'P', 'A', 'AE'
-                            elif len(df.columns) > 12: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'M', 'N', 'E', 'C', 'S', 'BK'
-                            else: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'K', 'O', 'D', 'C', 'M', 'U'
-                            rows.append({'EPISODE ID': str(r.iloc[cx(id_c)]), 'PATIENT NAME': r.iloc[cx(nm_c)], 'PHI': r.iloc[cx(ph_c)], 'TU': r.iloc[cx(tu_c)], 'OUTCOME': r.iloc[cx(ot_c)], 'Register': it['name']})
-                    return pd.DataFrame(rows).drop_duplicates(subset=['EPISODE ID'])
-
-                with st.spinner("Comparing files..."):
-                    df_old = get_data(old_f['id'])
-                    df_new = get_data(new_f['id'])
+                res = service.files().list(q="name='AMC_NTEP_Data' and mimeType='application/vnd.google-apps.folder'", fields="files(id)").execute()
+                p_id = res.get('files', [{}])[0].get('id')
+                subs = service.files().list(q=f"'{p_id}' in parents", fields="files(id, name)", orderBy="name").execute().get('files', [])
+                
+                if len(subs) >= 2:
+                    old_f, new_f = subs[-2], subs[-1]
                     
-                    # Logic: Only show the registers that exist in the latest folder
-                    latest_registers = df_new['Register'].unique()
-                    df_old_filtered = df_old[df_old['Register'].isin(latest_registers)]
-                    
-                    persistent = df_new[df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
-                    persistent['Status'] = "🔴 Persistent"
-                    new_pat = df_new[~df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
-                    new_pat['Status'] = "🔵 New Entry"
-                    resolved = df_old_filtered[~df_old_filtered['EPISODE ID'].isin(df_new['EPISODE ID'])].copy()
-                    resolved['Status'] = "🟢 Resolved"
+                    def get_data(f_id):
+                        items = service.files().list(q=f"'{f_id}' in parents and name contains '.xlsx'", fields="files(id, name)").execute().get('files', [])
+                        rows = []
+                        for it in items:
+                            req = service.files().get_media(fileId=it['id'])
+                            fh = io.BytesIO(); MediaIoBaseDownload(fh, req).next_chunk(); fh.seek(0)
+                            df = pd.read_excel(fh)
+                            for _, r in df.iterrows():
+                                if len(df.columns) > 19: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'T', 'V', 'Q', 'P', 'A', 'AE'
+                                elif len(df.columns) > 12: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'M', 'N', 'E', 'C', 'S', 'BK'
+                                else: id_c, nm_c, ph_c, tu_c, dg_c, ot_c = 'K', 'O', 'D', 'C', 'M', 'U'
+                                rows.append({'EPISODE ID': str(r.iloc[cx(id_c)]), 'PATIENT NAME': r.iloc[cx(nm_c)], 'PHI': r.iloc[cx(ph_c)], 'TU': r.iloc[cx(tu_c)], 'OUTCOME': r.iloc[cx(ot_c)], 'Register': it['name']})
+                        return pd.DataFrame(rows).drop_duplicates(subset=['EPISODE ID'])
 
-                    st.info(f"📍 Latest Register identified: **{', '.join(latest_registers)}** (from {new_f['name']})")
-                    
-                    res_final = pd.concat([persistent, new_pat, resolved])
-                    st.dataframe(res_final[['Status', 'PATIENT NAME', 'EPISODE ID', 'PHI', 'TU', 'OUTCOME', 'Register']], use_container_width=True, hide_index=True)
-            else: st.error("Need 2 folders in Drive (Old vs New).")
-        except Exception as e: st.error(f"Error: {e}")
+                    with st.spinner("Comparing files..."):
+                        df_old = get_data(old_f['id'])
+                        df_new = get_data(new_f['id'])
+                        
+                        latest_registers = df_new['Register'].unique()
+                        df_old_filtered = df_old[df_old['Register'].isin(latest_registers)]
+                        
+                        persistent = df_new[df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
+                        persistent['Status'] = "🔴 Persistent"
+                        new_pat = df_new[~df_new['EPISODE ID'].isin(df_old_filtered['EPISODE ID'])].copy()
+                        new_pat['Status'] = "🔵 New Entry"
+                        resolved = df_old_filtered[~df_old_filtered['EPISODE ID'].isin(df_new['EPISODE ID'])].copy()
+                        resolved['Status'] = "🟢 Resolved"
 
-st.markdown("<div style='text-align: center; font-size: 11px; margin-top: 30px; color: #888;'>District TB Center AMC | Monitoring Portal v4.1</div>", unsafe_allow_html=True)
+                        st.success(f"📍 Comparing **{len(latest_registers)}** registers from **{new_f['name']}** vs **{old_f['name']}**")
+                        
+                        res_final = pd.concat([persistent, new_pat, resolved])
+                        if res_final.empty:
+                            st.warning("No patients found to compare.")
+                        else:
+                            st.dataframe(res_final[['Status', 'PATIENT NAME', 'EPISODE ID', 'PHI', 'TU', 'OUTCOME', 'Register']], use_container_width=True, hide_index=True)
+                else: st.error("Need 2 date folders in Drive (Old vs New).")
+            except Exception as e: st.error(f"Error connecting to Google Drive: {e}")
+
+st.markdown("<div style='text-align: center; font-size: 11px; margin-top: 30px; color: #888;'>District TB Center AMC | Monitoring Portal v4.2</div>", unsafe_allow_html=True)
