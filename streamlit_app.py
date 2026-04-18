@@ -51,12 +51,18 @@ def get_col(df, letter):
 def is_blank(series):
     return series.str.strip().str.lower().isin(["", "nan", "nat", "none", "<na>", "null"])
 
+def get_opts(df, col):
+    if df.empty or col not in df.columns: return []
+    return sorted([str(x) for x in df[col].unique() if str(x).strip() not in ["", "nan", "None", "Zone Not Found", "N/A"]])
+
 # --- 3. THE EXCEL MIMIC ENGINE ---
 @st.cache_data
 def process_data():
     files = glob.glob("data/*.xlsx")
     df_slpa, df_udst, df_npo, df_op, df_cp = [pd.DataFrame()] * 5
     df_adt, df_rbs, df_art, df_cpt, df_hiv = [pd.DataFrame()] * 5
+    
+    extended_ids = set() 
     
     df_z = pd.DataFrame()
     for f in files:
@@ -134,9 +140,9 @@ def process_data():
             out_c = get_col(df, 'BK')
             init_c = get_col(df, 'BM')
             
-            # --- AUTO DATE LOGIC FOR OUTCOME PENDING ---
             out_date_c = pd.to_datetime(get_col(df, 'CB'), errors='coerce') 
-            today_date = pd.Timestamp(date.today()) # આ કોડ રોજ આપોઆપ આજની તારીખ લઇ લેશે
+            init_date_c = pd.to_datetime(get_col(df, 'BM'), errors='coerce')
+            today_date = pd.Timestamp(date.today()) 
             
             reg_c = pd.Series([""] * len(df))
             for col in df.columns:
@@ -146,9 +152,14 @@ def process_data():
                     
             df_npo = finalize_df(df[is_blank(init_c) & is_blank(out_c)], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK')
             
-            # Condition: Outcome is Blank + Regimen matches + Date is between Lowest and Today (<= Today)
+            # --- 1318 OUTCOME PENDING ---
             condition_op = is_blank(out_c) & (reg_c == "2HRZE/4HRE") & (out_date_c <= today_date)
             df_op = finalize_df(df[condition_op], 'M', 'N', 'C', 'E', 'D', 'S', 'BM', 'CB', 'BK')
+
+            # --- 168 DAY EXTENDED LOGIC ---
+            cond_ext = is_blank(out_c) & (reg_c == "2HRZE/4HRE") & (out_date_c > today_date) & ((out_date_c - init_date_c).dt.days > 168)
+            ext_ids_list = get_col(df[cond_ext], 'M').astype(str).str.strip().str.upper().tolist()
+            extended_ids.update(ext_ids_list)
 
         elif file_type == "CONSENT":
             df_cp = finalize_df(df[is_blank(get_col(df, 'Y'))], 'I', 'J', 'V', 'W', 'X', 'G', None, None, None)
@@ -171,9 +182,10 @@ def process_data():
             d['Initiation Date'] = pd.to_datetime(d['Initiation Date'], errors='coerce')
             d['Outcome Date'] = pd.to_datetime(d['Outcome Date'], errors='coerce')
 
-    return tuple(all_raw_dfs)
+    # AHÍ મેં ભૂલ સુધારી લીધી છે (df_ ની જગ્યાએ સાચા વેરીએબલ રિટર્ન કર્યા છે)
+    return df_slpa, df_udst, df_npo, df_op, df_cp, df_adt, df_rbs, df_art, df_cpt, df_hiv, extended_ids
 
-(f_slpa, f_udst, f_npo, f_op, f_cp, f_adt, f_rbs, f_art, f_cpt, f_hiv) = process_data()
+(f_slpa, f_udst, f_npo, f_op, f_cp, f_adt, f_rbs, f_art, f_cpt, f_hiv, extended_ids) = process_data()
 
 master_reports = {
     "SLPA": {"df": f_slpa, "icon": "🔬", "color": "#D35400"}, 
@@ -204,12 +216,15 @@ if pieces:
         'Treatment Outcome': 'first',
         'Pending Status': lambda x: " + ".join(x.unique())
     }).reset_index()
+    
+    df_master['Extend Status'] = df_master['Episode ID'].apply(lambda x: "Extended" if x in extended_ids else "")
 else:
-    df_master = pd.DataFrame(columns=['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Pending Status'])
+    df_master = pd.DataFrame(columns=['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Extend Status', 'Pending Status'])
 
-df_master = df_master[['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Pending Status']]
+# REORDERING COLUMNS SO EXTEND STATUS IS 2ND TO LAST, PENDING STATUS IS LAST
+df_master = df_master[['ZONE', 'TB Unit', 'Facility Type', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Extend Status', 'Pending Status']]
 
-# --- 5. NEW OFFICIAL AMC APP UI (WITH LOCAL IMAGES) ---
+# --- 5. UI APP HEADER ---
 b64_amc = img_to_b64("images/amc.png")
 b64_ntep = img_to_b64("images/ntep.jpg")
 b64_h1 = img_to_b64("images/h1.jpg")
@@ -235,9 +250,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-def get_opts(df, col):
-    if df.empty or col not in df.columns: return []
-    return sorted([str(x) for x in df[col].unique() if str(x).strip() not in ["", "nan", "None", "Zone Not Found", "N/A"]])
+def draw_card(title, value, color, icon):
+    return f"""
+    <div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="font-size: 24px; margin-bottom: 5px;">{icon}</div>
+        <div style="font-size: 13px; font-weight: bold; text-transform: uppercase; line-height: 1.1;">{title}</div>
+        <div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div>
+    </div>
+    """
 
 # Expandable Filters
 with st.expander("🔽 Filters & Sorting"):
@@ -253,10 +273,11 @@ with st.expander("🔽 Filters & Sorting"):
         df_for_phi = df_for_type[df_for_type['Facility Type'].isin(sel_type)] if sel_type else df_for_type
         sel_phi = st.multiselect("PHI", get_opts(df_for_phi, 'PHI'))
 
+    st.markdown("---")
     d1, d2, d3 = st.columns(3)
-    with d1: dr_diag = st.date_input("Diagnosis Date", value=[], key="d1")
-    with d2: dr_init = st.date_input("Initiation Date", value=[], key="d2")
-    with d3: dr_out = st.date_input("Outcome Date", value=[], key="d3")
+    with d1: dr_diag = st.date_input("Diagnosis Date Filter", value=[], key="d1")
+    with d2: dr_init = st.date_input("Initiation Date Filter", value=[], key="d2")
+    with d3: dr_out = st.date_input("Outcome Date Filter", value=[], key="d3")
     if st.button("Reset Filters", use_container_width=True): st.rerun()
 
 # --- 6. APPLY FILTERS ---
@@ -273,13 +294,13 @@ if not df_display.empty:
         df_display = df_display[df_display['Pending Status'].str.contains(pattern, regex=True, na=False)]
     
     if len(dr_diag) == 2:
-        mask = (df_display['Diagnosis Date'].dt.date >= dr_diag[0]) & (df_display['Diagnosis Date'].dt.date <= dr_diag[1])
+        mask = (pd.to_datetime(df_display['Diagnosis Date'], errors='coerce').dt.date >= dr_diag[0]) & (pd.to_datetime(df_display['Diagnosis Date'], errors='coerce').dt.date <= dr_diag[1])
         df_display = df_display[mask | df_display['Diagnosis Date'].isna()]
     if len(dr_init) == 2:
-        mask = (df_display['Initiation Date'].dt.date >= dr_init[0]) & (df_display['Initiation Date'].dt.date <= dr_init[1])
+        mask = (pd.to_datetime(df_display['Initiation Date'], errors='coerce').dt.date >= dr_init[0]) & (pd.to_datetime(df_display['Initiation Date'], errors='coerce').dt.date <= dr_init[1])
         df_display = df_display[mask | df_display['Initiation Date'].isna()]
     if len(dr_out) == 2:
-        mask = (df_display['Outcome Date'].dt.date >= dr_out[0]) & (df_display['Outcome Date'].dt.date <= dr_out[1])
+        mask = (pd.to_datetime(df_display['Outcome Date'], errors='coerce').dt.date >= dr_out[0]) & (pd.to_datetime(df_display['Outcome Date'], errors='coerce').dt.date <= dr_out[1])
         df_display = df_display[mask | df_display['Outcome Date'].isna()]
 
 filtered_counts = {}
@@ -291,15 +312,6 @@ for rep_name in master_reports.keys():
 
 # --- 7. CUSTOM COLORED KPI CARDS ---
 total_unique_patients = len(df_display)
-
-def draw_card(title, value, color, icon):
-    return f"""
-    <div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <div style="font-size: 24px; margin-bottom: 5px;">{icon}</div>
-        <div style="font-size: 13px; font-weight: bold; text-transform: uppercase; line-height: 1.1;">{title}</div>
-        <div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div>
-    </div>
-    """
 
 r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
 with r1_c1: st.markdown(draw_card("Total Pending Patients", total_unique_patients, "#1f618d", "👥"), unsafe_allow_html=True)
