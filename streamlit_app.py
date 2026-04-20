@@ -51,11 +51,24 @@ b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
+
+# --- LAST UPDATED TIMESTAMP BOXES ---
+try:
+    df_times = pd.read_csv("Update_Timestamps.csv")
+    time_html = "<div style='display:flex; justify-content:space-between; gap:10px; margin-bottom:20px;'>"
+    for _, r in df_times.iterrows():
+        color = "#27AE60" if r['Last Updated'] != "N/A" else "#C0392B" # લીલો રંગ જો અપડેટ હોય, નહીંતર લાલ
+        time_html += f"<div style='flex:1; background:#f4f6f7; padding:8px; border-radius:5px; text-align:center; border-left:4px solid {color};'><div style='font-size:11px; color:#555; text-transform:uppercase;'><b>{r['Register']}</b></div><div style='font-size:12px; color:#333; margin-top:3px;'>🕒 {r['Last Updated']}</div></div>"
+    time_html += "</div>"
+    st.markdown(time_html, unsafe_allow_html=True)
+except:
+    pass
+
 st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
 
+# --- TABS ---
 tab1, tab2 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison"])
 
-# --- TAB 1: MASTER DASHBOARD ---
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -94,14 +107,12 @@ with tab1:
 
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
     
-    # --- 4 Main Cards ---
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(draw_card("Total Pending", len(df_disp), "#1f618d", "👥"), unsafe_allow_html=True)
     with c2: st.markdown(draw_card("Outcome Pending", f_counts["Outcome"], "#F39C12", "🏥"), unsafe_allow_html=True)
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
 
-    # --- View All Other Indicators ---
     with st.expander("View All Other Pending Indicators"):
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
         with r2_c1: st.markdown(draw_card("SLPA", f_counts["SLPA"], "#D35400", "🔬"), unsafe_allow_html=True)
@@ -115,29 +126,27 @@ with tab1:
 
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
 
-# --- TAB 2: COMPARISON MATRIX ---
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Dependent Filters"):
         c1, c2 = st.columns(2)
         with c1:
             z2_opts = sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
-            s2_z = st.multiselect("Filter Zone", z2_opts)
+            s2_z = st.multiselect("Filter Zone", z2_opts, key='z2')
             
             df2_tu = df_comp[df_comp['ZONE'].isin(s2_z)] if s2_z else df_comp
             tu2_opts = sorted([str(x) for x in df2_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
-            s2_tu = st.multiselect("Filter TB Unit", tu2_opts)
+            s2_tu = st.multiselect("Filter TB Unit", tu2_opts, key='tu2')
         with c2:
             df2_phi = df2_tu[df2_tu['TB Unit'].isin(s2_tu)] if s2_tu else df2_tu
             phi2_opts = sorted([str(x) for x in df2_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
-            s2_phi = st.multiselect("Filter PHI", phi2_opts)
+            s2_phi = st.multiselect("Filter PHI", phi2_opts, key='phi2')
             
     df_c_disp = df_comp.copy()
     if s2_z: df_c_disp = df_c_disp[df_c_disp['ZONE'].isin(s2_z)]
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
 
-    # --- 4 Cards for Comparison ---
     t_new = (df_c_disp == "🔴 NEW").sum().sum()
     t_res = (df_c_disp == "🟢 RESOLVED").sum().sum()
     t_per = (df_c_disp == "🟡 PERSISTENT").sum().sum()
