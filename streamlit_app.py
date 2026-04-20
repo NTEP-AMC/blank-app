@@ -55,6 +55,7 @@ st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src=
 
 tab1, tab2 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison"])
 
+# --- TAB 1: MASTER DASHBOARD ---
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -62,18 +63,19 @@ with tab1:
         
         c1, c2 = st.columns(2)
         with c1:
-            z_opts = sorted([str(x) for x in df_master['ZONE'].unique() if str(x) not in ["nan", "", "None"]])
+            z_opts = sorted([str(x) for x in df_master['ZONE'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_z = st.multiselect("Zone", z_opts)
             
-            df_for_tu = df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master
-            tu_opts = sorted([str(x) for x in df_for_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
+            df_tu = df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master
+            tu_opts = sorted([str(x) for x in df_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_tu = st.multiselect("TB Unit", tu_opts)
         with c2:
-            df_for_phi = df_for_tu[df_for_tu['TB Unit'].isin(s_tu)] if s_tu else df_for_tu
-            phi_opts = sorted([str(x) for x in df_for_phi['PHI'].unique() if str(x) not in ["nan", "", "None"]])
+            df_phi = df_tu[df_tu['TB Unit'].isin(s_tu)] if s_tu else df_tu
+            phi_opts = sorted([str(x) for x in df_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_phi = st.multiselect("PHI", phi_opts)
             
-            ft_opts = sorted([str(x) for x in df_for_phi['Facility Type'].unique() if str(x) not in ["nan", "", "None"]])
+            df_ft = df_phi[df_phi['PHI'].isin(s_phi)] if s_phi else df_phi
+            ft_opts = sorted([str(x) for x in df_ft['Facility Type'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_ft = st.multiselect("Facility Type", ft_opts)
 
         d1, d2, d3 = st.columns(3)
@@ -83,35 +85,51 @@ with tab1:
     df_disp = df_master.copy()
     if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
     if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
-    if s_ft: df_disp = df_disp[df_disp['Facility Type'].isin(s_ft)]
     if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
+    if s_ft: df_disp = df_disp[df_disp['Facility Type'].isin(s_ft)]
     if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
+    if len(dr_diag) == 2:
+        df_disp = df_disp[(df_disp['Diagnosis Date'].dt.date >= dr_diag[0]) & (df_disp['Diagnosis Date'].dt.date <= dr_diag[1])]
+
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
+    
+    # --- 4 Main Cards ---
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(draw_card("Total Pending", len(df_disp), "#1f618d", "👥"), unsafe_allow_html=True)
     with c2: st.markdown(draw_card("Outcome Pending", f_counts["Outcome"], "#F39C12", "🏥"), unsafe_allow_html=True)
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
 
+    # --- View All Other Indicators ---
+    with st.expander("View All Other Pending Indicators"):
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+        with r2_c1: st.markdown(draw_card("SLPA", f_counts["SLPA"], "#D35400", "🔬"), unsafe_allow_html=True)
+        with r2_c2: st.markdown(draw_card("Consent", f_counts["Consent"], "#8E44AD", "📝"), unsafe_allow_html=True)
+        with r2_c3: st.markdown(draw_card("ADT", f_counts["ADT"], "#16A085", "🩸"), unsafe_allow_html=True)
+        with r2_c4: st.markdown(draw_card("RBS", f_counts["RBS"], "#E67E22", "💉"), unsafe_allow_html=True)
+        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
+        with r3_c1: st.markdown(draw_card("ART", f_counts["ART"], "#2980B9", "💊"), unsafe_allow_html=True)
+        with r3_c2: st.markdown(draw_card("CPT", f_counts["CPT"], "#D35400", "🛡️"), unsafe_allow_html=True)
+        with r3_c3: st.markdown(draw_card("HIV", f_counts["HIV"], "#C0392B", "🩺"), unsafe_allow_html=True)
+
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
 
+# --- TAB 2: COMPARISON MATRIX ---
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
-    
-    # --- Strict Cascading Filters Tab 2 ---
     with st.expander("🔽 Dependent Filters"):
         c1, c2 = st.columns(2)
         with c1:
-            z2_opts = sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) not in ["nan", "", "None"]])
+            z2_opts = sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s2_z = st.multiselect("Filter Zone", z2_opts)
             
             df2_tu = df_comp[df_comp['ZONE'].isin(s2_z)] if s2_z else df_comp
-            tu2_opts = sorted([str(x) for x in df2_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
+            tu2_opts = sorted([str(x) for x in df2_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s2_tu = st.multiselect("Filter TB Unit", tu2_opts)
         with c2:
             df2_phi = df2_tu[df2_tu['TB Unit'].isin(s2_tu)] if s2_tu else df2_tu
-            phi2_opts = sorted([str(x) for x in df2_phi['PHI'].unique() if str(x) not in ["nan", "", "None"]])
+            phi2_opts = sorted([str(x) for x in df2_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s2_phi = st.multiselect("Filter PHI", phi2_opts)
             
     df_c_disp = df_comp.copy()
@@ -119,7 +137,7 @@ with tab2:
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
 
-    # --- 4 KPI Cards ---
+    # --- 4 Cards for Comparison ---
     t_new = (df_c_disp == "🔴 NEW").sum().sum()
     t_res = (df_c_disp == "🟢 RESOLVED").sum().sum()
     t_per = (df_c_disp == "🟡 PERSISTENT").sum().sum()
