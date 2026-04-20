@@ -42,7 +42,6 @@ try:
         if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     
-    # 🎯 Tab 3 માટે નવો ડેટા 
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
         if col in df_curr_tb.columns: df_curr_tb[col] = pd.to_datetime(df_curr_tb[col], errors='coerce')
@@ -58,9 +57,10 @@ st.markdown(f"<div style='display: flex; justify-content: space-between; align-i
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
 
-# 🎯 --- TABS: હવે 3 Tabs છે ---
+# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
+# 🎯 --- TAB 1: MASTER DASHBOARD ---
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -101,10 +101,12 @@ with tab1:
     if len(dr_init) == 2: df_disp = df_disp[(df_disp['Initiation Date'].dt.date >= dr_init[0]) & (df_disp['Initiation Date'].dt.date <= dr_init[1])]
     if len(dr_out) == 2: df_disp = df_disp[(df_disp['Outcome Date'].dt.date >= dr_out[0]) & (df_disp['Outcome Date'].dt.date <= dr_out[1])]
 
+    # 🎯 કુલ પેન્ડિંગ રિપોર્ટ્સ ગણવાનું નવું લોજીક 
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
+    total_pendency = sum(f_counts.values()) 
     
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(draw_card("Total Pending", len(df_disp), "#1f618d", "👥"), unsafe_allow_html=True)
+    with c1: st.markdown(draw_card("Total Pendency", total_pendency, "#1f618d", "📄"), unsafe_allow_html=True)
     with c2: st.markdown(draw_card("Outcome Pending", f_counts["Outcome"], "#F39C12", "🏥"), unsafe_allow_html=True)
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
@@ -115,10 +117,15 @@ with tab1:
         with r2_c2: st.markdown(draw_card("Consent", f_counts["Consent"], "#8E44AD", "📝"), unsafe_allow_html=True)
         with r2_c3: st.markdown(draw_card("ADT", f_counts["ADT"], "#16A085", "🩸"), unsafe_allow_html=True)
         with r2_c4: st.markdown(draw_card("RBS", f_counts["RBS"], "#E67E22", "💉"), unsafe_allow_html=True)
+        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
+        with r3_c1: st.markdown(draw_card("ART", f_counts["ART"], "#2980B9", "💊"), unsafe_allow_html=True)
+        with r3_c2: st.markdown(draw_card("CPT", f_counts["CPT"], "#D35400", "🛡️"), unsafe_allow_html=True)
+        with r3_c3: st.markdown(draw_card("HIV", f_counts["HIV"], "#C0392B", "🩺"), unsafe_allow_html=True)
 
     conf = {"Diagnosis Date": st.column_config.DateColumn(format="DD-MM-YYYY"), "Initiation Date": st.column_config.DateColumn(format="DD-MM-YYYY"), "Outcome Date": st.column_config.DateColumn(format="DD-MM-YYYY")}
     st.dataframe(df_disp, use_container_width=True, hide_index=True, column_config=conf)
 
+# 🎯 --- TAB 2: COMPARISON MATRIX ---
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Dependent Filters"):
@@ -146,7 +153,7 @@ with tab2:
     t_total = t_new + t_per
     
     k1, k2, k3, k4 = st.columns(4)
-    with k1: st.markdown(draw_card("Total Active", t_total, "#1f618d", "📊"), unsafe_allow_html=True)
+    with k1: st.markdown(draw_card("Total Pendency", t_total, "#1f618d", "📊"), unsafe_allow_html=True)
     with k2: st.markdown(draw_card("New Pendency", t_new, "#C0392B", "🔴"), unsafe_allow_html=True)
     with k3: st.markdown(draw_card("Resolved", t_res, "#27AE60", "🟢"), unsafe_allow_html=True)
     with k4: st.markdown(draw_card("Persistent", t_per, "#F39C12", "🟡"), unsafe_allow_html=True)
@@ -177,7 +184,6 @@ with tab3:
             phi3_opts = sorted([str(x) for x in df3_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s3_phi = st.multiselect("PHI", phi3_opts, key='phi3')
             
-            # નવા બે ફિલ્ટર્સ
             case_opts = sorted([str(x) for x in df_curr_tb['Type of Case'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s3_case = st.multiselect("Type of Case", case_opts)
             
@@ -194,7 +200,6 @@ with tab3:
 
     df_curr_disp = df_curr_tb.copy()
     
-    # અપ્લાય ફિલ્ટર્સ
     if s3_z: df_curr_disp = df_curr_disp[df_curr_disp['ZONE'].isin(s3_z)]
     if s3_tu: df_curr_disp = df_curr_disp[df_curr_disp['TB Unit'].isin(s3_tu)]
     if s3_ft: df_curr_disp = df_curr_disp[df_curr_disp['Facility Type'].isin(s3_ft)]
@@ -208,7 +213,6 @@ with tab3:
 
     st.markdown(draw_card("Total Current Patients", len(df_curr_disp), "#27AE60", "👥"), unsafe_allow_html=True)
     
-    # 🎯 3rd Tab માટે તમારો મનપસંદ કોલમ ઓર્ડર:
     cols_to_show = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'TB_regimen', 'Type of Case']
     df_curr_final = df_curr_disp[cols_to_show]
     
