@@ -59,14 +59,23 @@ with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
         f_rep = st.multiselect("Report Type", inds)
+        
         c1, c2 = st.columns(2)
         with c1:
-            s_z = st.multiselect("Zone", sorted([str(x) for x in df_master['ZONE'].unique() if str(x) != "nan"]))
-            tu_opts = sorted([str(x) for x in df_master[df_master['ZONE'].isin(s_z)]['TB Unit'].unique()]) if s_z else sorted([str(x) for x in df_master['TB Unit'].unique()])
+            z_opts = sorted([str(x) for x in df_master['ZONE'].unique() if str(x) not in ["nan", "", "None"]])
+            s_z = st.multiselect("Zone", z_opts)
+            
+            df_for_tu = df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master
+            tu_opts = sorted([str(x) for x in df_for_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
             s_tu = st.multiselect("TB Unit", tu_opts)
         with c2:
-            phi_opts = sorted([str(x) for x in df_master[df_master['ZONE'].isin(s_z) & df_master['TB Unit'].isin(s_tu)]['PHI'].unique()]) if (s_z and s_tu) else sorted([str(x) for x in df_master['PHI'].unique()])
+            df_for_phi = df_for_tu[df_for_tu['TB Unit'].isin(s_tu)] if s_tu else df_for_tu
+            phi_opts = sorted([str(x) for x in df_for_phi['PHI'].unique() if str(x) not in ["nan", "", "None"]])
             s_phi = st.multiselect("PHI", phi_opts)
+            
+            ft_opts = sorted([str(x) for x in df_for_phi['Facility Type'].unique() if str(x) not in ["nan", "", "None"]])
+            s_ft = st.multiselect("Facility Type", ft_opts)
+
         d1, d2, d3 = st.columns(3)
         with d1: dr_diag = st.date_input("Diagnosis Date", value=[])
         if st.button("Reset Filters", key="r1"): st.rerun()
@@ -74,6 +83,7 @@ with tab1:
     df_disp = df_master.copy()
     if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
     if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
+    if s_ft: df_disp = df_disp[df_disp['Facility Type'].isin(s_ft)]
     if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
     if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
@@ -88,15 +98,20 @@ with tab1:
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
+    
+    # --- Strict Cascading Filters Tab 2 ---
     with st.expander("🔽 Dependent Filters"):
         c1, c2 = st.columns(2)
         with c1:
-            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) != "nan"]))
-            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique()]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique()])
+            z2_opts = sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) not in ["nan", "", "None"]])
+            s2_z = st.multiselect("Filter Zone", z2_opts)
+            
+            df2_tu = df_comp[df_comp['ZONE'].isin(s2_z)] if s2_z else df_comp
+            tu2_opts = sorted([str(x) for x in df2_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
             s2_tu = st.multiselect("Filter TB Unit", tu2_opts)
         with c2:
-            # --- PHI Depended Filter ---
-            phi2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z) & df_comp['TB Unit'].isin(s2_tu)]['PHI'].unique()]) if (s2_z and s2_tu) else sorted([str(x) for x in df_comp['PHI'].unique()])
+            df2_phi = df2_tu[df2_tu['TB Unit'].isin(s2_tu)] if s2_tu else df2_tu
+            phi2_opts = sorted([str(x) for x in df2_phi['PHI'].unique() if str(x) not in ["nan", "", "None"]])
             s2_phi = st.multiselect("Filter PHI", phi2_opts)
             
     df_c_disp = df_comp.copy()
@@ -104,11 +119,18 @@ with tab2:
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
 
-    # --- Total Pendency Box ---
+    # --- 4 KPI Cards ---
     t_new = (df_c_disp == "🔴 NEW").sum().sum()
+    t_res = (df_c_disp == "🟢 RESOLVED").sum().sum()
     t_per = (df_c_disp == "🟡 PERSISTENT").sum().sum()
-    st.markdown(draw_card("Total Active Pendency (New + Persistent)", t_new + t_per, "#1f618d", "📊"), unsafe_allow_html=True)
+    t_total = t_new + t_per
+    
+    k1, k2, k3, k4 = st.columns(4)
+    with k1: st.markdown(draw_card("Total Active", t_total, "#1f618d", "📊"), unsafe_allow_html=True)
+    with k2: st.markdown(draw_card("New Pendency", t_new, "#C0392B", "🔴"), unsafe_allow_html=True)
+    with k3: st.markdown(draw_card("Resolved", t_res, "#27AE60", "🟢"), unsafe_allow_html=True)
+    with k4: st.markdown(draw_card("Persistent", t_per, "#F39C12", "🟡"), unsafe_allow_html=True)
     
     st.dataframe(df_c_disp, use_container_width=True, hide_index=True)
 
-st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Monitoring System</div>", unsafe_allow_html=True)
+st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Auto-Dashboard Framework</div>", unsafe_allow_html=True)
