@@ -70,18 +70,20 @@ with tab1:
             tu_opts = sorted([str(x) for x in df_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_tu = st.multiselect("TB Unit", tu_opts)
         with c2:
-            # 👈 મુખ્ય સુધારો: પહેલા Facility Type નું ફિલ્ટર
             df_ft = df_tu[df_tu['TB Unit'].isin(s_tu)] if s_tu else df_tu
             ft_opts = sorted([str(x) for x in df_ft['Facility Type'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_ft = st.multiselect("Facility Type", ft_opts)
             
-            # 👈 પછી PHI નું ફિલ્ટર (જે Facility Type પર આધાર રાખશે)
             df_phi = df_ft[df_ft['Facility Type'].isin(s_ft)] if s_ft else df_ft
             phi_opts = sorted([str(x) for x in df_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_phi = st.multiselect("PHI", phi_opts)
 
+        # 🎯 અહીં 3 નવા Date Filters ઉમેર્યા છે
         d1, d2, d3 = st.columns(3)
-        with d1: dr_diag = st.date_input("Diagnosis Date", value=[])
+        with d1: dr_diag = st.date_input("Diagnosis Date", value=[], key="dr_diag")
+        with d2: dr_init = st.date_input("Initiation Date", value=[], key="dr_init")
+        with d3: dr_out = st.date_input("Outcome Date", value=[], key="dr_out")
+        
         if st.button("Reset Filters", key="r1"): st.rerun()
 
     df_disp = df_master.copy()
@@ -91,8 +93,13 @@ with tab1:
     if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
     if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
+    # 🎯 તારીખો માટેની ફિલ્ટર લોજીક
     if len(dr_diag) == 2:
         df_disp = df_disp[(df_disp['Diagnosis Date'].dt.date >= dr_diag[0]) & (df_disp['Diagnosis Date'].dt.date <= dr_diag[1])]
+    if len(dr_init) == 2:
+        df_disp = df_disp[(df_disp['Initiation Date'].dt.date >= dr_init[0]) & (df_disp['Initiation Date'].dt.date <= dr_init[1])]
+    if len(dr_out) == 2:
+        df_disp = df_disp[(df_disp['Outcome Date'].dt.date >= dr_out[0]) & (df_disp['Outcome Date'].dt.date <= dr_out[1])]
 
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
     
@@ -113,7 +120,12 @@ with tab1:
         with r3_c2: st.markdown(draw_card("CPT", f_counts["CPT"], "#D35400", "🛡️"), unsafe_allow_html=True)
         with r3_c3: st.markdown(draw_card("HIV", f_counts["HIV"], "#C0392B", "🩺"), unsafe_allow_html=True)
 
-    st.dataframe(df_disp, use_container_width=True, hide_index=True)
+    # તારીખનો ફોર્મેટ સાચો દેખાય તે માટે
+    conf = {"Diagnosis Date": st.column_config.DateColumn(format="DD-MM-YYYY"), 
+            "Initiation Date": st.column_config.DateColumn(format="DD-MM-YYYY"), 
+            "Outcome Date": st.column_config.DateColumn(format="DD-MM-YYYY")}
+    
+    st.dataframe(df_disp, use_container_width=True, hide_index=True, column_config=conf)
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
