@@ -117,12 +117,36 @@ with tab1:
 
 with tab2:
     st.markdown("#### 🔄 પ્રગતિ રિપોર્ટ (Yesterday vs Today)")
-    st.markdown("🔴 **NEW:** નવી એન્ટ્રી | 🟡 **PERSISTENT:** હજુ પેન્ડિંગ છે | 🟢 **RESOLVED:** કામ પૂરું થઈ ગયું")
     
-    sq2 = st.text_input("🔍 Search Name or ID in Comparison", "")
-    if sq2: df_comp = df_comp[df_comp['Patient Name'].str.contains(sq2, case=False, na=False) | df_comp['Episode ID'].astype(str).str.contains(sq2, case=False, na=False)]
+    # --- Tab 2 ના નવા ફિલ્ટર્સ ---
+    with st.expander("🔽 Filters for Comparison"):
+        c1, c2 = st.columns(2)
+        with c1:
+            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) != "nan"]), key='z2')
+            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique() if str(x) != "nan"]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique() if str(x) != "nan"])
+            s2_tu = st.multiselect("Filter TB Unit", tu2_opts, key='tu2')
+        with c2:
+            s2_phi = st.multiselect("Filter PHI", sorted([str(x) for x in df_comp['PHI'].unique() if str(x) != "nan"]), key='phi2')
+            
+    df_comp_disp = df_comp.copy()
+    if s2_z: df_comp_disp = df_comp_disp[df_comp_disp['ZONE'].isin(s2_z)]
+    if s2_tu: df_comp_disp = df_comp_disp[df_comp_disp['TB Unit'].isin(s2_tu)]
+    if s2_phi: df_comp_disp = df_comp_disp[df_comp_disp['PHI'].isin(s2_phi)]
+
+    sq2 = st.text_input("🔍 Search Name or ID in Comparison", "", key='sq2')
+    if sq2: df_comp_disp = df_comp_disp[df_comp_disp['Patient Name'].str.contains(sq2, case=False, na=False) | df_comp_disp['Episode ID'].astype(str).str.contains(sq2, case=False, na=False)]
     
-    st.dataframe(df_comp, use_container_width=True, hide_index=True, height=500)
-    st.download_button("📥 Download Comparison (CSV)", df_comp.to_csv(index=False).encode('utf-8'), "NTEP_Comparison.csv", "text/csv", use_container_width=True)
+    # --- ન્યુ, રિઝોલ્વ અને પર્સિસ્ટન્ટ ના બોક્સ ---
+    total_new = (df_comp_disp == "🔴 NEW").sum().sum()
+    total_res = (df_comp_disp == "🟢 RESOLVED").sum().sum()
+    total_per = (df_comp_disp == "🟡 PERSISTENT").sum().sum()
+    
+    k1, k2, k3 = st.columns(3)
+    with k1: st.markdown(draw_card("Total NEW", total_new, "#C0392B", "🔴"), unsafe_allow_html=True)
+    with k2: st.markdown(draw_card("Total RESOLVED", total_res, "#27AE60", "🟢"), unsafe_allow_html=True)
+    with k3: st.markdown(draw_card("Total PERSISTENT", total_per, "#F39C12", "🟡"), unsafe_allow_html=True)
+    
+    st.dataframe(df_comp_disp, use_container_width=True, hide_index=True, height=400)
+    st.download_button("📥 Download Comparison (CSV)", df_comp_disp.to_csv(index=False).encode('utf-8'), "NTEP_Comparison.csv", "text/csv", use_container_width=True)
 
 st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Auto-Dashboard Framework</div>", unsafe_allow_html=True)
