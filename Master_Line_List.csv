@@ -1,0 +1,288 @@
+ZONE,TB Unit,Facility Type,PHI,Patient Name,Episode ID,Diagnosis Date,Initiation Date,Outcome Date,Treatment Outcome,Extend Status,Pending Status
+No Zone File,Vatva,,UHC INDRAPURI,Aditya Maurya,100346417,2025-01-06,2025-01-08,,CURED,,RBS
+No Zone File,India Colony,,"MC-GCS Medical College, AMC",NATVARJI THAKOR,103767810,2025-01-20,2025-01-21,,DIED,,ADT
+No Zone File,Ghatlodia,,TS JADAV GAUTAMBHAI,DIPIKA TUNGARIYA,119918572,2025-02-18,2025-02-18,,TREATMENT_REGIMEN_CHANGED,,HIV
+No Zone File,Chandkheda,,PUKHARAJ,Anniaya Mittal,129290054,2025-03-06,2025-03-11,,TREATMENT_COMPLETE,,RBS
+No Zone File,Viratnagar,,TS JAINIL RIBADIYA  (NIKOL-2),bhavana rabari,131650151,2025-03-10,2025-03-11,,TREATMENT_COMPLETE,,RBS
+No Zone File,Vatva,,UCHC VATVA,BABITA HARIRAM KUSHWAHA ,135285359,2025-03-26,2025-03-27,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Rakhial,,UCHC RAKHIAL,NEHA ASHOKBHAI HALVADIYA,136210695,2025-04-03,2025-04-11,,CURED,,HIV
+No Zone File,Ghatlodia,,GURUKRUPA HOSPITAL AND RESSERCH CENTRE,GANGJI MEENA,136606810,2025-04-07,2025-04-07,,TREATMENT_COMPLETE,,ADT
+No Zone File,Ranip,,UHC Ranip,DAUSING RAVAT,136786845,2025-04-08,2025-04-08,,CURED,,ADT
+No Zone File,Bhaipura,,UHC RAMOL,BHAVNA BARAIYA,137221063,2025-04-12,2025-04-14,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Rakhial,,UHC ARBUDANAGAR,RAMPRASAD RAMADEV,137329083,2025-04-15,2025-04-17,,LOST_TO_FOLLOW_UP,,ART
+No Zone File,Bhaipura,,UHC BHAIPURA,Sanjay bhai Vanol,137432523,2025-04-16,2025-04-16,,CURED,,ART + CPT
+No Zone File,India Colony,,DR S.J. METALIA,HETAL BEN HITESH BHAI PARMAR,138143551,2025-04-23,2025-04-24,,TREATMENT_COMPLETE,,ADT
+No Zone File,India Colony,,UHC NARODA ROAD,LAXMIBEN KHODIDAS  PARMAR ,138239546,2025-05-01,2025-05-01,,DIED,,ADT
+No Zone File,Chandkheda,,UCHC Chandkheda,Modi  Jitendra,138298132,2025-04-24,2025-04-24,,CURED,,ADT
+No Zone File,Ranip,,TS KRITIKA PARMAR,Jyotiben Narendrasingh,139077277,2025-04-29,2025-05-01,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,India Colony,,UHC MEGHANINAGAR,KISHOREBHAI DESAI,139293006,2025-05-05,2025-05-06,,DIED,,ADT
+No Zone File,Rakhial,,UHC RAKHIAL,Chandrabhaga Kune,141934806,2025-05-29,2025-05-30,,DIED,,RBS
+No Zone File,Vasna,,UHC PALDI,RANJITBHAI THAKOR,142508612,2025-06-02,NaT,,nan,,RBS + HIV
+No Zone File,Jodhpur,,UHC AMBALI,DHANJIBHAI VANIYA,142562204,2025-04-21,2025-04-21,,TREATMENT_COMPLETE,,HIV
+No Zone File,Saijpur,,UHC KUBERNAGAR,Manojsing Rathod,143425183,2025-06-14,2025-06-16,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Ranip,,UHC New Ranip,SHUBHARAM KORI,144787922,2025-06-10,2025-06-10,,TREATMENT_FAILURE,,ADT
+No Zone File,Amraiwadi,,UHC VASTRAL,Jagatpal Kevat,144859537,2025-06-30,2025-07-09,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Vasna,,UHC NEW VASNA,GOVINDBHAI MOHAN TULAVDA,145219331,2025-06-26,NaT,,UNTRACEABLE_INCORRECT_ADDRESS,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Sabarmati,Manubhai Vaghela,145487790,2025-06-27,2025-06-27,,CURED,,ADT
+No Zone File,Nava Vadaj,,Bhikhubhai T Patel,pareshbhai makwana,145737103,2025-06-02,2025-06-03,,TREATMENT_COMPLETE,,RBS
+No Zone File,Ghatlodia,,MC GMERS SOLA,AMARSING CHAUHAN,146635016,2025-07-04,NaT,,DIED,,ADT
+No Zone File,Vejalpur,,UHC SANKALITNAGAR,Sikligar Sajid Abdulsalam,146761009,2025-07-03,2025-07-03,,TREATMENT_COMPLETE,,ADT
+No Zone File,Amraiwadi,,Arogya Hospital,NARMDABEN JAYNTIBHAI THAKOR,148139607,2025-07-05,2025-07-09,,CURED,,ADT
+No Zone File,Rakhial,,UHC ODHAV,RAM AZOR PRAJAPATI,148762606,2025-07-10,2025-07-11,,TREATMENT_FAILURE,,ADT
+No Zone File,Saijpur,,UHC SAIJPUR,ANANDIBEN CHUNARA,155497766,2025-07-24,2025-07-25,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,Rekhaben shantilal prajapti,159865341,2026-02-09,NaT,,UNTRACEABLE_MIGRATED,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,RAJU SOLANKI,159971293,2025-07-29,NaT,,DIED,,RBS + HIV
+No Zone File,Amraiwadi,,UHC VASTRAL,Sharma Ramsharan Shrisudama,172142447,2025-08-16,2025-08-19,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,India Colony,,UHC MEGHANINAGAR,PARSHOTTAMBHAI MUCHADIYA,180940751,2025-09-02,NaT,,DIED,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,Raman Bhai kardia,181127868,2025-08-06,2025-08-06,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Bhaipura,,UHC RAMOL,GIRISH BHAI  CHANDU LAL THAKKAR,181205592,2025-09-05,2025-09-05,,DIED,,ART
+No Zone File,India Colony,,UHC MEGHANINAGAR,vijay patani,190352180,2025-09-27,NaT,,UNTRACEABLE_MIGRATED,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,VIJYABEN MAHERIYA,190755032,2025-09-19,2025-09-23,,LOST_TO_FOLLOW_UP,,RBS
+No Zone File,Amraiwadi,,UHC VASTRAL,Ramesh dalbhai,191566152,2025-09-20,NaT,,PATIENT_REFUSED,,CPT
+No Zone File,Jodhpur,,Dr Arvind Patel,khanuram meena,197693354,2025-10-08,NaT,,nan,,RBS + HIV
+No Zone File,India Colony,,UHC MEGHANINAGAR,VANDANA PARMAR,198533986,2025-10-09,2025-10-10,,TREATMENT_REGIMEN_CHANGED,,ADT
+No Zone File,Rakhial,,Dr.Ilias Shaikh(Al Amin Garib Navaz Hospital,AHANA SURESHBHAI,200526035,2025-09-19,2025-09-19,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC NAROL,Santosh ravat,205896412,2025-11-01,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",memunaben lilgar,206739568,2025-10-31,2025-10-31,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC VEJALPUR,Khalifa Rijvana Mustakbhai,211622090,2025-11-12,2025-11-13,,nan,,RBS
+No Zone File,India Colony,,UHC NARODA ROAD,Varshaben Chauhan,213861526,2025-10-29,2025-11-08,,nan,,RBS
+No Zone File,Vejalpur,,UHC VEJALPUR,YOGESH MALIVAD,213952958,2025-11-15,2025-11-20,,nan,,ADT
+No Zone File,Isanpur,,Dr Pragnesh B. Vora,NANIBEN HARGOVIND BHAI  Desai,217659490,2025-11-19,2025-11-22,,nan,,HIV
+No Zone File,India Colony,,UHC MEGHANINAGAR,SHIVKUMAR  DAYAL,218055234,2025-11-20,2025-11-20,,nan,,ADT
+No Zone File,Behrampura,,UHWC BEHRAMPURA 1,NOORI .,222855107,2025-11-28,2025-11-28,,nan,,HIV
+No Zone File,Saijpur,,State dispKubernagar,VIJAYBHAI SOLANKI,234295384,2025-12-15,2025-12-16,,DIED,,ART + CPT
+No Zone File,Ghatlodia,,GURUKRUPA HOSPITAL AND RESSERCH CENTRE,TEJSINGH RATHOD,236231668,2025-12-13,2025-12-24,,nan,,RBS
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",RAJDIP SHIN VALA,237529849,2026-02-17,NaT,,nan,,RBS + HIV
+No Zone File,Jodhpur,,UCHC THALTEJ,om chatri,238045341,2025-12-15,2025-12-19,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,NARESHBHAI SARGARA,240749742,2025-12-22,2025-12-22,,nan,,RBS
+No Zone File,Saijpur,,prathna  multi speciality hospital,KARINA BHAGEL,242089746,2025-10-20,2025-10-21,,nan,,RBS
+No Zone File,Vejalpur,,MUSKAN GENERAL HOSPITAL DR.ANKIT,GULAM MAYODIN SHAIKH,243098191,2025-12-26,2025-12-26,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,CIMS HOSPITAL,KISHANA RAM,244355118,2025-11-13,2025-11-13,,nan,,RBS + HIV
+No Zone File,Saijpur,,DR  GIRISH NARSANGHANI,SATISH GADHAVI,245002182,2025-10-27,2025-10-28,,DIED,,HIV
+No Zone File,Viratnagar,,UHC NIKOL-3 (KATHWADA),dipubhai ramswarup raidas,245212625,2026-01-05,NaT,,UNTRACEABLE_INCORRECT_ADDRESS,,RBS + HIV
+No Zone File,Bhaipura,,UHC RAMOL-2,Rameshwar Rathod,245917068,2026-01-06,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,SHARDA  RAMDAS,246619536,2026-01-08,2026-01-09,,nan,,ADT
+No Zone File,Ranip,,SHREE NAR NARAYAN CLINIC,RINABEN PATEL,247216907,2026-01-10,2026-01-10,,nan,,RBS
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",MAHESH NAI,248057368,2026-02-02,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,jamila banu kireshi,248602723,2026-02-09,NaT,,DIED,,RBS + HIV
+No Zone File,Juna Vadaj,,Dr Harsh Toshniwal,niraj harshvardhan,249238406,2026-01-19,2026-01-19,,nan,,RBS
+No Zone File,India Colony,,INDIA COLONY  HEALTH FACILITY,SHELAR BHAVNABEN,249910666,2026-01-01,2026-01-20,,nan,,HIV
+No Zone File,Asarva,,"MC- Civil Hospital, AMC",Daksha Ben Makwana,249956859,2026-01-31,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",MOH SHOEB KHALIFA,250292086,2026-04-06,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC MADHUPURA,ashok ishwar,250382712,2026-01-22,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",MEHUL SONAGRA,250442962,2026-02-06,2026-02-10,,nan,,RBS + HIV
+No Zone File,Danilimda,,UCHC DANILIMDA,Saniya Aslambhai Shaikh,250851491,2026-01-28,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Sabarmati,DIPAK KESHAVLAL RATHOD,251380157,2026-01-20,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,MC-Dr. M K Shah Medical college and research center AMC,Jaya dua,252213495,2026-02-03,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,SHOBHNA BEN DASHRATH BHAI,252330687,2026-02-24,NaT,,nan,,RBS + HIV
+No Zone File,Amraiwadi,,UCHC GOMTIPUR,VIJAY PARMAR,252671446,2026-02-28,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,ANITABEN AJIT,252708460,2026-03-06,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,UHC KALUPUR,NARGISHBEN SIDI,252718205,2026-01-21,2026-01-21,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,Muskanbanu Aditya shekh,252886813,2025-12-11,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,TOSHIF SHAIKH,252932186,2026-03-05,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UCHC SARKHEJ,Imaran Pathan,253346285,2026-02-12,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,Puja MANJITSINH SAIGAL,253365937,2026-02-14,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Arvind suresh patni,253484560,2026-02-10,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,SAHIL CHAUHAN,253663710,2026-02-12,NaT,,DIED,,RBS + HIV
+No Zone File,Asarva,,"MC- Civil Hospital, AMC",KUSUM NARENDRA PARMAR,253866709,2026-02-12,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,FARHAN  AYUB SHAIKH ,253958264,2026-02-16,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,MUKESH GOHIL,254170045,2026-02-13,2026-02-13,,nan,,ADT
+No Zone File,Juna Vadaj,,UHC JUNA VADAJ,NARAN VASANT PANCHAL,254427317,2026-02-18,NaT,,UNTRACEABLE_INCORRECT_ADDRESS,,RBS + HIV
+No Zone File,Behrampura,,UHC KHODIYARNAGAR,Shubham Parmar,254604330,2026-03-12,NaT,,nan,,RBS + HIV
+No Zone File,Jamalpur,,JAMALPUR TU PRIVATE HEALTH FACILITY,AMINABIBI CHUNAWALA,254933123,2026-02-19,2026-02-19,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,UHC Navrangpura,mukesh tiwari,254949489,2026-02-13,NaT,,nan,,RBS + HIV
+No Zone File,Saijpur,,UHC SAIJPUR,Saheram Ishubhai Daraji,255085801,2026-02-18,2026-02-21,,nan,,HIV
+No Zone File,Ghatlodia,,UHC NEW GOTA,DIPIKSHA RAVAL,255196261,2026-02-19,NaT,,DIED,,RBS + HIV
+No Zone File,Ranip,,UHC Chandlodiya,SITABEN RAVAL,255281834,2026-02-06,2026-02-06,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC DUDHESHWAR,Krupaliben Makwana,255378327,2026-02-18,NaT,,nan,,RBS
+No Zone File,Behrampura,,UHC NAROL,SAYRABEGAM MOH SARIF SHEKH,255614790,2026-02-24,2026-02-25,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,KAUSHAL CHAUHAN,256039441,2026-02-23,NaT,,nan,,RBS + ART + CPT + HIV
+No Zone File,Chandkheda,,MC-Dr. M K Shah Medical college and research center AMC,Naranbhai nai,256152786,2026-02-23,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,SURAJSINH AMARSINH,256284233,2026-02-09,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,Daniben Vankar,256286673,2026-02-27,NaT,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC NAROL,mo sikandar saiyad,256502075,2026-02-21,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,Shobha Dantani,256675333,2026-02-26,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UCHC SARKHEJ,FATEHIN BANU PATHAN,256775167,2026-03-03,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,govindbhai dindor,257115508,2026-02-28,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,SDH ESIC Model Hosp.,Sakariben patel,257121623,2026-02-27,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,AJAY PATNI,257449672,2026-02-27,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",NAZIYA PRAVIN PATHAN,257491928,2026-03-11,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,VASIM RAHIS QURESHI,257594465,2026-02-28,2026-03-10,,nan,,RBS + HIV
+No Zone File,Nava Vadaj,,UHC Naranpura,SHREYA PANCHAL,257597376,2026-03-09,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,Gautam waghela,257606314,2026-02-23,NaT,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC LAMBHA,karina rameshbhai vadvai,257739196,2026-03-02,2026-04-02,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",BALDEV KHASIYA PARMAR,257785632,2026-03-05,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC DUDHESHWAR,rohit dahyabhai makwana,257815358,2026-03-20,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC MADHUPURA,shankar giruprasad,257864375,2026-03-03,NaT,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC BHAIPURA,kavita vaghela,257914075,2026-02-27,NaT,,nan,,RBS + HIV
+No Zone File,Amraiwadi,,UCHC VASTRAL,kiran yadav,258063643,2026-03-06,NaT,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,Junavadaj pvt health facility,Mr. KARAN BHARATKUMAR CHOUDHARY,258277451,2026-03-07,2026-03-10,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,UHC NEW AMBAWADI,KANTILAL MANIRAM ACHARYA,258468290,2026-03-10,2026-03-12,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC PIPLAJ,marya Aryan parmar,258572653,2026-03-09,2026-03-14,,TREATMENT_REGIMEN_CHANGED,,RBS
+No Zone File,Rakhial,,UHC ARBUDANAGAR,Rajubhai Parmar,258640508,2026-03-10,NaT,,nan,,RBS + HIV
+No Zone File,Vatva,,UHC VATVA 3,Ishvarbhai Parmar,258671995,2026-03-10,NaT,,UNTRACEABLE_INCORRECT_ADDRESS,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,DIKSHABEN CHUNARIWAL,258773282,2026-03-10,NaT,,UNTRACEABLE_MIGRATED,,HIV
+No Zone File,Amraiwadi,,UCHC VASTRAL,suresh kuswaha,258776593,2026-03-09,NaT,,nan,,HIV
+No Zone File,Vasna,,UHC PALDI,UTAKARSHA MAHATO,259033449,2026-03-09,2026-03-11,,nan,,RBS
+No Zone File,Ranip,,SAMATA HOSPITAL,MANSI GARAMBHA,259194036,2026-03-02,2026-03-03,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,Sparsh Chest Disease Center,Dhat bhai sangat,259373848,2026-02-26,2026-02-26,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC VEJALPUR,Samir mulaji,259629784,2026-03-18,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",SUNIL BAKULBHAI,259878708,2026-03-16,2026-03-16,,nan,,RBS + HIV
+No Zone File,Rakhial,,UHC RAJPUR,JITENDRA MEENA,259918664,2026-03-16,2026-03-16,,nan,,CPT
+No Zone File,Juna Vadaj,,UHC JUNA VADAJ,Rameshbhai Vaghela,260122425,2026-03-16,2026-04-10,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,CHETAN PTB MAKWANA,260160125,2026-03-20,2026-04-06,,nan,,RBS + HIV
+No Zone File,Vasna,,VASNA TU HEALTH FACILITY,ISVARSINGH Detwal,260247175,2026-03-20,2026-03-21,,nan,,RBS + HIV
+No Zone File,Ranip,,UHC Chandlodiya,VIMLA BEN PATEL ,260256054,2026-03-11,2026-03-20,,nan,,RBS + HIV
+No Zone File,Isanpur,,DR. PURANSHINGH B THAKUR,anand k rajbhar,260265064,2026-03-17,2026-03-17,,nan,,RBS
+No Zone File,Isanpur,,DHRUKSHAMANIBEN HOSPITAL,Punam vaghela,260360728,2026-03-17,NaT,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,Junavadaj pvt health facility,prathviben Thakor,260370065,2026-03-16,2026-03-18,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",JAKIYA SAIYAD,260585675,2026-03-18,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,KUSUM DHIRAJLAL (KD) MAIN HOSPITAL,Mr Kanjibhai Mathurdas Patel,260712959,2026-01-26,2026-01-29,,nan,,ADT
+No Zone File,Bapunagar,,DH SCL Gen. Hosp.,payal jatav,260825421,2026-03-25,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",VANDNA KHOKAR,260907724,2026-03-21,2026-03-21,,nan,,RBS + HIV
+No Zone File,Saijpur,,UHC KUBERNAGAR,Babiben rathod,260909947,2026-04-09,NaT,,nan,,RBS + HIV
+No Zone File,Ranip,,UHC Ranip,solanki nitaben,261115898,2026-03-18,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,UHC GHATLODIA,SACHIN RATHOD,261187114,2026-03-25,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,UCHC DANILIMDA,BILAL SHEKH,261373918,2026-03-27,2026-04-06,,nan,,ADT
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",NAYNA BEN MAKWANA,261489504,2026-03-24,2026-03-30,,nan,,HIV
+No Zone File,Vasna,,DH V S HOSPITAL,SHITAL DANTANIYA,261539673,2026-03-25,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",FAKHRUDDIN MOGAL,261543463,2026-03-27,2026-03-28,,nan,,RBS + HIV
+No Zone File,Vatva,,Divyajivan Hospital,KULDIPSINH RATHOD,261574363,2026-03-23,2026-03-27,,nan,,RBS + HIV
+No Zone File,India Colony,,UHC INDIA COLONY,VIRENDRA KESUBHAI PATEL,261601919,2026-03-25,2026-03-25,,nan,,ADT
+No Zone File,Ranip,,UHC Chandlodiya,KANUBHAI DESAI,261644221,2026-02-17,2026-02-18,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,ishwarbhai dhanjibhai,262024378,2026-03-31,NaT,,nan,,RBS + ART + CPT + HIV
+No Zone File,Vatva,,UHC INDRAPURI,patel shreya,262253664,2026-04-01,NaT,,nan,,RBS + HIV
+No Zone File,India Colony,,UHC MEGHANINAGAR,chachiben patani,262258854,2026-04-02,NaT,,UNTRACEABLE_MIGRATED,,RBS + HIV
+No Zone File,Viratnagar,,UHC NIKOL-3 (KATHWADA),Ramkali pal,262289658,2026-04-01,2026-04-01,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC KHODIYARNAGAR,sumeya kutvuddin kureshi,262292986,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,UHC SHAHPUR,MOH IMRAN SHAIKH,262309303,2026-03-28,2026-03-30,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,Mohammad Yasin Shaikh,262346687,2026-03-30,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,Dr. Shailesh J Kothari,KHUSHI BAROT,262356642,2026-03-28,2026-03-28,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC BHAIPURA,SHIVAM YADAV,262455757,2026-04-01,2026-04-06,,nan,,RBS + HIV
+No Zone File,Vasna,,VASNA TU HEALTH FACILITY,Mr Narendrabhai Shah,262539264,2026-03-11,2026-03-11,,nan,,ADT
+No Zone File,Chandkheda,,UCHC Sabarmati,HARISHKUMAR SHANKARLAL PARMAR,262738829,2026-03-28,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,Dr Pranav Shah,Sarika chunara,262764300,2026-04-01,2026-04-01,,nan,,RBS + HIV
+No Zone File,Vejalpur,,SWASTIK SURGICAL HOSPITAL,REHANABEN DOSANI,262833334,2026-03-30,2026-04-02,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC PALDI,DINESHBHAI MEENA,262862567,2026-04-07,NaT,,UNTRACEABLE_INCORRECT_ADDRESS,,RBS + HIV
+No Zone File,Behrampura,,UCHC Faisalnagar,Anam Idrishi,262912576,2026-04-02,2026-04-04,,nan,,HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,AARTI PTB Pandey,263129734,2026-04-08,2026-04-15,,nan,,RBS + HIV
+No Zone File,Behrampura,,UCHC Faisalnagar,Shaikh Dilsad Nausad,263204566,2026-04-04,NaT,,nan,,RBS + HIV
+No Zone File,Isanpur,,Isanpur pvt health facility,POONAM JAMTANI,263232697,2026-04-04,2026-04-04,,nan,,ADT
+No Zone File,Asarva,,UHC GIRDHARNAGAR,Gangaben Nagjibhai Chaudhari,263368849,2026-04-03,NaT,,nan,,RBS + HIV
+No Zone File,Rakhial,,UCHC RAKHIAL,md Husnain Hashmi,263404522,2026-04-01,NaT,,nan,,RBS + HIV
+No Zone File,Vatva,,UHC VATVA 3,samsadbanu shekh,263424630,2026-04-07,2026-04-15,,nan,,RBS + HIV
+No Zone File,Danilimda,,UHC MANINAGAR,KISHORI THAKKAR,263471996,2026-03-30,2026-04-06,,nan,,ADT
+No Zone File,Vasna,,VASNA TU HEALTH FACILITY,prajapati kamlesh,263492199,2026-04-06,2026-04-06,,nan,,RBS + HIV
+No Zone File,Ranip,,UHC New Ranip,JAYABEN MANE,263501525,2026-04-06,2026-04-11,,nan,,RBS + HIV
+No Zone File,Chandkheda,,MC-Dr. M K Shah Medical college and research center AMC,meena solanki,263505792,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Vatva,,SHUBHAM MULTISPECIALITY HOSPITAL,RAHAT SHAIKH,263526571,2026-04-02,NaT,,nan,,RBS + HIV
+No Zone File,India Colony,,UHC INDIA COLONY,chavada payal,263601755,2026-04-08,2026-04-08,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC PALDI,MOHAMMAD RIYAZ TEZABWALA,263672719,2026-04-10,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC NEW VEJALPUR,KARAN MALODIYA,263690005,2026-03-12,2026-04-04,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC SANKALITNAGAR,Soheb Pathan,263759285,2026-04-11,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC SANKALITNAGAR,Kankuben Vaghela,263764245,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,Dr. Hitesh P. Jirawala (Arihant Clinic),Vipulbhai Bhill,263838575,2026-04-01,2026-04-01,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC NAROL,VIKRAMSING RANA,263842820,2026-04-06,2026-04-08,,nan,,ART + CPT
+No Zone File,Behrampura,,UCHC Faisalnagar,HALIMA BIBI SHAH,263884512,2026-04-07,2026-04-07,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC RAMOL,Devidas Shyam,263898674,2026-04-07,2026-04-09,,nan,,HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,Nagjibhai Raghubhai Gamara,263925762,2026-04-07,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Sabarmati,PRAKASH POPATJI THAKOR,264029202,2026-04-08,NaT,,nan,,RBS + HIV
+No Zone File,Behrampura,,UCHC Beherampura,Ahezaj Ahmadhamja  Shaikh,264077167,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Vatva,,UCHC VATVA,mohmad Chand mohmad sufi,264143809,2026-04-08,2026-04-10,,nan,,RBS + HIV
+No Zone File,Vejalpur,,UHC VEJALPUR,Shaikh Chandmiya Mohammad Ikbal,264143921,2026-04-07,2026-04-10,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,umesh maganlal shrimali,264167936,2026-04-09,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,UCHC DANILIMDA,Nasimbanu Abdul tofik shaikh,264173519,2026-04-08,NaT,,nan,,RBS + HIV
+No Zone File,Vejalpur,,Gujarat Child Care Hospital,yashashvi dhadhal,264183668,2026-04-07,2026-04-09,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC  VASNA,SHANKAR BHAI SOLANKI,264214430,2026-04-09,2026-04-10,,nan,,RBS + HIV
+No Zone File,Vejalpur,,Sagar Hospital I Dr. Dilip Ameta,prakash Balai,264380645,2026-04-07,2026-04-08,,nan,,RBS + HIV
+No Zone File,Asarva,,"MC- Civil Hospital, AMC",DIPAKRAJ RAMU BHAI NISHAD,264433714,2026-04-17,2026-04-17,,nan,,RBS + HIV
+No Zone File,Shahpur,,UHC SHAHPUR,Mehzabin Shaikh,264437401,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,UHC SHAHPUR,pintu Shrimali,264455807,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Niruben Vaghela,264478079,2026-04-10,2026-04-10,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC BHAIPURA,Jayaben Devipuajak Devipujal,264501023,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Viratnagar,,UHC THAKKARNAGAR,ANJALI PATANI,264502735,2026-04-14,NaT,,nan,,RBS + HIV
+No Zone File,Amraiwadi,,UHC VASTRAL 2,poojaben luhar,264610641,2026-04-10,2026-04-13,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC BHAIPURA,Parth Chauhan,264625220,2026-03-06,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,UHC SARASPUR,Jagdishbhai patel,264711382,2026-04-15,2026-04-15,,nan,,ADT
+No Zone File,Ghatlodia,,MC GMERS SOLA,SITABEN BHATI,264716849,2026-04-10,2026-04-13,,nan,,ART + CPT
+No Zone File,Vejalpur,,PRIVATE HEALTH FACILITY VEJALPUR,Dilipbhai Govindbhai Jiliya,264803293,2026-02-06,2026-02-06,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Ratanlal Dhobi,264810386,2026-04-08,2026-04-08,,nan,,RBS + HIV
+No Zone File,Behrampura,,Behrampura tu pvt facility,MO SAHRUKH Nurahemad siddiki,265040670,2026-04-06,2026-04-11,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,Ghatlodiya Privet Heath Facility,chanakya shah,265053744,2026-03-23,2026-03-23,,nan,,RBS + HIV
+No Zone File,Behrampura,,UHC NAROL,Sanjay Parmar,265095176,2026-02-27,2026-02-27,,nan,,RBS + HIV
+No Zone File,Behrampura,,UCHC Faisalnagar,Alik Yasin ansari,265121855,2026-04-02,2026-04-02,,nan,,RBS + HIV
+No Zone File,Viratnagar,,SARDAR  HOSPITAL(Viratnagar),chandrakantaben dinesh,265168774,2026-04-11,2026-04-13,,nan,,RBS + HIV
+No Zone File,Bhaipura,,Bhaipura Heath Facility,KANTIBHAI THAKOR,265213903,2026-04-08,2026-04-09,,nan,,RBS + ART + CPT + HIV
+No Zone File,Chandkheda,,CHANDKHEDA TU PRIVATE HEALTH FACILITY,natashaben rakeshbhai Jadeja,265266263,2026-04-12,2026-04-12,,nan,,RBS + HIV
+No Zone File,Saijpur,,Dr Mukesh Chaudhari,Dolatsinh devda,265267219,2026-04-09,2026-04-10,,nan,,RBS + HIV
+No Zone File,Viratnagar,,UHC THAKKARNAGAR,simran patni,265298048,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Behrampura,,UCHC Faisalnagar,Qureshi Mo Ikbal Amirudin,265311020,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Saijpur,,UHC KRISHNANAGAR,Manisha Kumawat,265324743,2026-04-16,2026-04-18,,nan,,RBS + HIV
+No Zone File,Jodhpur,,JODHPUR PRIVATE HEALTH FACILITY,Dhairy  Bhagat,265369562,2026-04-11,2026-04-14,,nan,,RBS + HIV
+No Zone File,Vejalpur,,Sagar Hospital I Dr. Dilip Ameta,moh Amin qureshi,265410227,2026-04-09,2026-04-09,,nan,,RBS + HIV
+No Zone File,Danilimda,,MC-NARENDRA MODI MEDICAL COLLEGE,BHUVAL PTB SAHSNI,265445012,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,Junavadaj pvt health facility,Sunilbhai parmar,265460046,2026-04-14,2026-04-15,,nan,,RBS + HIV
+No Zone File,Noblenagar,,UHC NOBLENAGAR,JAYESH RAVAL,265461484,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Jamalpur,,UHC RAIKHAD,Javed Hussain,265479048,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Jamalpur,,UHCBEHRAMPURA-3,Shaikh Nausad,265480379,2026-03-13,2026-03-16,,nan,,RBS + HIV
+No Zone File,Isanpur,,DHRUKSHAMANIBEN HOSPITAL,deepa jadav,265488447,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC DUDHESHWAR,pinki chauhan,265498517,2026-04-15,2026-04-15,,nan,,HIV
+No Zone File,Vejalpur,,UHC VEJALPUR,MUSKAN SIPAI,265502817,2026-04-06,2026-04-15,,nan,,RBS + HIV
+No Zone File,Saijpur,,UHC KRISHNANAGAR,tejal chunara,265511636,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,LAXMIBEN LADHEL,265541490,2026-04-15,2026-04-15,,nan,,HIV
+No Zone File,Behrampura,,UCHC Faisalnagar,Shaikh Ishak,265559226,2026-04-06,2026-04-13,,nan,,RBS + HIV
+No Zone File,Nava Vadaj,,UHC Nava Vadaj,Ranjitbhai Vaghela,265627244,2025-09-30,2025-10-01,,nan,,RBS + HIV
+No Zone File,Vatva,,UHC INDRAPURI,patel ramesh,265649460,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Vasna,,Parth Surgical Hospital,ANAVARBHAI MEMAN,265652265,2026-04-10,2026-04-10,,nan,,RBS + HIV
+No Zone File,Vasna,,UHC PALDI,MOH RIYAZ TEJABWALA,265659705,2026-04-10,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,UHC MIRZAPUR,sanjay dabhi,265761461,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Rakhial,,UHC RAJPUR,Ajitkhan pathan,265770236,2026-04-15,2026-04-15,,nan,,RBS + HIV
+No Zone File,Viratnagar,,viratnagar pvt hospital,HETALBEN SAVALIYA,265783006,2026-04-14,2026-04-14,,nan,,RBS + HIV
+No Zone File,Danilimda,,UHC MANINAGAR,JAVED ANSARI,265796211,2026-04-16,2026-04-18,,nan,,RBS + HIV
+No Zone File,Bhaipura,,KUNAL MEDICAL HOSPITAL,Mukeshbhai Thakor,265800247,2026-04-16,2026-04-16,,nan,,RBS + HIV
+No Zone File,Chandkheda,,Dr Janak G. Chokasi,Ajaybhai katra,265803666,2026-04-10,2026-04-16,,nan,,RBS + HIV
+No Zone File,Danilimda,,Abhishek Hospital and Heart Center,LILABEB CHAUHAN,265844404,2026-04-05,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,ajay life care,Shaileshbhai parmar,265850279,2026-04-14,2026-04-14,,nan,,RBS + HIV
+No Zone File,Isanpur,,Isanpur pvt health facility,RAHUL CHRISTIAN,265853670,2026-04-09,NaT,,nan,,RBS + HIV
+No Zone File,India Colony,,UHC MEGHANINAGAR,Japankor Mahipalsingh Chaudhry,265866039,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,Mamta Devi RATHOR,265974004,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,UHC SARASPUR,ASHABEN KAVDE,265977278,2026-03-30,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,Dr. Manoj Jadhav Hospital,JIGNESHBHAI DANGAR,265977594,2026-04-03,2026-04-16,,nan,,RBS + HIV
+No Zone File,Bhaipura,,UHC BHAIPURA,Kantibhai Somabhai mina,265986432,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Jagruti jagdamba pandor,265986719,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Rakhial,,UCHC RAKHIAL,Moh Afzal Ansari,265988592,2026-04-15,2026-04-16,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,bharat hira parmar,265990028,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,pinakin laxman parmar,265991298,2026-04-15,NaT,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Hariom Ramprasad sharma,265993068,2026-04-16,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC MADHUPURA,Rohan Thakor,266072691,2026-04-17,2026-04-18,,nan,,HIV
+No Zone File,Behrampura,,UHWC LAMBHA 1,Simran Ramzanibhai shaikh,266076255,2026-04-16,2026-04-17,,nan,,RBS + HIV
+No Zone File,Danilimda,,Dr. Mubshishr Saiyed,Mantsha Shekh,266078130,2026-04-13,2026-04-17,,nan,,RBS + HIV
+No Zone File,Rakhial,,Shri Ram Hospital,Saraniya Narendrabhai Sahdevbhai,266079749,2026-04-15,2026-04-15,,nan,,RBS + HIV
+No Zone File,Vasna,,"MC-NHL Medical College, AMC",MOHAMMAD ATEEQUR RAHEMAN SHAIKH,266085094,2026-04-17,2026-04-17,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,TULSIRAM KUDITYA,266092801,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,TS RUTURAJ KALPESHBHAI ZALA,Mo Rahis Shaikh,266099642,2026-02-17,2026-02-17,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,pravinbhai solanki,266129624,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Isanpur,,Dr Saurin Upadhyay,ANKIT SEN,266174709,2026-03-25,2026-03-25,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,Rahul parmar,266254673,2026-04-17,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,Smruti Medical Hospital,SANA AAFRIN RAJPUT,266279745,2026-04-04,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,AASTHA HOSPITAL ( Dr. Vishal L Hirani),JAYNTIBHAI PATEL,266284314,2026-04-04,NaT,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,SONI MAHESHBHAI BADRILAL,266292787,2026-03-30,2026-03-30,,nan,,RBS + HIV
+No Zone File,Danilimda,,Dr. Jinesh S. Sanghavi (Arogyam Children Hospital),MOHIT PARMAR,266297135,2026-04-07,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,Shraddha Hospital,KANTADEVI SOMANI,266299799,2026-04-06,NaT,,nan,,RBS + HIV
+No Zone File,Shahpur,,Dr Viral Shah(Shraddha  Multispeciality Hospital),MARFATIYA MEHJABINA,266299852,2026-04-12,NaT,,nan,,RBS + HIV
+No Zone File,Danilimda,,Dr. Harshad L. Shah (The Family Clinic),AMRIN SHAIKH,266303240,2026-04-10,2026-04-17,,nan,,RBS + HIV
+No Zone File,Juna Vadaj,,UHC Navrangpura,Parmar Sitaben Surajbhai,266304162,2025-01-23,2025-01-25,,CASE_NOT_DIAGOSED_AS_TB,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,DANTANI SHOBHABEN ANANDBHAI,266307711,2026-03-31,2026-03-31,,nan,,RBS + HIV
+No Zone File,Chandkheda,,UCHC Chandkheda,Umeshbhai Shrimali,266310838,2026-04-09,2026-04-13,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,RAHUL RAMESHBHAI PATNI PATNI,266317957,2026-04-02,2026-04-02,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,JAIDIP PRAKASH BHAI NAYAR,266323232,2026-04-02,2026-04-02,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,vikram bhai vanzara,266325480,2026-04-03,2026-04-03,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,AKASH RAJUBHAI PATNI,266328903,2026-04-04,2026-04-04,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr Hashmukh Patel,RAHUL VECHATBHAI PATNI,266331605,2026-04-04,2026-04-04,,nan,,RBS + HIV
+No Zone File,Asarva,,Dr.Arun Patel Clinic,NEELAM CHANDUBHAI,266418026,2026-04-16,2026-04-18,,nan,,RBS + HIV
+No Zone File,Isanpur,,Dr Pragnesh B. Vora,PANKAJKUMAR MALI,266429682,2025-10-27,2025-10-27,,nan,,RBS + HIV
+No Zone File,Asarva,,UHC DUDHESHWAR,popat Mafatlal chauhan,266454666,2026-04-13,NaT,,nan,,RBS + HIV
+No Zone File,Jodhpur,,UHC BOPAL GHUMA,AJAYBHAI THAKOR,266508057,2026-04-10,NaT,,nan,,RBS + HIV
+No Zone File,Ghatlodia,,MC GMERS SOLA,JAGADISH SOLANKY,266523347,2026-04-18,NaT,,nan,,RBS + HIV
+No Zone File,Bapunagar,,SDH ESIC Model Hosp.,Narayanbhai gupta,266546126,2026-04-17,2026-04-18,,nan,,RBS + HIV
+No Zone File,Ranip,,UHC New Ranip,BALDEV MOTI  DABHODIYA ,98808515,2025-01-16,2025-01-16,,CURED,,ADT
