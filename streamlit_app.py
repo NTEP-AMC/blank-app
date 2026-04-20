@@ -35,12 +35,18 @@ def draw_card(title, value, color, icon):
     </div>
     """
 
-# --- LOAD COLAB DATA ---
+# --- LOAD COLAB DATA (WITH SAFETY CHECK) ---
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
         if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
+    
     df_comp = pd.read_csv("Comparison_Matrix.csv")
+    
+    # 🛡️ SAFETY CHECK: જો જૂનો ડેટા હોય તો ક્રેશ થવાને બદલે ખાલી કોલમ બનાવી દેશે
+    for c in ['ZONE', 'PHI', 'TB Unit']:
+        if c not in df_comp.columns: df_comp[c] = "N/A"
+        
 except:
     st.error("⚠️ ડેટા હજુ અપડેટ નથી થયો. કૃપા કરીને Google Colab માં Play બટન દબાવો.")
     st.stop()
@@ -118,15 +124,14 @@ with tab1:
 with tab2:
     st.markdown("#### 🔄 પ્રગતિ રિપોર્ટ (Yesterday vs Today)")
     
-    # --- Tab 2 ના નવા ફિલ્ટર્સ ---
     with st.expander("🔽 Filters for Comparison"):
         c1, c2 = st.columns(2)
         with c1:
-            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) != "nan"]), key='z2')
-            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique() if str(x) != "nan"]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique() if str(x) != "nan"])
+            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) != "nan" and str(x) != "N/A"]), key='z2')
+            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique() if str(x) != "nan" and str(x) != "N/A"]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique() if str(x) != "nan" and str(x) != "N/A"])
             s2_tu = st.multiselect("Filter TB Unit", tu2_opts, key='tu2')
         with c2:
-            s2_phi = st.multiselect("Filter PHI", sorted([str(x) for x in df_comp['PHI'].unique() if str(x) != "nan"]), key='phi2')
+            s2_phi = st.multiselect("Filter PHI", sorted([str(x) for x in df_comp['PHI'].unique() if str(x) != "nan" and str(x) != "N/A"]), key='phi2')
             
     df_comp_disp = df_comp.copy()
     if s2_z: df_comp_disp = df_comp_disp[df_comp_disp['ZONE'].isin(s2_z)]
@@ -136,7 +141,6 @@ with tab2:
     sq2 = st.text_input("🔍 Search Name or ID in Comparison", "", key='sq2')
     if sq2: df_comp_disp = df_comp_disp[df_comp_disp['Patient Name'].str.contains(sq2, case=False, na=False) | df_comp_disp['Episode ID'].astype(str).str.contains(sq2, case=False, na=False)]
     
-    # --- ન્યુ, રિઝોલ્વ અને પર્સિસ્ટન્ટ ના બોક્સ ---
     total_new = (df_comp_disp == "🔴 NEW").sum().sum()
     total_res = (df_comp_disp == "🟢 RESOLVED").sum().sum()
     total_per = (df_comp_disp == "🟡 PERSISTENT").sum().sum()
