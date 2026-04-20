@@ -35,18 +35,15 @@ def draw_card(title, value, color, icon):
     </div>
     """
 
-# --- LOAD COLAB DATA (WITH SAFETY CHECK) ---
+# --- LOAD COLAB DATA ---
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
         if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
     
     df_comp = pd.read_csv("Comparison_Matrix.csv")
-    
-    # 🛡️ SAFETY CHECK: જો જૂનો ડેટા હોય તો ક્રેશ થવાને બદલે ખાલી કોલમ બનાવી દેશે
-    for c in ['ZONE', 'PHI', 'TB Unit']:
-        if c not in df_comp.columns: df_comp[c] = "N/A"
-        
+    for c in ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']:
+        if c not in df_comp.columns: df_comp[c] = ""
 except:
     st.error("⚠️ ડેટા હજુ અપડેટ નથી થયો. કૃપા કરીને Google Colab માં Play બટન દબાવો.")
     st.stop()
@@ -69,12 +66,12 @@ with tab1:
         
         c1, c2 = st.columns(2)
         with c1:
-            s_z = st.multiselect("Zone", sorted([str(x) for x in df_master['ZONE'].unique() if str(x) != "nan"]))
-            tu_opts = sorted([str(x) for x in df_master[df_master['ZONE'].isin(s_z)]['TB Unit'].unique() if str(x) != "nan"]) if s_z else sorted([str(x) for x in df_master['TB Unit'].unique() if str(x) != "nan"])
+            s_z = st.multiselect("Zone", sorted([str(x) for x in df_master['ZONE'].unique() if str(x) not in ["nan", "", "None"]]))
+            tu_opts = sorted([str(x) for x in df_master[df_master['ZONE'].isin(s_z)]['TB Unit'].unique() if str(x) not in ["nan", "", "None"]]) if s_z else sorted([str(x) for x in df_master['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
             s_tu = st.multiselect("TB Unit", tu_opts)
         with c2:
-            s_ft = st.multiselect("Facility Type", sorted([str(x) for x in df_master['Facility Type'].unique() if str(x) != "nan"]))
-            s_phi = st.multiselect("PHI", sorted([str(x) for x in df_master['PHI'].unique() if str(x) != "nan"]))
+            s_ft = st.multiselect("Facility Type", sorted([str(x) for x in df_master['Facility Type'].unique() if str(x) not in ["nan", "", "None"]]))
+            s_phi = st.multiselect("PHI", sorted([str(x) for x in df_master['PHI'].unique() if str(x) not in ["nan", "", "None"]]))
         
         st.markdown("---")
         d1, d2, d3 = st.columns(3)
@@ -122,35 +119,38 @@ with tab1:
     st.download_button("📥 Download Master Data (CSV)", df_disp.to_csv(index=False).encode('utf-8'), "NTEP_Master_Data.csv", "text/csv", use_container_width=True)
 
 with tab2:
-    st.markdown("#### 🔄 પ્રગતિ રિપોર્ટ (Yesterday vs Today)")
+    st.markdown("#### 🔄 પ્રગતિ રિપોર્ટ: NEW vs PERSISTENT vs RESOLVED")
     
+    # --- 3 KPI બોક્સ ---
+    total_new = (df_comp == "🔴 NEW").sum().sum()
+    total_res = (df_comp == "🟢 RESOLVED").sum().sum()
+    total_per = (df_comp == "🟡 PERSISTENT").sum().sum()
+    
+    k1, k2, k3 = st.columns(3)
+    with k1: st.markdown(draw_card("New Pendency", total_new, "#C0392B", "🔴"), unsafe_allow_html=True)
+    with k2: st.markdown(draw_card("Resolved Work", total_res, "#27AE60", "🟢"), unsafe_allow_html=True)
+    with k3: st.markdown(draw_card("Still Pending", total_per, "#F39C12", "🟡"), unsafe_allow_html=True)
+
+    # --- ફિલ્ટર્સ ---
     with st.expander("🔽 Filters for Comparison"):
         c1, c2 = st.columns(2)
         with c1:
-            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) != "nan" and str(x) != "N/A"]), key='z2')
-            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique() if str(x) != "nan" and str(x) != "N/A"]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique() if str(x) != "nan" and str(x) != "N/A"])
+            s2_z = st.multiselect("Filter Zone", sorted([str(x) for x in df_comp['ZONE'].unique() if str(x) not in ["nan", "", "None"]]), key='z2')
+            tu2_opts = sorted([str(x) for x in df_comp[df_comp['ZONE'].isin(s2_z)]['TB Unit'].unique() if str(x) not in ["nan", "", "None"]]) if s2_z else sorted([str(x) for x in df_comp['TB Unit'].unique() if str(x) not in ["nan", "", "None"]])
             s2_tu = st.multiselect("Filter TB Unit", tu2_opts, key='tu2')
         with c2:
-            s2_phi = st.multiselect("Filter PHI", sorted([str(x) for x in df_comp['PHI'].unique() if str(x) != "nan" and str(x) != "N/A"]), key='phi2')
+            s2_phi = st.multiselect("Filter PHI", sorted([str(x) for x in df_comp['PHI'].unique() if str(x) not in ["nan", "", "None"]]), key='phi2')
             
     df_comp_disp = df_comp.copy()
     if s2_z: df_comp_disp = df_comp_disp[df_comp_disp['ZONE'].isin(s2_z)]
     if s2_tu: df_comp_disp = df_comp_disp[df_comp_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_comp_disp = df_comp_disp[df_comp_disp['PHI'].isin(s2_phi)]
 
+    st.markdown("---")
     sq2 = st.text_input("🔍 Search Name or ID in Comparison", "", key='sq2')
     if sq2: df_comp_disp = df_comp_disp[df_comp_disp['Patient Name'].str.contains(sq2, case=False, na=False) | df_comp_disp['Episode ID'].astype(str).str.contains(sq2, case=False, na=False)]
     
-    total_new = (df_comp_disp == "🔴 NEW").sum().sum()
-    total_res = (df_comp_disp == "🟢 RESOLVED").sum().sum()
-    total_per = (df_comp_disp == "🟡 PERSISTENT").sum().sum()
-    
-    k1, k2, k3 = st.columns(3)
-    with k1: st.markdown(draw_card("Total NEW", total_new, "#C0392B", "🔴"), unsafe_allow_html=True)
-    with k2: st.markdown(draw_card("Total RESOLVED", total_res, "#27AE60", "🟢"), unsafe_allow_html=True)
-    with k3: st.markdown(draw_card("Total PERSISTENT", total_per, "#F39C12", "🟡"), unsafe_allow_html=True)
-    
-    st.dataframe(df_comp_disp, use_container_width=True, hide_index=True, height=400)
+    st.dataframe(df_comp_disp, use_container_width=True, hide_index=True, height=500)
     st.download_button("📥 Download Comparison (CSV)", df_comp_disp.to_csv(index=False).encode('utf-8'), "NTEP_Comparison.csv", "text/csv", use_container_width=True)
 
 st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Auto-Dashboard Framework</div>", unsafe_allow_html=True)
