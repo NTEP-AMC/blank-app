@@ -7,8 +7,8 @@ st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sideb
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1000px; }
-    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-weight: bold; }
+    .block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 1000px; }
+    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 10px; padding-top: 10px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,19 +51,6 @@ b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
-
-# --- LAST UPDATED TIMESTAMP BOXES ---
-try:
-    df_times = pd.read_csv("Update_Timestamps.csv")
-    time_html = "<div style='display:flex; justify-content:space-between; gap:10px; margin-bottom:20px;'>"
-    for _, r in df_times.iterrows():
-        color = "#27AE60" if r['Last Updated'] != "N/A" else "#C0392B" # લીલો રંગ જો અપડેટ હોય, નહીંતર લાલ
-        time_html += f"<div style='flex:1; background:#f4f6f7; padding:8px; border-radius:5px; text-align:center; border-left:4px solid {color};'><div style='font-size:11px; color:#555; text-transform:uppercase;'><b>{r['Register']}</b></div><div style='font-size:12px; color:#333; margin-top:3px;'>🕒 {r['Last Updated']}</div></div>"
-    time_html += "</div>"
-    st.markdown(time_html, unsafe_allow_html=True)
-except:
-    pass
-
 st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
 
 # --- TABS ---
@@ -160,4 +147,16 @@ with tab2:
     
     st.dataframe(df_c_disp, use_container_width=True, hide_index=True)
 
-st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Auto-Dashboard Framework</div>", unsafe_allow_html=True)
+# --- FOOTER & SMALL TIMESTAMPS AT THE BOTTOM ---
+try:
+    df_times = pd.read_csv("Update_Timestamps.csv")
+    time_html = "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:20px; padding-top:15px; border-top:1px solid #ddd;'>"
+    for _, r in df_times.iterrows():
+        color = "#27AE60" if r['Last Updated'] != "N/A" else "#C0392B"
+        time_html += f"<div style='background:#f4f6f7; padding:4px 8px; border-radius:4px; text-align:center; border-left:3px solid {color}; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'><div style='font-size:9px; color:#666; text-transform:uppercase;'><b>{r['Register']}</b></div><div style='font-size:10px; color:#222; margin-top:1px;'>🕒 {r['Last Updated']}</div></div>"
+    time_html += "</div>"
+    st.markdown(time_html, unsafe_allow_html=True)
+except:
+    pass
+
+st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Monitoring System</div>", unsafe_allow_html=True)
