@@ -70,13 +70,15 @@ with tab1:
             tu_opts = sorted([str(x) for x in df_tu['TB Unit'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_tu = st.multiselect("TB Unit", tu_opts)
         with c2:
-            df_phi = df_tu[df_tu['TB Unit'].isin(s_tu)] if s_tu else df_tu
-            phi_opts = sorted([str(x) for x in df_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
-            s_phi = st.multiselect("PHI", phi_opts)
-            
-            df_ft = df_phi[df_phi['PHI'].isin(s_phi)] if s_phi else df_phi
+            # 👈 મુખ્ય સુધારો: પહેલા Facility Type નું ફિલ્ટર
+            df_ft = df_tu[df_tu['TB Unit'].isin(s_tu)] if s_tu else df_tu
             ft_opts = sorted([str(x) for x in df_ft['Facility Type'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
             s_ft = st.multiselect("Facility Type", ft_opts)
+            
+            # 👈 પછી PHI નું ફિલ્ટર (જે Facility Type પર આધાર રાખશે)
+            df_phi = df_ft[df_ft['Facility Type'].isin(s_ft)] if s_ft else df_ft
+            phi_opts = sorted([str(x) for x in df_phi['PHI'].unique() if str(x) not in ["nan", "", "None", "N/A"]])
+            s_phi = st.multiselect("PHI", phi_opts)
 
         d1, d2, d3 = st.columns(3)
         with d1: dr_diag = st.date_input("Diagnosis Date", value=[])
@@ -85,8 +87,8 @@ with tab1:
     df_disp = df_master.copy()
     if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
     if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
-    if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
     if s_ft: df_disp = df_disp[df_disp['Facility Type'].isin(s_ft)]
+    if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
     if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
     if len(dr_diag) == 2:
