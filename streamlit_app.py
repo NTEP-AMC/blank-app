@@ -35,22 +35,18 @@ def draw_card(title, value, color, icon):
     </div>
     """
 
-# 🎯 Looker Studio જેવું કાઉન્ટ બનાવવાનું ફંક્શન
 def get_options_with_counts(df, column_name):
     counts = df[column_name].value_counts()
     return [f"{val} ({count})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
 
-# 🎯 યુઝરે સિલેક્ટ કરેલા ઓપ્શનમાંથી પાછળનો આંકડો કાઢીને અસલ નામ શોધવાનું ફંક્શન
 def clean_selection(selected_list):
     return [item.rsplit(" (", 1)[0] for item in selected_list]
 
-# --- LOAD DATA ---
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
         if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
     df_comp = pd.read_csv("Comparison_Matrix.csv")
-    
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
         if col in df_curr_tb.columns: df_curr_tb[col] = pd.to_datetime(df_curr_tb[col], errors='coerce')
@@ -58,17 +54,14 @@ except:
     st.error("⚠️ ડેટા અપડેટ કરો...")
     st.stop()
 
-# --- HEADER ---
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 
-# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
-# 🎯 --- TAB 1: MASTER DASHBOARD ---
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -122,10 +115,21 @@ with tab1:
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
 
+    # 🎯 અહીં તમારા બધા જૂના બોક્સ પાછા આવી ગયા છે!
+    with st.expander("View All Other Pending Indicators"):
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+        with r2_c1: st.markdown(draw_card("SLPA", f_counts["SLPA"], "#D35400", "🔬"), unsafe_allow_html=True)
+        with r2_c2: st.markdown(draw_card("Consent", f_counts["Consent"], "#8E44AD", "📝"), unsafe_allow_html=True)
+        with r2_c3: st.markdown(draw_card("ADT", f_counts["ADT"], "#16A085", "🩸"), unsafe_allow_html=True)
+        with r2_c4: st.markdown(draw_card("RBS", f_counts["RBS"], "#E67E22", "💉"), unsafe_allow_html=True)
+        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
+        with r3_c1: st.markdown(draw_card("ART", f_counts["ART"], "#2980B9", "💊"), unsafe_allow_html=True)
+        with r3_c2: st.markdown(draw_card("CPT", f_counts["CPT"], "#D35400", "🛡️"), unsafe_allow_html=True)
+        with r3_c3: st.markdown(draw_card("HIV", f_counts["HIV"], "#C0392B", "🩺"), unsafe_allow_html=True)
+
     conf = {"Diagnosis Date": st.column_config.DateColumn(format="DD-MM-YYYY"), "Initiation Date": st.column_config.DateColumn(format="DD-MM-YYYY"), "Outcome Date": st.column_config.DateColumn(format="DD-MM-YYYY")}
     st.dataframe(df_disp, use_container_width=True, hide_index=True, column_config=conf)
 
-# 🎯 --- TAB 2: COMPARISON MATRIX ---
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Dependent Filters"):
@@ -163,7 +167,6 @@ with tab2:
     
     st.dataframe(df_c_disp, use_container_width=True, hide_index=True)
 
-# 🎯 --- TAB 3: CURRENT TB PATIENTS ---
 with tab3:
     st.markdown("#### 🏥 Current TB Patients of AMC")
     st.caption("આ લિસ્ટમાં માત્ર એવા જ દર્દીઓ છે જેનું Notification Register માં 'Treatment Outcome' ખાલી છે.")
@@ -228,7 +231,6 @@ with tab3:
     st.dataframe(df_curr_final, use_container_width=True, hide_index=True, column_config=conf)
     st.download_button("📥 Download Current Patients List", df_curr_final.to_csv(index=False).encode('utf-8'), "Current_TB_Patients.csv", "text/csv", use_container_width=True)
 
-# --- FOOTER & TIMESTAMPS ---
 try:
     df_times = pd.read_csv("Update_Timestamps.csv")
     time_html = "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:20px; padding-top:15px; border-top:1px solid #ddd;'>"
