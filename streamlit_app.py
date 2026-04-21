@@ -75,13 +75,11 @@ except:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
     st.stop()
 
-# 🎯 Role-Based Filtering (Zone Not Found Logic Included)
 def filter_by_role(df, role, target):
     if df.empty: return df
     if role == "TB_UNIT" and 'TB Unit' in df.columns:
         return df[df['TB Unit'].astype(str).str.strip().str.upper() == target]
     elif role == "ZONE" and 'ZONE' in df.columns:
-        # 🎯 પોતાનો ઝોન + 'N/A' (Zone Not Found) વાળા દર્દીઓ દેખાશે
         valid_zones = [target, 'N/A', 'NAN', 'NONE']
         return df[df['ZONE'].astype(str).str.strip().str.upper().isin(valid_zones)]
     return df
@@ -111,18 +109,20 @@ if b64_h1 and b64_h2:
 
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
+# ==========================================
+# 🟢 TAB 1: MASTER DASHBOARD
+# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
-        f_rep = st.multiselect("Report Type", inds)
+        f_rep = st.multiselect("Report Type", inds, key='rep1')
         c1, c2 = st.columns(2)
         with c1:
-            # 🎯 બધા લોગીનમાં સમાન ફિલ્ટર બોક્સ દેખાશે
-            s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_master, 'ZONE')))
-            s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master, 'TB Unit')))
+            s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_master, 'ZONE'), key='z1'))
+            s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master, 'TB Unit'), key='tu1'))
         with c2:
-            s_ft_raw = st.multiselect("Facility Category", ["PUBLIC", "PRIVATE"])
-            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_master, 'PHI')))
+            s_ft_raw = st.multiselect("Facility Category", ["PUBLIC", "PRIVATE"], key='fc1')
+            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_master, 'PHI'), key='phi1'))
     
     df_disp = df_master.copy()
     if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
@@ -137,31 +137,79 @@ with tab1:
 
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
     c1, c2, c3, c4 = st.columns(4)
+    # તમારી ડીઝાઈન અને KPI બોક્સ એકદમ અકબંધ!
     with c1: st.markdown(draw_card("Total Pendency", len(df_disp), "#1f618d", "📄"), unsafe_allow_html=True)
     with c2: st.markdown(draw_card("Outcome Pending", f_counts["Outcome"], "#F39C12", "🏥"), unsafe_allow_html=True)
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
     
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download This Report", df_disp.to_csv(index=False).encode('utf-8'), "Master_Report.csv", "text/csv")
+    st.download_button("📥 Download This Report", df_disp.to_csv(index=False).encode('utf-8'), "Master_Report.csv", "text/csv", key='dl1')
 
+# ==========================================
+# 🟡 TAB 2: DAILY COMPARISON
+# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters"):
         c1, c2, c3 = st.columns(3)
-        with c1: s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_comp, 'ZONE'), key='z2'))
-        with c2: s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_comp, 'TB Unit'), key='tu2'))
+        with c1: 
+            s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_comp, 'ZONE'), key='z2'))
+            s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_comp[df_comp['ZONE'].isin(s2_z)] if s2_z else df_comp, 'TB Unit'), key='tu2'))
+        with c2: 
+            # 🎯 Tab 2 માં Facility Category અને PHI ફિલ્ટર્સ ઉમેર્યા
+            s2_ft_raw = st.multiselect("Facility Category", ["PUBLIC", "PRIVATE"], key='fc2')
+            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_comp, 'PHI'), key='phi2'))
         with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_comp.columns if c not in ignore_cols], key='ind2')
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
+            
     df_c = df_comp.copy()
     if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
     if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
+    if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
+    if s2_ft_raw:
+        if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
+        elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+        elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+    
+    # 🎯 Report Type અને Status નું પ્રોપર ફિલ્ટર લોજીક
+    if s2_ind or s2_stat:
+        inds_to_check = s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]
+        stats_to_check = s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
+        mask = pd.Series(False, index=df_c.index)
+        for ind in inds_to_check:
+            if ind in df_c.columns:
+                mask = mask | df_c[ind].isin(stats_to_check)
+        df_c = df_c[mask]
+        
     st.dataframe(df_c, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download Comparison", df_c.to_csv(index=False).encode('utf-8'), "Comparison_Matrix.csv", "text/csv")
+    st.download_button("📥 Download Comparison", df_c.to_csv(index=False).encode('utf-8'), "Comparison_Matrix.csv", "text/csv", key='dl2')
 
+# ==========================================
+# 🔵 TAB 3: CURRENT TB PATIENTS
+# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
-    st.dataframe(df_curr_tb, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download Patient List", df_curr_tb.to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv")
+    with st.expander("🔽 Filters"):
+        c1, c2 = st.columns(2)
+        with c1:
+            # 🎯 Tab 3 માં પણ બધા જ ફિલ્ટર્સ ઉમેર્યા
+            s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_curr_tb, 'ZONE'), key='z3'))
+            s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_curr_tb[df_curr_tb['ZONE'].isin(s3_z)] if s3_z else df_curr_tb, 'TB Unit'), key='tu3'))
+        with c2:
+            s3_ft_raw = st.multiselect("Facility Category", ["PUBLIC", "PRIVATE"], key='fc3')
+            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_curr_tb, 'PHI'), key='phi3'))
+            
+    df_t3 = df_curr_tb.copy()
+    if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
+    if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
+    if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
+    if s3_ft_raw:
+        if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
+        elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+        elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+
+    st.dataframe(df_t3, use_container_width=True, hide_index=True)
+    st.download_button("📥 Download Patient List", df_t3.to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv", key='dl3')
