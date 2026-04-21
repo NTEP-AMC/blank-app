@@ -10,13 +10,11 @@ def img_to_b64(img_path):
     except: return ""
 
 # ==========================================
-# 🎯 --- CORPORATE LOGIN PAGE (Mobile Friendly) ---
+# 🎯 --- CORPORATE LOGIN PAGE ---
 # ==========================================
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    # 🎯 અહીં મેં તમારો પેલો ટાઈમ્સ ઓફ ઇન્ડિયા વાળો ફોટો સેટ કર્યો છે (Screenshot_20260420...jpg)
-    # ⚠️ ખાતરી કરો કે GitHub ના images ફોલ્ડરમાં કોઈ એક સારો ફોટો 'bg.jpg' નામથી હોય 
     bg_img = img_to_b64("images/bg.jpg")
     
     if bg_img: bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
@@ -34,8 +32,8 @@ if not st.session_state.auth:
         }}
         .login-overlay {{
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(13, 50, 77, 0.4); /* ડીસન્ટ કોર્પોરેટ કલર */
-            backdrop-filter: blur(5px); /* હળવો બ્લર, જેથી પાછળનો ફોટો દેખાય */
+            background: rgba(13, 50, 77, 0.4); 
+            backdrop-filter: blur(5px); 
             -webkit-backdrop-filter: blur(5px);
             z-index: 0;
         }}
@@ -128,7 +126,6 @@ b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 
-# 🎯 --- પેલા બે હેરિટેજ ફોટા મેઈન ડેશબોર્ડમાં પાછા લાવી દીધા ---
 if b64_h1 and b64_h2:
     st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
 
@@ -203,8 +200,9 @@ with tab1:
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
-    with st.expander("🔽 Dependent Filters"):
-        c1, c2 = st.columns(2)
+    with st.expander("🔽 Dependent Filters & Status"):
+        # 🎯 અહીં મેં 3 કોલમ બનાવીને નવું Status Filter ઉમેર્યું છે!
+        c1, c2, c3 = st.columns(3)
         with c1:
             z2_opts = get_options_with_counts(df_comp, 'ZONE')
             s2_z_raw = st.multiselect("Filter Zone", z2_opts, key='z2')
@@ -219,11 +217,25 @@ with tab2:
             phi2_opts = get_options_with_counts(df2_phi, 'PHI')
             s2_phi_raw = st.multiselect("Filter PHI", phi2_opts, key='phi2')
             s2_phi = clean_selection(s2_phi_raw)
+        with c3:
+            # 🎯 નવું સ્ટેટસ ફિલ્ટર 
+            status_options = ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
+            s2_status = st.multiselect("Filter by Status", status_options, key='status2')
             
     df_c_disp = df_comp.copy()
     if s2_z: df_c_disp = df_c_disp[df_c_disp['ZONE'].isin(s2_z)]
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
+    
+    # 🎯 Status Filter લોજીક
+    if s2_status:
+        base_cols = ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']
+        ind_cols = [c for c in df_c_disp.columns if c not in base_cols]
+        mask = pd.Series(False, index=df_c_disp.index)
+        for col in ind_cols:
+            for stat in s2_status:
+                mask = mask | (df_c_disp[col] == stat)
+        df_c_disp = df_c_disp[mask]
 
     t_new = (df_c_disp == "🔴 NEW").sum().sum()
     t_res = (df_c_disp == "🟢 RESOLVED").sum().sum()
@@ -313,4 +325,4 @@ try:
 except:
     pass
 
-st
+st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Monitoring System</div>", unsafe_allow_html=True)
