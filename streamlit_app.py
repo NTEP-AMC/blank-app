@@ -9,94 +9,76 @@ def img_to_b64(img_path):
         with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
     except: return ""
 
-# 🎯 --- CORPORATE LOGIN PAGE (GLASSMORPHISM) ---
+# ==========================================
+# 🎯 --- CORPORATE BLURRY LOGIN PAGE ---
+# ==========================================
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    # બેકગ્રાઉન્ડ ઈમેજ માટે સેટિંગ
-    bg_img = img_to_b64("images/bg.jpg")
-    if bg_img:
-        bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
-    else:
-        # જો ફોટો ન મળે તો શાનદાર બ્લુ ગ્રેડિએન્ટ
-        bg_css = "background: linear-gradient(135deg, #0d324d 0%, #7f5a83 100%);"
-
+    # 🌆 બેકગ્રાઉન્ડ ઈમેજ માટે (જો તમારી પાસે ઈમેજ ન હોય તો ઓટોમેટિક શાનદાર ડાર્ક થીમ લેશે)
+    bg_url = "https://images.unsplash.com/photo-1582510003544-4d00b7f74220?q=80&w=2070" 
+    
     login_style = f"""
     <style>
         #MainMenu {{visibility: hidden;}} header {{visibility: hidden;}} footer {{visibility: hidden;}}
         .stApp {{
-            {bg_css}
+            background-image: url('{bg_url}');
             background-size: cover;
             background-position: center;
         }}
-        .overlay {{
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(13, 50, 77, 0.4);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+        .login-overlay {{
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 25, 47, 0.65); /* ડાર્ક કોર્પોરેટ બ્લુ કલર */
+            backdrop-filter: blur(12px); /* શાનદાર બ્લર ઈફેક્ટ */
+            -webkit-backdrop-filter: blur(12px);
             z-index: 0;
         }}
-        .login-box {{
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+        .glass-panel {{
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 16px;
             padding: 40px;
-            width: 420px;
+            width: 400px;
+            margin: auto;
+            margin-top: 15vh;
             text-align: center;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-            color: white;
             position: relative;
             z-index: 1;
-            margin: auto;
-            margin-top: 12vh;
-        }}
-        .login-box h2 {{
             color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-weight: bold;
-            margin-bottom: 5px;
-            font-size: 26px;
         }}
-        .login-box p {{ color: #e0e0e0; font-size: 13px; margin-bottom: 25px; }}
+        .glass-panel h2 {{ font-family: 'Arial', sans-serif; font-weight: bold; font-size: 28px; margin-bottom: 5px; }}
+        .glass-panel p {{ color: #b0c4de; font-size: 14px; margin-bottom: 30px; letter-spacing: 1px; }}
         .stTextInput>div>div>input {{
+            background-color: rgba(255, 255, 255, 0.8) !important;
             border-radius: 8px !important;
             padding: 12px !important;
+            color: #000 !important;
         }}
         .stButton>button {{
-            width: 100%;
-            background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%);
-            color: white;
-            border-radius: 8px;
-            padding: 10px;
-            font-weight: bold;
-            border: none;
-            transition: all 0.3s ease;
+            width: 100%; background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%);
+            color: white; border-radius: 8px; padding: 12px; font-weight: bold; border: none; margin-top: 10px;
         }}
-        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: translateY(-2px); }}
+        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: scale(1.02); }}
     </style>
     """
     st.markdown(login_style, unsafe_allow_html=True)
-    st.markdown("<div class='overlay'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='login-overlay'></div>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.markdown("""
-        <div class='login-box'>
-            <h2>🏥 AMC NTEP</h2>
-            <p>Secure Enterprise Portal • Authorized Access Only</p>
+        <div class='glass-panel'>
+            <h2 style="color:white;">AMC NTEP</h2>
+            <p>SECURE DASHBOARD PORTAL</p>
         """, unsafe_allow_html=True)
         
-        pwd = st.text_input("", type="password", placeholder="Enter Corporate Password")
-        if st.button("Secure Login"):
+        pwd = st.text_input("Administrator Password", type="password", placeholder="Enter Password", label_visibility="collapsed")
+        if st.button("SECURE LOGIN"):
             if pwd == "AMC@2026": 
                 st.session_state.auth = True
                 st.rerun()
-            else: 
-                st.error("⚠️ Invalid Credentials")
-        
+            else: st.error("⚠️ Access Denied")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
