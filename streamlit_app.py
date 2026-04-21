@@ -10,41 +10,129 @@ def img_to_b64(img_path):
     except: return ""
 
 # ==========================================
-# 🎯 --- CORPORATE LOGIN PAGE ---
+# 🎯 --- GLASSMORPHISM LOGIN PAGE (Mobile Friendly) ---
 # ==========================================
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
+    # તમારા ઈમેજ ફોલ્ડરમાં 'bg.jpg' નામથી પેલો હેરીટેજ ફોટો હોવો જોઈએ
     bg_img = img_to_b64("images/bg.jpg")
-    
     if bg_img: bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
-    else: bg_css = "background-color: #1f618d;"
+    else: bg_css = "background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);"
     
     login_style = f"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         #MainMenu {{visibility: hidden;}} header {{visibility: hidden;}} footer {{visibility: hidden;}}
-        .stApp {{ {bg_css} background-size: cover; background-position: center; background-attachment: fixed; }}
-        .login-overlay {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(13, 50, 77, 0.4); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 0; }}
-        .glass-panel {{ background: rgba(255, 255, 255, 0.25); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 12px; padding: 35px; width: 90%; max-width: 400px; margin: auto; margin-top: 15vh; text-align: center; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); position: relative; z-index: 1; color: #ffffff; }}
-        .glass-panel h2 {{ font-family: 'Arial', sans-serif; font-weight: 900; font-size: 26px; margin-bottom: 5px; color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); }}
-        .glass-panel p {{ color: #f1f1f1; font-size: 13px; font-weight: bold; margin-bottom: 25px; letter-spacing: 1px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }}
-        .stTextInput>div>div>input {{ background-color: rgba(255, 255, 255, 0.95) !important; border-radius: 6px !important; padding: 10px !important; color: #000 !important; }}
-        .stButton>button {{ width: 100%; background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%); color: white; border-radius: 6px; padding: 10px; font-weight: bold; border: none; margin-top: 10px; }}
-        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: translateY(-2px); transition: 0.3s; }}
+        .stApp {{
+            {bg_css}
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }}
+        .login-container {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 80vh;
+        }}
+        /* 🎯 Premium Glass Effect */
+        .glass-panel {{
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            text-align: center;
+            color: white;
+            transition: transform 0.3s ease;
+        }}
+        .glass-panel:hover {{
+            transform: translateY(-5px);
+        }}
+        .glass-panel h2 {{ 
+            font-weight: 800; 
+            font-size: 28px; 
+            margin-bottom: 0px; 
+            color: #ffffff; 
+            letter-spacing: 1px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5); 
+        }}
+        .glass-panel p {{ 
+            color: #e0e0e0; 
+            font-size: 14px; 
+            font-weight: 500; 
+            margin-bottom: 30px; 
+            letter-spacing: 2px; 
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.6); 
+        }}
+        .stTextInput>div>div>input {{ 
+            background-color: rgba(255, 255, 255, 0.8) !important; 
+            border-radius: 10px !important; 
+            padding: 12px !important; 
+            color: #111 !important; 
+            border: 1px solid rgba(255,255,255,0.5) !important;
+            font-size: 16px !important;
+        }}
+        .stTextInput>div>div>input:focus {{
+            background-color: rgba(255, 255, 255, 1) !important; 
+            box-shadow: 0 0 10px rgba(255,255,255,0.5) !important;
+        }}
+        .stButton>button {{ 
+            width: 100%; 
+            background: linear-gradient(90deg, #FF8008 0%, #FFC837 100%); 
+            color: white; 
+            border-radius: 10px; 
+            padding: 12px; 
+            font-size: 16px;
+            font-weight: bold; 
+            border: none; 
+            margin-top: 15px; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }}
+        .stButton>button:hover {{ 
+            background: linear-gradient(90deg, #FFC837 0%, #FF8008 100%); 
+            transform: scale(1.02); 
+            box-shadow: 0 6px 20px rgba(255, 128, 8, 0.4); 
+        }}
+        
+        /* 📱 Mobile Responsive CSS */
+        @media (max-width: 768px) {{
+            .glass-panel {{
+                width: 90% !important;
+                padding: 30px 20px !important;
+                margin-top: 5vh;
+            }}
+            .glass-panel h2 {{ font-size: 24px !important; }}
+        }}
     </style>
     """
     st.markdown(login_style, unsafe_allow_html=True)
-    st.markdown("<div class='login-overlay'></div>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1,2,1])
+    st.markdown("<div class='login-container'>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,3,1])
     with col2:
-        st.markdown("""<div class='glass-panel'><h2>AMC | NTEP</h2><p>SECURE DISTRICT DASHBOARD</p>""", unsafe_allow_html=True)
-        pwd = st.text_input("Password", type="password", placeholder="Enter Portal Password", label_visibility="collapsed")
-        if st.button("LOGIN"):
-            if pwd == "AMC@2026": st.session_state.auth = True; st.rerun()
-            else: st.error("⚠️ Invalid Password")
+        st.markdown("""
+        <div class='glass-panel'>
+            <h2>AMC | NTEP</h2>
+            <p>SECURE PORTAL</p>
+        """, unsafe_allow_html=True)
+        
+        pwd = st.text_input("Password", type="password", placeholder="Enter Password...", label_visibility="collapsed")
+        if st.button("Access Dashboard"):
+            if pwd == "AMC@2026": 
+                st.session_state.auth = True
+                st.rerun()
+            else: st.error("⚠️ Invalid Password. Try Again.")
         st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 
@@ -56,16 +144,16 @@ st.markdown("""
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     .block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 1000px; }
-    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 10px; padding-top: 10px; font-weight: bold; }
+    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 10px; padding-top: 10px; font-weight: bold; border-top: 1px solid #ddd;}
 </style>
 """, unsafe_allow_html=True)
 
 def draw_card(title, value, color, icon):
     return f"""
-    <div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <div style="font-size: 24px; margin-bottom: 5px;">{icon}</div>
-        <div style="font-size: 13px; font-weight: bold; text-transform: uppercase; line-height: 1.1;">{title}</div>
-        <div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div>
+    <div style="background-color: {color}; border-radius: 12px; padding: 18px 5px; margin-bottom: 15px; color: white; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: transform 0.2s;">
+        <div style="font-size: 26px; margin-bottom: 8px;">{icon}</div>
+        <div style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">{title}</div>
+        <div style="font-size: 30px; font-weight: 900; margin-top: 5px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">{value}</div>
     </div>
     """
 
@@ -91,16 +179,16 @@ except:
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
-st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
-st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
+st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1f618d; padding-bottom: 10px;'><img src='data:image/png;base64,{b64_amc}' height='70'><h3 style='margin:0; font-weight:900; color: #1f618d; letter-spacing: 1px;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='70'></div>", unsafe_allow_html=True)
+st.markdown("<div style='background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%); color:white; text-align:center; padding:12px; border-radius:8px; margin:15px 0; font-weight: bold; letter-spacing: 1px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 
 if b64_h1 and b64_h2:
-    st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='display:flex; gap:10px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:140px; object-fit:cover; border-radius:10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:140px; object-fit:cover; border-radius:10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);'></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
 with tab1:
-    with st.expander("🔽 Filters & Sorting"):
+    with st.expander("🔽 Filters & Sorting", expanded=False):
         inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
         f_rep = st.multiselect("Report Type", inds)
         
@@ -169,7 +257,6 @@ with tab1:
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters (Geography & Report Type)"):
-        # 🎯 નવું સેટઅપ: Geography અને Report Type (Indicator) બંને ફિલ્ટર
         c1, c2, c3 = st.columns(3)
         with c1:
             z2_opts = get_options_with_counts(df_comp, 'ZONE')
@@ -186,12 +273,10 @@ with tab2:
             s2_phi_raw = st.multiselect("Filter PHI", phi2_opts, key='phi2')
             s2_phi = clean_selection(s2_phi_raw)
         with c3:
-            # 🎯 1. સબ-શીટ જેવો Report Type ફિલ્ટર (જેમ કે SLPA, Outcome)
             base_cols_comp = ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']
             available_inds = [col for col in df_comp.columns if col not in base_cols_comp]
-            s2_ind = st.multiselect("Filter by Report Type (Indicator)", available_inds, key='ind2')
+            s2_ind = st.multiselect("Filter by Report Type", available_inds, key='ind2')
             
-            # 🎯 2. નવું/જૂનું સ્ટેટસ ફિલ્ટર
             status_options = ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
             s2_status = st.multiselect("Filter by Status", status_options, key='status2')
             
@@ -200,18 +285,14 @@ with tab2:
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
     
-    # 🎯 Report Type (Indicator) ફિલ્ટરનું લોજીક 
     if s2_ind:
-        # માત્ર પસંદ કરેલા ઇન્ડિકેટર્સની કોલમ જ રાખશે, અને એવા દર્દી બતાવશે જેમાં કંઈક સ્ટેટસ હોય
         cols_to_keep = base_cols_comp + s2_ind
         df_c_disp = df_c_disp[cols_to_keep]
-        # જે દર્દીઓનું સિલેક્ટ કરેલા રિપોર્ટમાં કોઈ જ સ્ટેટસ નથી, તેમને કાઢી નાખશે
         mask = pd.Series(False, index=df_c_disp.index)
         for col in s2_ind:
             mask = mask | (df_c_disp[col].notna() & (df_c_disp[col] != ""))
         df_c_disp = df_c_disp[mask]
 
-    # 🎯 Status ફિલ્ટરનું લોજીક
     if s2_status:
         ind_cols = [c for c in df_c_disp.columns if c not in base_cols_comp]
         mask = pd.Series(False, index=df_c_disp.index)
@@ -299,13 +380,13 @@ with tab3:
 
 try:
     df_times = pd.read_csv("Update_Timestamps.csv")
-    time_html = "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:20px; padding-top:15px; border-top:1px solid #ddd;'>"
+    time_html = "<div style='display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-top:30px; padding-top:20px; border-top:1px solid #eee;'>"
     for _, r in df_times.iterrows():
         color = "#27AE60" if r['Last Updated'] != "N/A" else "#C0392B"
-        time_html += f"<div style='background:#f4f6f7; padding:4px 8px; border-radius:4px; text-align:center; border-left:3px solid {color}; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'><div style='font-size:9px; color:#666; text-transform:uppercase;'><b>{r['Register']}</b></div><div style='font-size:10px; color:#222; margin-top:1px;'>🕒 {r['Last Updated']}</div></div>"
+        time_html += f"<div style='background:#f9f9f9; padding:6px 12px; border-radius:6px; text-align:center; border-left:4px solid {color}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:10px; color:#555; text-transform:uppercase; letter-spacing: 0.5px;'><b>{r['Register']}</b></div><div style='font-size:11px; color:#111; margin-top:2px; font-weight: bold;'>🕒 {r['Last Updated']}</div></div>"
     time_html += "</div>"
     st.markdown(time_html, unsafe_allow_html=True)
 except:
     pass
 
-st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Monitoring System</div>", unsafe_allow_html=True)
+st.markdown("<div class='amc-footer'>Developed for District TB Center AMC | Empowering NTEP Monitoring</div>", unsafe_allow_html=True)
