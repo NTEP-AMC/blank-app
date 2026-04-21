@@ -9,9 +9,6 @@ def img_to_b64(img_path):
         with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
     except: return ""
 
-# ==========================================
-# 🎯 1. SMART LOGIN SYSTEM
-# ==========================================
 if "auth" not in st.session_state: 
     st.session_state.auth = False
     st.session_state.current_user = ""
@@ -47,9 +44,6 @@ if not st.session_state.auth:
                 st.error("⚠️ Invalid Username or Password")
     st.stop()
 
-# ==========================================
-# 🎯 2. USER PROFILE & LOGOUT
-# ==========================================
 st.sidebar.markdown(f"### 👤 Logged in as:")
 st.sidebar.success(f"**{st.session_state.target} ({st.session_state.role})**")
 
@@ -69,9 +63,6 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state.auth = False
     st.rerun()
 
-# ==========================================
-# 🎯 3. LOAD & FILTER DATA (DANILIMDA BUG FIXED)
-# ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
 try:
@@ -84,26 +75,21 @@ except:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
     st.stop()
 
+# 🎯 Role-Based Filtering (Zone Not Found Logic Included)
 def filter_by_role(df, role, target):
     if df.empty: return df
     if role == "TB_UNIT" and 'TB Unit' in df.columns:
-        # સ્પેસનો પ્રોબ્લેમ જડમૂળથી ખતમ (100% Strict Match)
-        df_clean = df['TB Unit'].astype(str).str.strip().str.upper()
-        return df[df_clean == target]
+        return df[df['TB Unit'].astype(str).str.strip().str.upper() == target]
     elif role == "ZONE" and 'ZONE' in df.columns:
-        # પોતાનો ઝોન + 'Not Found' / 'N/A' બધું જ દેખાડશે
-        df_clean = df['ZONE'].astype(str).str.strip().str.upper()
-        valid_zones = [target, 'N/A', 'NAN', 'NONE', 'ZONE NOT FOUND', '']
-        return df[df_clean.isin(valid_zones)]
+        # 🎯 પોતાનો ઝોન + 'N/A' (Zone Not Found) વાળા દર્દીઓ દેખાશે
+        valid_zones = [target, 'N/A', 'NAN', 'NONE']
+        return df[df['ZONE'].astype(str).str.strip().str.upper().isin(valid_zones)]
     return df
 
 df_master = filter_by_role(df_master, st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
 
-# ==========================================
-# 🎯 4. DASHBOARD UI
-# ==========================================
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
 
@@ -131,6 +117,7 @@ with tab1:
         f_rep = st.multiselect("Report Type", inds)
         c1, c2 = st.columns(2)
         with c1:
+            # 🎯 બધા લોગીનમાં સમાન ફિલ્ટર બોક્સ દેખાશે
             s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_master, 'ZONE')))
             s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_master[df_master['ZONE'].isin(s_z)] if s_z else df_master, 'TB Unit')))
         with c2:
