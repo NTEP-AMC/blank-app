@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import base64
-import os
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="expanded")
 
@@ -11,90 +10,69 @@ def img_to_b64(img_path):
     except: return ""
 
 # ==========================================
-# 🎯 --- SMART LOGIN & PASSWORD SYSTEM ---
+# 🎯 1. SMART LOGIN SYSTEM
 # ==========================================
 if "auth" not in st.session_state: 
     st.session_state.auth = False
     st.session_state.current_user = ""
-    st.session_state.current_tu = ""
+    st.session_state.role = ""
+    st.session_state.target = ""
 
-# યુઝર ડેટાબેઝ વાંચો
 try:
     df_users = pd.read_csv("users.csv")
     df_users['Username'] = df_users['Username'].astype(str).str.strip().str.upper()
     df_users['Password'] = df_users['Password'].astype(str).str.strip()
 except:
-    st.error("⚠️ User Database (users.csv) મળ્યું નથી! પહેલા Colab માં યુઝર બનાવવાનો કોડ રન કરો.")
+    st.error("⚠️ User Database (users.csv) મળ્યું નથી!")
     st.stop()
 
 if not st.session_state.auth:
     st.markdown("<h2 style='text-align: center; color: #1f618d; margin-top: 10vh;'>AMC | NTEP Secure Login</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #555;'>Please log in with your TB Unit ID</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #555;'>Log in with your Zone or TB Unit ID</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        uname = st.text_input("Username (TB Unit)").strip().upper()
+        uname = st.text_input("Username").strip().upper()
         pwd = st.text_input("Password", type="password").strip()
         
         if st.button("Login", use_container_width=True):
-            # પાસવર્ડ અને આઈડી ચેક કરો
             user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
-            
             if not user_match.empty: 
                 st.session_state.auth = True
                 st.session_state.current_user = uname
-                st.session_state.current_tu = user_match.iloc[0]['TB_Unit']
+                st.session_state.role = user_match.iloc[0]['Role']
+                st.session_state.target = user_match.iloc[0]['Target']
                 st.rerun()
             else: 
                 st.error("⚠️ Invalid Username or Password")
     st.stop()
 
 # ==========================================
-# 🎯 --- USER PROFILE & CHANGE PASSWORD ---
+# 🎯 2. USER PROFILE & LOGOUT
 # ==========================================
 st.sidebar.markdown(f"### 👤 Logged in as:")
-st.sidebar.success(f"**{st.session_state.current_tu}**")
+st.sidebar.success(f"**{st.session_state.target} ({st.session_state.role})**")
 
-# પાસવર્ડ બદલવાની સુવિધા
 with st.sidebar.expander("🔑 Change My Password"):
     new_pwd = st.text_input("New Password", type="password", key="p1")
     conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
-    
     if st.button("Update Password", use_container_width=True):
         if new_pwd == conf_pwd and new_pwd != "":
-            # યુઝરનો નવો પાસવર્ડ અપડેટ કરો
             df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'] = new_pwd
             df_users.to_csv("users.csv", index=False)
-            st.success("✅ Password changed successfully!")
+            st.success("✅ Password updated!")
         else:
-            st.error("⚠️ Passwords do not match or are empty!")
+            st.error("⚠️ Passwords do not match!")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Logout"):
     st.session_state.auth = False
     st.rerun()
 
-
 # ==========================================
-# 🎯 --- ORIGINAL MAIN DASHBOARD ---
+# 🎯 3. LOAD & FILTER DATA (DANILIMDA BUG FIXED)
 # ==========================================
-st.markdown("""
-<style>
-    #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
-    .block-container { padding-top: 1rem; padding-bottom: 1rem; max-width: 1000px; }
-    .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 10px; padding-top: 10px; font-weight: bold; }
-</style>
-""", unsafe_allow_html=True)
-
-def draw_card(title, value, color, icon):
-    return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase; line-height: 1.1;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
-
-def get_options_with_counts(df, column_name):
-    counts = df[column_name].value_counts()
-    return [f"{val} ({count})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
-
-def clean_selection(selected_list):
-    return [item.rsplit(" (", 1)[0] for item in selected_list]
+st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
@@ -103,14 +81,38 @@ try:
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
 except:
-    st.error("⚠️ ડેટા અપડેટ કરો...")
+    st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
     st.stop()
 
-# 🎯 લોજીક: જો ADMIN લોગીન હોય તો બધું બતાવો, નહિ તો માત્ર તે જ TB Unit નો ડેટા બતાવો!
-if st.session_state.current_user != "ADMIN":
-    df_master = df_master[df_master['TB Unit'] == st.session_state.current_tu]
-    df_comp = df_comp[df_comp['TB Unit'] == st.session_state.current_tu]
-    df_curr_tb = df_curr_tb[df_curr_tb['TB Unit'] == st.session_state.current_tu]
+def filter_by_role(df, role, target):
+    if df.empty: return df
+    if role == "TB_UNIT" and 'TB Unit' in df.columns:
+        # સ્પેસનો પ્રોબ્લેમ જડમૂળથી ખતમ (100% Strict Match)
+        df_clean = df['TB Unit'].astype(str).str.strip().str.upper()
+        return df[df_clean == target]
+    elif role == "ZONE" and 'ZONE' in df.columns:
+        # પોતાનો ઝોન + 'Not Found' / 'N/A' બધું જ દેખાડશે
+        df_clean = df['ZONE'].astype(str).str.strip().str.upper()
+        valid_zones = [target, 'N/A', 'NAN', 'NONE', 'ZONE NOT FOUND', '']
+        return df[df_clean.isin(valid_zones)]
+    return df
+
+df_master = filter_by_role(df_master, st.session_state.role, st.session_state.target)
+df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
+df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
+
+# ==========================================
+# 🎯 4. DASHBOARD UI
+# ==========================================
+def draw_card(title, value, color, icon):
+    return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
+
+def get_options_with_counts(df, column_name):
+    counts = df[column_name].value_counts()
+    return [f"{val} ({count})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
+
+def clean_selection(selected_list):
+    return [item.rsplit(" (", 1)[0] for item in selected_list]
 
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
