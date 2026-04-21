@@ -24,34 +24,9 @@ if not st.session_state.auth:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         #MainMenu {{visibility: hidden;}} header {{visibility: hidden;}} footer {{visibility: hidden;}}
-        .stApp {{
-            {bg_css}
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-        }}
-        .login-overlay {{
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(13, 50, 77, 0.4); 
-            backdrop-filter: blur(5px); 
-            -webkit-backdrop-filter: blur(5px);
-            z-index: 0;
-        }}
-        .glass-panel {{
-            background: rgba(255, 255, 255, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 12px;
-            padding: 35px;
-            width: 90%;
-            max-width: 400px;
-            margin: auto;
-            margin-top: 15vh;
-            text-align: center;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
-            position: relative;
-            z-index: 1;
-            color: #ffffff;
-        }}
+        .stApp {{ {bg_css} background-size: cover; background-position: center; background-attachment: fixed; }}
+        .login-overlay {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(13, 50, 77, 0.4); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 0; }}
+        .glass-panel {{ background: rgba(255, 255, 255, 0.25); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 12px; padding: 35px; width: 90%; max-width: 400px; margin: auto; margin-top: 15vh; text-align: center; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); position: relative; z-index: 1; color: #ffffff; }}
         .glass-panel h2 {{ font-family: 'Arial', sans-serif; font-weight: 900; font-size: 26px; margin-bottom: 5px; color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); }}
         .glass-panel p {{ color: #f1f1f1; font-size: 13px; font-weight: bold; margin-bottom: 25px; letter-spacing: 1px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }}
         .stTextInput>div>div>input {{ background-color: rgba(255, 255, 255, 0.95) !important; border-radius: 6px !important; padding: 10px !important; color: #000 !important; }}
@@ -64,17 +39,10 @@ if not st.session_state.auth:
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.markdown("""
-        <div class='glass-panel'>
-            <h2>AMC | NTEP</h2>
-            <p>SECURE DISTRICT DASHBOARD</p>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("""<div class='glass-panel'><h2>AMC | NTEP</h2><p>SECURE DISTRICT DASHBOARD</p>""", unsafe_allow_html=True)
         pwd = st.text_input("Password", type="password", placeholder="Enter Portal Password", label_visibility="collapsed")
         if st.button("LOGIN"):
-            if pwd == "AMC@2026": 
-                st.session_state.auth = True
-                st.rerun()
+            if pwd == "AMC@2026": st.session_state.auth = True; st.rerun()
             else: st.error("⚠️ Invalid Password")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
@@ -200,8 +168,8 @@ with tab1:
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
-    with st.expander("🔽 Dependent Filters & Status"):
-        # 🎯 અહીં મેં 3 કોલમ બનાવીને નવું Status Filter ઉમેર્યું છે!
+    with st.expander("🔽 Filters (Geography & Report Type)"):
+        # 🎯 નવું સેટઅપ: Geography અને Report Type (Indicator) બંને ફિલ્ટર
         c1, c2, c3 = st.columns(3)
         with c1:
             z2_opts = get_options_with_counts(df_comp, 'ZONE')
@@ -218,7 +186,12 @@ with tab2:
             s2_phi_raw = st.multiselect("Filter PHI", phi2_opts, key='phi2')
             s2_phi = clean_selection(s2_phi_raw)
         with c3:
-            # 🎯 નવું સ્ટેટસ ફિલ્ટર 
+            # 🎯 1. સબ-શીટ જેવો Report Type ફિલ્ટર (જેમ કે SLPA, Outcome)
+            base_cols_comp = ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']
+            available_inds = [col for col in df_comp.columns if col not in base_cols_comp]
+            s2_ind = st.multiselect("Filter by Report Type (Indicator)", available_inds, key='ind2')
+            
+            # 🎯 2. નવું/જૂનું સ્ટેટસ ફિલ્ટર
             status_options = ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
             s2_status = st.multiselect("Filter by Status", status_options, key='status2')
             
@@ -227,10 +200,20 @@ with tab2:
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
     
-    # 🎯 Status Filter લોજીક
+    # 🎯 Report Type (Indicator) ફિલ્ટરનું લોજીક 
+    if s2_ind:
+        # માત્ર પસંદ કરેલા ઇન્ડિકેટર્સની કોલમ જ રાખશે, અને એવા દર્દી બતાવશે જેમાં કંઈક સ્ટેટસ હોય
+        cols_to_keep = base_cols_comp + s2_ind
+        df_c_disp = df_c_disp[cols_to_keep]
+        # જે દર્દીઓનું સિલેક્ટ કરેલા રિપોર્ટમાં કોઈ જ સ્ટેટસ નથી, તેમને કાઢી નાખશે
+        mask = pd.Series(False, index=df_c_disp.index)
+        for col in s2_ind:
+            mask = mask | (df_c_disp[col].notna() & (df_c_disp[col] != ""))
+        df_c_disp = df_c_disp[mask]
+
+    # 🎯 Status ફિલ્ટરનું લોજીક
     if s2_status:
-        base_cols = ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']
-        ind_cols = [c for c in df_c_disp.columns if c not in base_cols]
+        ind_cols = [c for c in df_c_disp.columns if c not in base_cols_comp]
         mask = pd.Series(False, index=df_c_disp.index)
         for col in ind_cols:
             for stat in s2_status:
