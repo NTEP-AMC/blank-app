@@ -4,6 +4,107 @@ import base64
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
+def img_to_b64(img_path):
+    try:
+        with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
+    except: return ""
+
+# 🎯 --- CORPORATE LOGIN PAGE (GLASSMORPHISM) ---
+if "auth" not in st.session_state: st.session_state.auth = False
+
+if not st.session_state.auth:
+    # બેકગ્રાઉન્ડ ઈમેજ માટે સેટિંગ
+    bg_img = img_to_b64("images/bg.jpg")
+    if bg_img:
+        bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
+    else:
+        # જો ફોટો ન મળે તો શાનદાર બ્લુ ગ્રેડિએન્ટ
+        bg_css = "background: linear-gradient(135deg, #0d324d 0%, #7f5a83 100%);"
+
+    login_style = f"""
+    <style>
+        #MainMenu {{visibility: hidden;}} header {{visibility: hidden;}} footer {{visibility: hidden;}}
+        .stApp {{
+            {bg_css}
+            background-size: cover;
+            background-position: center;
+        }}
+        .overlay {{
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(13, 50, 77, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 0;
+        }}
+        .login-box {{
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 16px;
+            padding: 40px;
+            width: 420px;
+            text-align: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            color: white;
+            position: relative;
+            z-index: 1;
+            margin: auto;
+            margin-top: 12vh;
+        }}
+        .login-box h2 {{
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 26px;
+        }}
+        .login-box p {{ color: #e0e0e0; font-size: 13px; margin-bottom: 25px; }}
+        .stTextInput>div>div>input {{
+            border-radius: 8px !important;
+            padding: 12px !important;
+        }}
+        .stButton>button {{
+            width: 100%;
+            background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 10px;
+            font-weight: bold;
+            border: none;
+            transition: all 0.3s ease;
+        }}
+        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: translateY(-2px); }}
+    </style>
+    """
+    st.markdown(login_style, unsafe_allow_html=True)
+    st.markdown("<div class='overlay'></div>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("""
+        <div class='login-box'>
+            <h2>🏥 AMC NTEP</h2>
+            <p>Secure Enterprise Portal • Authorized Access Only</p>
+        """, unsafe_allow_html=True)
+        
+        pwd = st.text_input("", type="password", placeholder="Enter Corporate Password")
+        if st.button("Secure Login"):
+            if pwd == "AMC@2026": 
+                st.session_state.auth = True
+                st.rerun()
+            else: 
+                st.error("⚠️ Invalid Credentials")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+
+# ==========================================
+# 🎯 --- MAIN DASHBOARD (AFTER LOGIN) ---
+# ==========================================
+
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
@@ -11,20 +112,6 @@ st.markdown("""
     .amc-footer { text-align: center; font-size: 11px; color: #555; margin-top: 10px; padding-top: 10px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
-
-if "auth" not in st.session_state: st.session_state.auth = False
-if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center; color: #1f618d; margin-top: 50px;'>🏥 AMC NTEP Login</h2>", unsafe_allow_html=True)
-    pwd = st.text_input("Password", type="password")
-    if st.button("Login", use_container_width=True):
-        if pwd == "AMC@2026": st.session_state.auth = True; st.rerun()
-        else: st.error("Wrong Password")
-    st.stop()
-
-def img_to_b64(img_path):
-    try:
-        with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
-    except: return ""
 
 def draw_card(title, value, color, icon):
     return f"""
@@ -115,7 +202,6 @@ with tab1:
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
 
-    # 🎯 અહીં તમારા બધા જૂના બોક્સ પાછા આવી ગયા છે!
     with st.expander("View All Other Pending Indicators"):
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
         with r2_c1: st.markdown(draw_card("SLPA", f_counts["SLPA"], "#D35400", "🔬"), unsafe_allow_html=True)
