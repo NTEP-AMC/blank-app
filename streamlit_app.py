@@ -114,7 +114,7 @@ tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "�
 # ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
-        inds = ["SLPA", "UDST", "Not Put On", "Outcome", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
+        inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
         f_rep = st.multiselect("Report Type", inds, key='rep1')
         c1, c2 = st.columns(2)
         with c1:
@@ -136,12 +136,24 @@ with tab1:
         elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
 
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
+    
+    # 🎯 ડેશબોર્ડ બોક્સ (બધા જ 10 રિપોર્ટ માટે)
+    st.markdown("##### 📈 Key Performance Indicators")
     c1, c2, c3, c4 = st.columns(4)
-    # તમારી ડીઝાઈન અને KPI બોક્સ એકદમ અકબંધ!
     with c1: st.markdown(draw_card("Total Pendency", len(df_disp), "#1f618d", "📄"), unsafe_allow_html=True)
     with c2: st.markdown(draw_card("Outcome Pending", f_counts["Outcome"], "#F39C12", "🏥"), unsafe_allow_html=True)
     with c3: st.markdown(draw_card("UDST Pending", f_counts["UDST"], "#C0392B", "🧪"), unsafe_allow_html=True)
     with c4: st.markdown(draw_card("Not Put On", f_counts["Not Put On"], "#27AE60", "⏳"), unsafe_allow_html=True)
+
+    c5, c6, c7, c8 = st.columns(4)
+    with c5: st.markdown(draw_card("SLPA", f_counts["SLPA"], "#8E44AD", "🔬"), unsafe_allow_html=True)
+    with c6: st.markdown(draw_card("Consent", f_counts["Consent"], "#D35400", "📝"), unsafe_allow_html=True)
+    with c7: st.markdown(draw_card("HIV", f_counts["HIV"], "#C0392B", "🩸"), unsafe_allow_html=True)
+    with c8: st.markdown(draw_card("ART / CPT", f"{f_counts['ART']} / {f_counts['CPT']}", "#2980B9", "💊"), unsafe_allow_html=True)
+
+    c9, c10, c11, _ = st.columns(4)
+    with c9: st.markdown(draw_card("RBS", f_counts["RBS"], "#16A085", "🩺"), unsafe_allow_html=True)
+    with c10: st.markdown(draw_card("ADT", f_counts["ADT"], "#E67E22", "📊"), unsafe_allow_html=True)
     
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     st.download_button("📥 Download This Report", df_disp.to_csv(index=False).encode('utf-8'), "Master_Report.csv", "text/csv", key='dl1')
@@ -157,7 +169,6 @@ with tab2:
             s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_comp, 'ZONE'), key='z2'))
             s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_comp[df_comp['ZONE'].isin(s2_z)] if s2_z else df_comp, 'TB Unit'), key='tu2'))
         with c2: 
-            # 🎯 Tab 2 માં Facility Category અને PHI ફિલ્ટર્સ ઉમેર્યા
             s2_ft_raw = st.multiselect("Facility Category", ["PUBLIC", "PRIVATE"], key='fc2')
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_comp, 'PHI'), key='phi2'))
         with c3: 
@@ -174,7 +185,6 @@ with tab2:
         elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
         elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
     
-    # 🎯 Report Type અને Status નું પ્રોપર ફિલ્ટર લોજીક
     if s2_ind or s2_stat:
         inds_to_check = s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]
         stats_to_check = s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
@@ -184,6 +194,18 @@ with tab2:
                 mask = mask | df_c[ind].isin(stats_to_check)
         df_c = df_c[mask]
         
+    # 🎯 Tab 2 ના નવા KPI બોક્સ (New / Resolved)
+    ind_cols_in_df = [c for c in df_c.columns if c not in ignore_cols]
+    new_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum()
+    res_c = (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum()
+    per_c = (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
+    
+    st.markdown("##### 📈 Daily Action Status")
+    cc1, cc2, cc3 = st.columns(3)
+    with cc1: st.markdown(draw_card("🔴 NEW PENDENCY", new_c, "#E74C3C", "🚨"), unsafe_allow_html=True)
+    with cc2: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
+    with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
+
     st.dataframe(df_c, use_container_width=True, hide_index=True)
     st.download_button("📥 Download Comparison", df_c.to_csv(index=False).encode('utf-8'), "Comparison_Matrix.csv", "text/csv", key='dl2')
 
@@ -195,7 +217,6 @@ with tab3:
     with st.expander("🔽 Filters"):
         c1, c2 = st.columns(2)
         with c1:
-            # 🎯 Tab 3 માં પણ બધા જ ફિલ્ટર્સ ઉમેર્યા
             s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_curr_tb, 'ZONE'), key='z3'))
             s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_curr_tb[df_curr_tb['ZONE'].isin(s3_z)] if s3_z else df_curr_tb, 'TB Unit'), key='tu3'))
         with c2:
@@ -211,5 +232,9 @@ with tab3:
         elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
         elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
 
-    st.dataframe(df_t3, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download Patient List", df_t3.to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv", key='dl3')
+    # 🎯 Tab 3 નો નવો ચોક્કસ ક્રમ
+    t3_col_order = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
+    t3_final_cols = [c for c in t3_col_order if c in df_t3.columns]
+    
+    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
+    st.download_button("📥 Download Patient List", df_t3[t3_final_cols].to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv", key='dl3')
