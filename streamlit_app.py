@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import base64
-import os
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
@@ -11,19 +10,17 @@ def img_to_b64(img_path):
     except: return ""
 
 # ==========================================
-# 🎯 --- CORPORATE BLURRY LOGIN PAGE (Mobile Friendly) ---
+# 🎯 --- CORPORATE LOGIN PAGE (Mobile Friendly) ---
 # ==========================================
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    # 🎯 તમારો Heritage ફોટો પકડવા માટેનો કોડ
+    # 🎯 અહીં મેં તમારો પેલો ટાઈમ્સ ઓફ ઇન્ડિયા વાળો ફોટો સેટ કર્યો છે (Screenshot_20260420...jpg)
+    # ⚠️ ખાતરી કરો કે GitHub ના images ફોલ્ડરમાં કોઈ એક સારો ફોટો 'bg.jpg' નામથી હોય 
     bg_img = img_to_b64("images/bg.jpg")
     
-    if bg_img:
-        bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
-    else:
-        # જો bg.jpg ન મળે, તો ડાર્ક બ્લુ થીમ
-        bg_css = "background-color: #1f618d;"
+    if bg_img: bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}');"
+    else: bg_css = "background-color: #1f618d;"
     
     login_style = f"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -37,49 +34,31 @@ if not st.session_state.auth:
         }}
         .login-overlay {{
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(10, 25, 47, 0.5); /* ફોટો દેખાય એ માટે કલર આછો કર્યો છે */
-            backdrop-filter: blur(8px); /* બ્લર ઈફેક્ટ */
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(13, 50, 77, 0.4); /* ડીસન્ટ કોર્પોરેટ કલર */
+            backdrop-filter: blur(5px); /* હળવો બ્લર, જેથી પાછળનો ફોટો દેખાય */
+            -webkit-backdrop-filter: blur(5px);
             z-index: 0;
         }}
         .glass-panel {{
-            background: rgba(255, 255, 255, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 16px;
-            padding: 40px;
-            width: 100%;
-            max-width: 420px;
+            background: rgba(255, 255, 255, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            padding: 35px;
+            width: 90%;
+            max-width: 400px;
             margin: auto;
             margin-top: 15vh;
             text-align: center;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
             position: relative;
             z-index: 1;
             color: #ffffff;
         }}
-        .glass-panel h2 {{ font-family: 'Arial', sans-serif; font-weight: bold; font-size: 28px; margin-bottom: 5px; color: white; text-shadow: 1px 1px 2px black; }}
-        .glass-panel p {{ color: #e0e0e0; font-size: 14px; margin-bottom: 30px; letter-spacing: 1px; text-shadow: 1px 1px 2px black; }}
-        .stTextInput>div>div>input {{
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            border-radius: 8px !important;
-            padding: 12px !important;
-            color: #000 !important;
-        }}
-        .stButton>button {{
-            width: 100%; background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%);
-            color: white; border-radius: 8px; padding: 12px; font-weight: bold; border: none; margin-top: 10px;
-        }}
-        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: scale(1.02); }}
-        
-        /* 📱 Mobile Friendly CSS */
-        @media (max-width: 768px) {{
-            .glass-panel {{
-                width: 90% !important;
-                padding: 25px !important;
-                margin-top: 10vh !important;
-            }}
-            .glass-panel h2 {{ font-size: 22px !important; }}
-        }}
+        .glass-panel h2 {{ font-family: 'Arial', sans-serif; font-weight: 900; font-size: 26px; margin-bottom: 5px; color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); }}
+        .glass-panel p {{ color: #f1f1f1; font-size: 13px; font-weight: bold; margin-bottom: 25px; letter-spacing: 1px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }}
+        .stTextInput>div>div>input {{ background-color: rgba(255, 255, 255, 0.95) !important; border-radius: 6px !important; padding: 10px !important; color: #000 !important; }}
+        .stButton>button {{ width: 100%; background: linear-gradient(90deg, #1f618d 0%, #2980b9 100%); color: white; border-radius: 6px; padding: 10px; font-weight: bold; border: none; margin-top: 10px; }}
+        .stButton>button:hover {{ box-shadow: 0 4px 15px rgba(41, 128, 185, 0.5); transform: translateY(-2px); transition: 0.3s; }}
     </style>
     """
     st.markdown(login_style, unsafe_allow_html=True)
@@ -89,16 +68,16 @@ if not st.session_state.auth:
     with col2:
         st.markdown("""
         <div class='glass-panel'>
-            <h2>AMC NTEP</h2>
-            <p>SECURE DASHBOARD PORTAL</p>
+            <h2>AMC | NTEP</h2>
+            <p>SECURE DISTRICT DASHBOARD</p>
         """, unsafe_allow_html=True)
         
-        pwd = st.text_input("Administrator Password", type="password", placeholder="Enter Password", label_visibility="collapsed")
-        if st.button("SECURE LOGIN"):
+        pwd = st.text_input("Password", type="password", placeholder="Enter Portal Password", label_visibility="collapsed")
+        if st.button("LOGIN"):
             if pwd == "AMC@2026": 
                 st.session_state.auth = True
                 st.rerun()
-            else: st.error("⚠️ Access Denied")
+            else: st.error("⚠️ Invalid Password")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -148,6 +127,10 @@ b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
+
+# 🎯 --- પેલા બે હેરિટેજ ફોટા મેઈન ડેશબોર્ડમાં પાછા લાવી દીધા ---
+if b64_h1 and b64_h2:
+    st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
@@ -330,4 +313,4 @@ try:
 except:
     pass
 
-st.markdown("<div class='amc-footer'>Created by District TB Center AMC | NTEP Monitoring System</div>", unsafe_allow_html=True)
+st
