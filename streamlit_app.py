@@ -50,9 +50,8 @@ if not st.session_state.auth:
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
 # ==========================================
-# 👤 USER PROFILE & SETTINGS (ફ્રન્ટ સ્ક્રીન પર)
+# 👤 USER PROFILE & SETTINGS
 # ==========================================
-# 🎯 લાઈટ/ડાર્ક થીમ બંનેમાં દેખાય એવો મસ્ત કલર
 st.markdown(f"""
 <div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>
     👤 Logged in as: <span style='color: #0b2e13; font-size: 18px;'>{st.session_state.target} ({st.session_state.role})</span>
@@ -64,7 +63,7 @@ with st.expander("⚙️ Account Settings & Change Password"):
     with c_p1: new_pwd = st.text_input("New Password", type="password", key="p1")
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
-        st.write("") # Spacing
+        st.write("") 
         st.write("")
         if st.button("Update Password", use_container_width=True):
             if new_pwd == conf_pwd and new_pwd != "":
@@ -110,47 +109,57 @@ df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
 
-def get_options_with_counts(df, column_name):
-    counts = df[column_name].value_counts()
-    return [f"{val} ({count})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
+# 🎯 નવું સ્માર્ટ કાઉન્ટર: જે દર્દી નહિ, પણ "પેન્ડન્સી (Actions)" ગણશે!
+def get_options_with_counts(df, column_name, tab_name="tab1"):
+    if df.empty: return []
+    try:
+        if tab_name == "tab1" and 'Pending Status' in df.columns:
+            df_temp = df.copy()
+            df_temp['act_cnt'] = df_temp['Pending Status'].astype(str).apply(lambda x: len([s for s in x.split('+') if s.strip()]))
+            counts = df_temp.groupby(column_name)['act_cnt'].sum()
+        elif tab_name == "tab2":
+            std_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+            ind_cols = [c for c in df.columns if c not in std_cols]
+            df_temp = df.copy()
+            df_temp['act_cnt'] = df_temp[ind_cols].apply(lambda row: sum(row.astype(str).str.strip() != ""), axis=1)
+            counts = df_temp.groupby(column_name)['act_cnt'].sum()
+        else:
+            counts = df[column_name].value_counts()
+            
+        counts = counts[counts > 0].sort_values(ascending=False)
+        return [f"{val} ({int(count)})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
+    except:
+        return []
 
 def clean_selection(selected_list):
     return [item.rsplit(" (", 1)[0] for item in selected_list]
 
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
-b64_h1, b64_h2 = img_to_b64("images/h1.jpg"), img_to_b64("images/h2.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 
-if b64_h1 and b64_h2:
-    st.markdown(f"<div style='display:flex; gap:8px; margin-bottom: 20px;'><img src='data:image/jpeg;base64,{b64_h1}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'><img src='data:image/jpeg;base64,{b64_h2}' style='width:50%; height:130px; object-fit:cover; border-radius:5px;'></div>", unsafe_allow_html=True)
-
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
 # ==========================================
-# 🟢 TAB 1: MASTER DASHBOARD
+# 🟢 TAB 1: MASTER DASHBOARD 
 # ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
         df_disp = df_master.copy()
         
-        # 🎯 Step 1: 100% CASCADING LOGIC
         with c1:
             if st.session_state.role == "ADMIN":
-                s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_disp, 'ZONE'), key='z1'))
+                s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_disp, 'ZONE', 'tab1'), key='z1'))
                 if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
             
             if st.session_state.role in ["ADMIN", "ZONE"]:
-                s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit'), key='tu1'))
+                s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit', 'tab1'), key='tu1'))
                 if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
                 
-            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI'), key='phi1'))
-            if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
-
         with c2:
-            # Facility Type relies on Zone/TU/PHI selections!
+            # 🎯 Facility Category પહેલા આવશે, જેથી તે PHI ને ફિલ્ટર કરી શકે!
             available_facs = df_disp['Facility Type'].str.upper().unique()
             fac_opts = []
             if any(f in ['PUBLIC', 'PHI'] for f in available_facs): fac_opts.append("PUBLIC")
@@ -161,7 +170,11 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                
+            
+            # હવે PHI અપડેટેડ ડેટામાંથી આવશે
+            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
+            
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
 
@@ -176,7 +189,6 @@ with tab1:
 
         if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
-    # 🎯 Tab 1 Total Pendency (Actions ગણશે જેથી Tab 2 સાથે 100% મેચ થાય)
     f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
     total_actions_t1 = sum(f_counts.values())
     
@@ -214,17 +226,15 @@ with tab2:
         
         with c1: 
             if st.session_state.role == "ADMIN":
-                s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE'), key='z2'))
+                s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
                 if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
             
             if st.session_state.role in ["ADMIN", "ZONE"]:
-                s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit'), key='tu2'))
+                s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
                 if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
-                
-            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI'), key='phi2'))
-            if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
 
         with c2: 
+            # Facility Type First!
             available_facs2 = df_c['Facility Type'].str.upper().unique()
             fac_opts2 = []
             if any(f in ['PUBLIC', 'PHI'] for f in available_facs2): fac_opts2.append("PUBLIC")
@@ -236,10 +246,12 @@ with tab2:
                 elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 
+            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
+            if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
+        
+        with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
-            
-        with c3: 
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
             
     if s2_ind or s2_stat:
@@ -255,8 +267,6 @@ with tab2:
     new_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum()
     res_c = (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum()
     per_c = (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
-    
-    # 🎯 MATCHING LOGIC: (NEW + PERSISTENT = TOTAL) 
     total_pendency_c = new_c + per_c
     
     st.markdown("##### 📈 Daily Action Status")
@@ -280,16 +290,13 @@ with tab3:
         
         with c1:
             if st.session_state.role == "ADMIN":
-                s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE'), key='z3'))
+                s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
                 if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
             
             if st.session_state.role in ["ADMIN", "ZONE"]:
-                s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit'), key='tu3'))
+                s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
                 if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
                 
-            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI'), key='phi3'))
-            if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
-            
         with c2:
             available_facs3 = df_t3['Facility Type'].str.upper().unique()
             fac_opts3 = []
@@ -301,6 +308,9 @@ with tab3:
                 if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
                 elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+
+            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
+            if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
 
     t3_col_order = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
     t3_final_cols = [c for c in t3_col_order if c in df_t3.columns]
