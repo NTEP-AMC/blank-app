@@ -147,8 +147,9 @@ with tab1:
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
-    with st.expander("🔽 Dependent Filters"):
-        c1, c2 = st.columns(2)
+    # 🎯 અહીં Tab 2 ના નવા અને બહુ કામના ફિલ્ટર્સ ઉમેરેલા છે!
+    with st.expander("🔽 Filters (Geography, Report Type & Status)"):
+        c1, c2, c3 = st.columns(3)
         with c1:
             z2_opts = get_options_with_counts(df_comp, 'ZONE')
             s2_z_raw = st.multiselect("Filter Zone", z2_opts, key='z2')
@@ -163,11 +164,37 @@ with tab2:
             phi2_opts = get_options_with_counts(df2_phi, 'PHI')
             s2_phi_raw = st.multiselect("Filter PHI", phi2_opts, key='phi2')
             s2_phi = clean_selection(s2_phi_raw)
+        with c3:
+            # 🎯 Report Type અને Status ના ફિલ્ટર્સ
+            base_cols_comp = ['ZONE', 'PHI', 'TB Unit', 'Episode ID', 'Patient Name']
+            available_inds = [col for col in df_comp.columns if col not in base_cols_comp]
+            s2_ind = st.multiselect("Filter by Report Type", available_inds, key='ind2')
+            
+            status_options = ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"]
+            s2_status = st.multiselect("Filter by Status", status_options, key='status2')
             
     df_c_disp = df_comp.copy()
     if s2_z: df_c_disp = df_c_disp[df_c_disp['ZONE'].isin(s2_z)]
     if s2_tu: df_c_disp = df_c_disp[df_c_disp['TB Unit'].isin(s2_tu)]
     if s2_phi: df_c_disp = df_c_disp[df_c_disp['PHI'].isin(s2_phi)]
+    
+    # 🎯 Report Type ના આધારે ડેટા ફિલ્ટર
+    if s2_ind:
+        cols_to_keep = base_cols_comp + s2_ind
+        df_c_disp = df_c_disp[cols_to_keep]
+        mask = pd.Series(False, index=df_c_disp.index)
+        for col in s2_ind:
+            mask = mask | (df_c_disp[col].notna() & (df_c_disp[col] != ""))
+        df_c_disp = df_c_disp[mask]
+
+    # 🎯 Status ના આધારે ડેટા ફિલ્ટર
+    if s2_status:
+        ind_cols = [c for c in df_c_disp.columns if c not in base_cols_comp]
+        mask = pd.Series(False, index=df_c_disp.index)
+        for col in ind_cols:
+            for stat in s2_status:
+                mask = mask | (df_c_disp[col] == stat)
+        df_c_disp = df_c_disp[mask]
 
     t_new = (df_c_disp == "🔴 NEW").sum().sum()
     t_res = (df_c_disp == "🟢 RESOLVED").sum().sum()
