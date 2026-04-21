@@ -50,7 +50,7 @@ if not st.session_state.auth:
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
 # ==========================================
-# 👤 USER PROFILE & SETTINGS
+# 👤 USER PROFILE & SECURITY SETTINGS
 # ==========================================
 st.markdown(f"""
 <div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>
@@ -58,30 +58,45 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# 🎯 OLD PASSWORD વાળી સિક્યોરિટી સિસ્ટમ
 with st.expander("⚙️ Account Settings & Change Password"):
-    c_p1, c_p2, c_p3 = st.columns([2, 2, 1])
+    c_p0, c_p1, c_p2, c_p3 = st.columns([2, 2, 2, 1])
+    with c_p0: old_pwd = st.text_input("Old Password", type="password", key="p0")
     with c_p1: new_pwd = st.text_input("New Password", type="password", key="p1")
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
         st.write("") 
         st.write("")
-        if st.button("Update Password", use_container_width=True):
-            if new_pwd == conf_pwd and new_pwd != "":
+        if st.button("Update", use_container_width=True):
+            current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
+            
+            if old_pwd != current_actual_pwd:
+                st.error("⚠️ Old Password is incorrect!")
+            elif new_pwd != conf_pwd:
+                st.error("⚠️ New Passwords do not match!")
+            elif new_pwd == "":
+                st.error("⚠️ Password cannot be empty!")
+            else:
                 df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'] = new_pwd
                 df_users.to_csv("users.csv", index=False)
                 st.success("✅ Password updated!")
-            else:
-                st.error("⚠️ Passwords do not match!")
     
     st.markdown("---")
     if st.button("🚪 Logout Securely"):
         st.session_state.auth = False
         st.rerun()
 
+# 🎯 ગુપ્ત ADMIN PANEL (માત્ર એડમિન માટે)
+if st.session_state.role == "ADMIN":
+    with st.expander("🛡️ Admin Panel: View & Download All Passwords"):
+        st.warning("⚠️ Strictly Confidential: Below are the live, updated passwords for all Users.")
+        st.dataframe(df_users, use_container_width=True, hide_index=True)
+        st.download_button("📥 Download Credentials (Excel/CSV)", df_users.to_csv(index=False).encode('utf-8'), "AMC_NTEP_Users_Passwords.csv", "text/csv", key='dl_users')
+
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # ==========================================
-# 📊 LOAD DATA
+# 📊 LOAD DATA & DASHBOARD (નીચેનો બધો કોડ જૂનો અને સેફ છે)
 # ==========================================
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
@@ -109,7 +124,6 @@ df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
 
-# 🎯 નવું સ્માર્ટ કાઉન્ટર: જે દર્દી નહિ, પણ "પેન્ડન્સી (Actions)" ગણશે!
 def get_options_with_counts(df, column_name, tab_name="tab1"):
     if df.empty: return []
     try:
@@ -141,9 +155,6 @@ st.markdown("<div style='background-color:#1f618d; color:white; text-align:cente
 
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
-# ==========================================
-# 🟢 TAB 1: MASTER DASHBOARD 
-# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
@@ -159,7 +170,6 @@ with tab1:
                 if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
                 
         with c2:
-            # 🎯 Facility Category પહેલા આવશે, જેથી તે PHI ને ફિલ્ટર કરી શકે!
             available_facs = df_disp['Facility Type'].str.upper().unique()
             fac_opts = []
             if any(f in ['PUBLIC', 'PHI'] for f in available_facs): fac_opts.append("PUBLIC")
@@ -171,7 +181,6 @@ with tab1:
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
             
-            # હવે PHI અપડેટેડ ડેટામાંથી આવશે
             s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             
@@ -215,9 +224,6 @@ with tab1:
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     st.download_button("📥 Download This Report", df_disp.to_csv(index=False).encode('utf-8'), "Master_Report.csv", "text/csv", key='dl1')
 
-# ==========================================
-# 🟡 TAB 2: DAILY COMPARISON
-# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters"):
@@ -234,7 +240,6 @@ with tab2:
                 if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
 
         with c2: 
-            # Facility Type First!
             available_facs2 = df_c['Facility Type'].str.upper().unique()
             fac_opts2 = []
             if any(f in ['PUBLIC', 'PHI'] for f in available_facs2): fac_opts2.append("PUBLIC")
@@ -279,9 +284,6 @@ with tab2:
     st.dataframe(df_c, use_container_width=True, hide_index=True)
     st.download_button("📥 Download Comparison", df_c.to_csv(index=False).encode('utf-8'), "Comparison_Matrix.csv", "text/csv", key='dl2')
 
-# ==========================================
-# 🔵 TAB 3: CURRENT TB PATIENTS
-# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
