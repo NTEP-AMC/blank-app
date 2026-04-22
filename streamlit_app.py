@@ -289,7 +289,7 @@ with tab3:
     st.download_button("📥 Download Patient List", df_t3[t3_final_cols].to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Current Patients List"))
 
 # ==========================================
-# 🟣 TAB 4: DIFFERENTIATED TB CARE (Looker Studio Design)
+# 🟣 TAB 4: DIFFERENTIATED TB CARE 
 # ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; background-color: #d4edda; color: #155724; padding: 10px; border-radius: 10px; border: 2px solid #000;'>NTEP - AMC DIFF CARE</h3>", unsafe_allow_html=True)
@@ -297,7 +297,6 @@ with tab4:
     if not df_dtb_care.empty:
         df_t4 = df_dtb_care.copy()
         
-        # 🎯 મહિનાઓ ગોઠવવા માટેની સ્માર્ટ ટ્રીક
         for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if col in df_t4.columns: df_t4[col] = pd.to_datetime(df_t4[col], errors='coerce')
         
@@ -305,11 +304,12 @@ with tab4:
         df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
-        df_t4['Follow Up Due'] = "Pending Formula" # ⚠️ આનું લોજીક આપશો એટલે ગોઠવી દઈશું
         
+        # 🎯 BLANK (ACTIVE) દર્શાવવા માટે નવું નામ:
+        df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace("N/A", "BLANK (ACTIVE)")
+
         with st.expander("🔽 Looker Studio Filters", expanded=True):
             c1, c2, c3 = st.columns(3)
-            
             with c1:
                 if st.session_state.role == "ADMIN":
                     s4_z = clean_selection(st.multiselect("ZONE", get_options_with_counts(df_t4, 'ZONE', 'tab4'), key='z4'))
@@ -340,8 +340,9 @@ with tab4:
                 s4_sd = clean_selection(st.multiselect("SITE OF DISEASE", get_options_with_counts(df_t4, 'Site of Disease', 'tab4'), key='sd4'))
                 if s4_sd: df_t4 = df_t4[df_t4['Site of Disease'].isin(s4_sd)]
                 
-                s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_t4, 'Treatment Outcome', 'tab4'), key='to4'))
-                if s4_to: df_t4 = df_t4[df_t4['Treatment Outcome'].isin(s4_to)]
+                # 🎯 BLANK વાળું નવું ફિલ્ટર!
+                s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_t4, 'Treatment Outcome Display', 'tab4'), key='to4'))
+                if s4_to: df_t4 = df_t4[df_t4['Treatment Outcome Display'].isin(s4_to)]
                 
                 s4_fd = clean_selection(st.multiselect("FOLLOW UP DUE", get_options_with_counts(df_t4, 'Follow Up Due', 'tab4'), key='fd4'))
                 if s4_fd: df_t4 = df_t4[df_t4['Follow Up Due'].isin(s4_fd)]
@@ -356,11 +357,57 @@ with tab4:
                 s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_t4, 'Outcome Month', 'tab4'), key='om4'))
                 if s4_om: df_t4 = df_t4[df_t4['Outcome Month'].isin(s4_om)]
 
-        # 🎯 ફાઇનલ ડિસ્પ્લે 
-        # (અહી ડેટાબેઝના 'Month' વાળા કોલમ્સ હાઈડ કરી દઈએ છીએ, જેથી લિસ્ટ ક્લીન રહે)
-        display_cols = [c for c in df_t4.columns if "Month" not in c and c != "Follow Up Due" and c != "Treatment Status"]
-        st.dataframe(df_t4[display_cols], use_container_width=True, hide_index=True)
+        # 🎯 8 KPI BOXES (Follow Up Pending)
+        st.markdown("##### 🩺 Follow Up Pending Summary")
+        kpi_b = len(df_t4[df_t4['Follow Up Due'].str.contains('BASELINE', na=False)])
+        kpi_1 = len(df_t4[df_t4['Follow Up Due'].str.contains('1ST MONTH', na=False)])
+        kpi_2 = len(df_t4[df_t4['Follow Up Due'].str.contains('2ND MONTH', na=False)])
+        kpi_3 = len(df_t4[df_t4['Follow Up Due'].str.contains('3RD MONTH', na=False)])
+        kpi_4 = len(df_t4[df_t4['Follow Up Due'].str.contains('4TH MONTH', na=False)])
+        kpi_5 = len(df_t4[df_t4['Follow Up Due'].str.contains('5TH MONTH', na=False)])
+        kpi_6 = len(df_t4[df_t4['Follow Up Due'].str.contains('6TH MONTH', na=False)])
+        kpi_total = len(df_t4[df_t4['Follow Up Due'] != 'Completed'])
         
+        kb1, kb2, kb3, kb4 = st.columns(4)
+        with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
+        with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
+        with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
+        with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
+        
+        kb5, kb6, kb7, kb8 = st.columns(4)
+        with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
+        with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
+        with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
+        with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
+
+        # 🎯 Looker Studio જેવું PIVOT ટેબલ!
+        st.markdown("##### 📊 Zone-wise Due Matrix")
+        zones = df_t4['ZONE'].unique()
+        matrix_data = []
+        for z in zones:
+            z_df = df_t4[df_t4['ZONE'] == z]
+            matrix_data.append({
+                'ZONE': z, 'Completed': len(z_df[z_df['Follow Up Due'] == 'Completed']),
+                'BASELINE': len(z_df[z_df['Follow Up Due'].str.contains('BASELINE', na=False)]),
+                '1ST MONTH': len(z_df[z_df['Follow Up Due'].str.contains('1ST MONTH', na=False)]),
+                '2ND MONTH': len(z_df[z_df['Follow Up Due'].str.contains('2ND MONTH', na=False)]),
+                '3RD MONTH': len(z_df[z_df['Follow Up Due'].str.contains('3RD MONTH', na=False)]),
+                '4TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('4TH MONTH', na=False)]),
+                '5TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('5TH MONTH', na=False)]),
+                '6TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('6TH MONTH', na=False)]),
+                'Grand Total': len(z_df)
+            })
+        if matrix_data:
+            df_matrix = pd.DataFrame(matrix_data)
+            df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
+            df_matrix.at['Total', 'ZONE'] = 'Grand Total'
+            st.dataframe(df_matrix, use_container_width=True, hide_index=True)
+        
+        display_cols = [c for c in df_t4.columns if "Month" not in c and c not in ["Follow Up Due", "Treatment Status", "Treatment Outcome Display"]]
+        display_cols.append('Follow Up Due') # લાઈન લિસ્ટમાં જોવા માટે 
+        
+        st.markdown("##### 📄 Patient Line List")
+        st.dataframe(df_t4[display_cols], use_container_width=True, hide_index=True)
         st.download_button("📥 Download Differentiated Care Report", df_t4[display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
     else:
-        st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી. કૃપા કરીને ડેટા પ્રોસેસિંગ કોડ રન કરો.")
+        st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી.")
