@@ -131,7 +131,6 @@ def generate_outcome_ppt(df_master):
 
     prs = Presentation()
     
-    # સ્ટેપ 1: Jan 2025 થી March 2025 સુધીનો Outcome નો ડેટા ફિલ્ટર કરવો
     mask = (
         df_master['Pending Status'].astype(str).str.contains('Outcome', na=False) &
         (df_master['Outcome Date'] >= pd.to_datetime('2025-01-01', dayfirst=True)) &
@@ -139,9 +138,8 @@ def generate_outcome_ppt(df_master):
     )
     df_filtered = df_master[mask].copy()
 
-    # ટેબલ બનાવવાનું ફંક્શન
     def add_table_slide(slide_title, data_df, cols):
-        slide = prs.slides.add_slide(prs.slide_layouts[5]) # Title Only Layout
+        slide = prs.slides.add_slide(prs.slide_layouts[5]) 
         title = slide.shapes.title
         title.text = slide_title
         title.text_frame.paragraphs[0].font.size = Pt(32)
@@ -163,23 +161,19 @@ def generate_outcome_ppt(df_master):
         table.columns[0].width = Inches(4.5)
         table.columns[1].width = Inches(2.5)
         
-        # હેડર
         for i, col_name in enumerate(cols):
             cell = table.cell(0, i)
             cell.text = col_name
             cell.text_frame.paragraphs[0].font.bold = True
             
-        # ડેટા
         for i, (_, row) in enumerate(data_df.iterrows()):
             table.cell(i+1, 0).text = str(row.iloc[0])
             table.cell(i+1, 1).text = str(row.iloc[1])
 
-    # સ્લાઈડ 1: All Zone Wise
     zone_summary = df_filtered.groupby('ZONE').size().reset_index(name='Outcome Pending (Q1 2025)')
     zone_summary = zone_summary.sort_values(by='Outcome Pending (Q1 2025)', ascending=False)
     add_table_slide("All Zones - Outcome Pending (Quarter 1 2025)", zone_summary, ['Zone Name', 'Outcome Pending (Q1 2025)'])
     
-    # સ્લાઈડ્સ 2 થી 8: દરેક ઝોનના PHI મુજબ
     zones = sorted(df_filtered['ZONE'].dropna().unique())
     for zone in zones:
         phi_df = df_filtered[df_filtered['ZONE'] == zone]
@@ -299,4 +293,51 @@ with tab1:
     with st.expander("🔽 Tap to show other reports"):
         oc_cols = st.columns(4)
         for i, (k, v) in enumerate(others):
-            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True
+            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
+    
+    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` (અથવા Mac માં `Cmd + P`) દબાવીને 'Save as PDF' સિલેક્ટ કરો.")
+    st.dataframe(df_disp, use_container_width=True, hide_index=True)
+    
+    col_dl1, col_dl2 = st.columns(2)
+    if not df_disp.empty:
+        excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
+        with col_dl1:
+            st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Report"))
+            
+    ppt_data = generate_outcome_ppt(df_master)
+    if ppt_data:
+        with col_dl2:
+            st.download_button("📊 Download PPT (Outcome Q1-2025)", ppt_data, "Outcome_Pending_Q1_2025.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", key='dl_ppt')
+
+with tab2:
+    st.markdown("#### 🔄 Comparison Matrix")
+    with st.expander("🔽 Filters"):
+        c1, c2, c3 = st.columns(3)
+        df_c = df_comp.copy()
+        with c1: 
+            if st.session_state.role == "ADMIN":
+                s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
+                if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
+            if st.session_state.role in ["ADMIN", "ZONE"]:
+                s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
+                if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
+        with c2: 
+            available_facs2 = df_c['Facility Type'].str.upper().unique()
+            fac_opts2 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs2)]
+            s2_ft_raw = st.multiselect("Facility Category", fac_opts2, key='fc2')
+            if s2_ft_raw:
+                if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
+                elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
+            if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
+        with c3: 
+            ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+            s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
+            s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
+            
+    if s2_ind or s2_stat:
+        mask = pd.Series(False, index=df_c.index)
+        for ind in (s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]):
+            if ind in df_c.columns: mask = mask | df_c[ind].isin(s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"])
+        df_c = df_c[mask]
