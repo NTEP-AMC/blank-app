@@ -101,7 +101,7 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-# 🎯 NEW FUNCTION: મસ્ત ડીઝાઈન વાળી Excel બનાવવા માટે 
+# 🎯 BUG FIX: એક્સેલ ફંક્શન હવે ખાલી ડેટા પર ક્રેશ નહિ થાય!
 def convert_df_to_excel(df, sheet_name="Data"):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -109,23 +109,23 @@ def convert_df_to_excel(df, sheet_name="Data"):
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
         
-        # ડીઝાઈન ફોર્મેટ (રંગ, બોર્ડર, એલાઈનમેન્ટ)
         header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center', 'fg_color': '#1f618d', 'font_color': 'white', 'border': 1})
         cell_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
         
-        # હેડર માં ફોર્મેટ લગાવો
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_format)
             
-        # ડેટામાં ફોર્મેટ અને કોલમની સાઈઝ સેટ કરો
         for i, col in enumerate(df.columns):
-            column_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
-            # જો કોઈ કોલમ બહુ મોટી હોય તો લિમિટ સેટ કરો
+            if len(df) == 0:
+                column_len = len(str(col)) + 2
+            else:
+                max_val_len = df[col].astype(str).map(len).max()
+                column_len = max(max_val_len if pd.notna(max_val_len) else 0, len(str(col))) + 2
+                
             if column_len > 30: column_len = 30 
-            worksheet.set_column(i, i, column_len, cell_format)
+            worksheet.set_column(i, i, int(column_len), cell_format)
             
-    processed_data = output.getvalue()
-    return processed_data
+    return output.getvalue()
 
 def parse_dt_safe(s):
     try: return pd.to_datetime(s, errors='coerce', dayfirst=True)
@@ -230,12 +230,18 @@ with tab1:
     with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
     with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
+
+    with st.expander("🔽 Tap to show other reports"):
+        oc_cols = st.columns(4)
+        for i, (k, v) in enumerate(others):
+            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
     st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` (અથવા Mac માં `Cmd + P`) દબાવીને 'Save as PDF' સિલેક્ટ કરો.")
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     
-    excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
-    st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Report"))
+    if not df_disp.empty:
+        excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
+        st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Report"))
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -286,8 +292,9 @@ with tab2:
     st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` દબાવો.")
     st.dataframe(df_c, use_container_width=True, hide_index=True)
     
-    excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
-    st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Comparison"))
+    if not df_c.empty:
+        excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
+        st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Comparison"))
 
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
@@ -318,8 +325,9 @@ with tab3:
 
     t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
     
-    st.info("💡 **Tip:** ડાઉનલોડ થયેલી Excel ને Google Drive માં અપલોડ કરશો, એટલે એ ફોર્મેટવાળી ગુગલ શીટ બની જશે!")
+    st.info("💡 **Tip:** ડાઉનલોડ થયેલી Excel ને Google Drive માં અપલોડ કરશો, એટલે એ મસ્ત ફોર્મેટવાળી ગુગલ શીટ બની જશે!")
     st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
     
-    excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
-    st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Current Patients"))
+    if not df_t3.empty:
+        excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
+        st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Current Patients"))
