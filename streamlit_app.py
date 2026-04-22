@@ -15,13 +15,6 @@ def img_to_b64(img_path):
 LOG_FILE = "activity_log.csv"
 india_tz = pytz.timezone('Asia/Kolkata')
 
-def parse_dt(s):
-    if pd.isna(s) or str(s).strip() in ["", "NAN", "NAT", "NONE", "<NA>"]: return pd.NaT
-    d = pd.to_datetime(s, format='%m/%d/%Y', errors='coerce')
-    if pd.isna(d): d = pd.to_datetime(s, format='%d-%m-%Y', errors='coerce')
-    if pd.isna(d): d = pd.to_datetime(s, errors='coerce')
-    return d
-
 def log_activity(username, role, target, action):
     if not os.path.exists(LOG_FILE):
         df_log = pd.DataFrame(columns=["Timestamp", "Username", "Role", "Target", "Action"])
@@ -110,7 +103,7 @@ st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_h
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-        if col in df_master.columns: df_master[col] = df_master[col].apply(parse_dt)
+        if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     df_time = pd.read_csv("Update_Timestamps.csv")
@@ -305,13 +298,13 @@ with tab4:
         df_t4 = df_dtb_care.copy()
         
         for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if col in df_t4.columns: df_t4[col] = df_t4[col].apply(parse_dt)
+            if col in df_t4.columns: df_t4[col] = pd.to_datetime(df_t4[col], errors='coerce')
         
         df_t4['Notification Month'] = df_t4['Diagnosis Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
-        df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace("N/A", "BLANK (ACTIVE)")
+        df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace(["", "NAN", "N/A", "NONE", "<NA>"], "BLANK (ACTIVE)")
 
         with st.expander("🔽 Looker Studio Filters", expanded=True):
             c1, c2, c3 = st.columns(3)
@@ -351,7 +344,10 @@ with tab4:
                 all_due_opts = get_options_with_counts(df_t4, 'Follow Up Due', 'tab4')
                 s4_fd_raw = st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4')
                 s4_fd = clean_selection(s4_fd_raw)
-                if len(s4_fd_raw) > 0: df_t4 = df_t4[df_t4['Follow Up Due'].isin(s4_fd)]
+                
+                # 🎯 ફિક્સ: જો ફિલ્ટર ખાલી હોય તો બધો ડેટા દેખાશે! 
+                if len(s4_fd_raw) > 0: 
+                    df_t4 = df_t4[df_t4['Follow Up Due'].isin(s4_fd)]
 
             with c3:
                 s4_phi = clean_selection(st.multiselect("HEALTH FACILITY", get_options_with_counts(df_t4, 'PHI', 'tab4'), key='phi4'))
@@ -385,10 +381,13 @@ with tab4:
         with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
         with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
 
-        # 🎯 Looker Studio 100% Exact Pivot Matrix!
+        # 🎯 Looker Studio 100% Exact Matrix Layout (તમારા જૂના ફોટા જેવું જ)
         st.markdown("##### 📊 Zone-wise Due Matrix")
         if not df_t4.empty:
             df_matrix = df_t4.groupby(['ZONE', 'Follow Up Due']).size().unstack(fill_value=0)
+            if 'Completed' in df_matrix.columns and len(s4_fd_raw) > 0 and 'Completed' not in s4_fd:
+                df_matrix = df_matrix.drop(columns=['Completed']) # જો ફિલ્ટર કર્યું હોય તો Completed કાઢી નાખવું
+            
             df_matrix['Grand Total'] = df_matrix.sum(axis=1)
             df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
             df_matrix = df_matrix.reset_index()
