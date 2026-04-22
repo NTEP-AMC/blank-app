@@ -13,27 +13,18 @@ def img_to_b64(img_path):
     except: return ""
 
 # ==========================================
-# 📝 AUDIT LOG SYSTEM (ટ્રેકિંગ)
+# 📝 AUDIT LOG SYSTEM 
 # ==========================================
 LOG_FILE = "activity_log.csv"
 india_tz = pytz.timezone('Asia/Kolkata')
 
 def log_activity(username, role, target, action):
-    # લોગ ફાઈલ ના હોય તો બનાવો
     if not os.path.exists(LOG_FILE):
         df_log = pd.DataFrame(columns=["Timestamp", "Username", "Role", "Target", "Action"])
         df_log.to_csv(LOG_FILE, index=False)
     
-    # નવી એન્ટ્રી ઉમેરો
     current_time = datetime.now(india_tz).strftime("%d-%b-%Y, %I:%M %p")
-    new_entry = pd.DataFrame([{
-        "Timestamp": current_time,
-        "Username": username,
-        "Role": role,
-        "Target": target,
-        "Action": action
-    }])
-    
+    new_entry = pd.DataFrame([{"Timestamp": current_time, "Username": username, "Role": role, "Target": target, "Action": action}])
     new_entry.to_csv(LOG_FILE, mode='a', header=False, index=False)
 
 # ==========================================
@@ -69,10 +60,7 @@ if not st.session_state.auth:
                 st.session_state.current_user = uname
                 st.session_state.role = user_match.iloc[0]['Role']
                 st.session_state.target = user_match.iloc[0]['Target']
-                
-                # 📝 લોગીન થતાં જ એન્ટ્રી પાડો!
                 log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged In")
-                
                 st.rerun()
             else: 
                 st.error("⚠️ Invalid Username or Password")
@@ -99,47 +87,35 @@ with st.expander("⚙️ Account Settings & Change Password"):
         st.write("")
         if st.button("Update", use_container_width=True):
             current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
-            
-            if old_pwd != current_actual_pwd:
-                st.error("⚠️ Old Password is incorrect!")
-            elif new_pwd != conf_pwd:
-                st.error("⚠️ New Passwords do not match!")
-            elif new_pwd == "":
-                st.error("⚠️ Password cannot be empty!")
+            if old_pwd != current_actual_pwd: st.error("⚠️ Old Password is incorrect!")
+            elif new_pwd != conf_pwd: st.error("⚠️ New Passwords do not match!")
+            elif new_pwd == "": st.error("⚠️ Password cannot be empty!")
             else:
                 df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'] = new_pwd
                 df_users.to_csv("users.csv", index=False)
-                # 📝 પાસવર્ડ બદલ્યાની એન્ટ્રી 
                 log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Password Changed")
                 st.success("✅ Password updated!")
     
     st.markdown("---")
     if st.button("🚪 Logout Securely"):
-        # 📝 લોગઆઉટ થતાં જ એન્ટ્રી પાડો!
         log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged Out")
         st.session_state.auth = False
         st.rerun()
 
-# ==========================================
-# 🛡️ ADMIN PANEL (ફક્ત એડમિન માટે: Passwords + Audit Logs)
-# ==========================================
 if st.session_state.role == "ADMIN":
     with st.expander("🛡️ Admin Panel: View Passwords & Activity Logs"):
         a_tab1, a_tab2 = st.tabs(["🔑 Manage Users", "📝 Activity Logs"])
-        
         with a_tab1:
             st.warning("⚠️ Strictly Confidential: Live User Credentials")
             st.dataframe(df_users, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download Credentials", df_users.to_csv(index=False).encode('utf-8'), "Users_Passwords.csv", "text/csv")
-            
+            st.download_button("📥 Download Credentials", df_users.to_csv(index=False).encode('utf-8'), "Users_Passwords.csv", "text/csv", key='dl_cred')
         with a_tab2:
             st.info("📊 Tracking user logins and downloads.")
             try:
                 df_logs = pd.read_csv(LOG_FILE)
-                # સૌથી છેલ્લી એન્ટ્રી સૌથી ઉપર દેખાય તે માટે
                 df_logs = df_logs.iloc[::-1] 
                 st.dataframe(df_logs, use_container_width=True, hide_index=True)
-                st.download_button("📥 Download Logs", df_logs.to_csv(index=False).encode('utf-8'), "Activity_Logs.csv", "text/csv")
+                st.download_button("📥 Download Logs", df_logs.to_csv(index=False).encode('utf-8'), "Activity_Logs.csv", "text/csv", key='dl_logs')
             except:
                 st.write("No logs available yet.")
 
@@ -154,6 +130,7 @@ try:
         if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
+    df_time = pd.read_csv("Update_Timestamps.csv") # 🎯 ટાઈમસ્ટેમ્પ ફાઈલ લોડ કરી
 except:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
     st.stop()
@@ -202,6 +179,14 @@ b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
+
+# 🎯 LAST UPDATED TIMESTAMPS BOX
+if not df_time.empty:
+    with st.expander("🕒 Register Last Sync Timestamps (IST)"):
+        t_cols = st.columns(4)
+        for i, row in df_time.iterrows():
+            with t_cols[i % 4]:
+                st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
@@ -275,8 +260,6 @@ with tab1:
                 st.markdown(draw_card(k, v, colors.get(k, "#34495E"), icons.get(k, "📌")), unsafe_allow_html=True)
     
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
-    
-    # 📝 ડાઉનલોડ બટન દબાવે એટલે લોગમાં એન્ટ્રી પડે!
     csv_data1 = df_disp.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download This Report", csv_data1, "Master_Report.csv", "text/csv", key='dl1', 
                        on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Master Report"))
@@ -342,7 +325,6 @@ with tab2:
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
 
     st.dataframe(df_c, use_container_width=True, hide_index=True)
-    
     csv_data2 = df_c.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Comparison", csv_data2, "Comparison_Matrix.csv", "text/csv", key='dl2',
                        on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Comparison Report"))
@@ -351,7 +333,6 @@ with tab2:
 # 🔵 TAB 3: CURRENT TB PATIENTS
 # ==========================================
 with tab3:
-    st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
         c1, c2, c3 = st.columns(3)
         df_t3 = df_curr_tb.copy()
@@ -380,11 +361,15 @@ with tab3:
             s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
             if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
 
+    # 🎯 TAB 3 માં TOTAL ACTIVE PATIENTS નું મસ્ત બોક્સ!
+    st.markdown("##### 📈 Patient Overview")
+    c_t3, _, _, _ = st.columns(4)
+    with c_t3: st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
+
     t3_col_order = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
     t3_final_cols = [c for c in t3_col_order if c in df_t3.columns]
     
     st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
-    
     csv_data3 = df_t3[t3_final_cols].to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Patient List", csv_data3, "Current_Patients.csv", "text/csv", key='dl3',
                        on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Current Patients List"))
