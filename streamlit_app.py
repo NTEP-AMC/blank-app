@@ -249,7 +249,10 @@ with tab2:
         df_c = df_c[mask]
         
     ind_cols_in_df = [c for c in df_c.columns if c not in ignore_cols]
-    new_c, res_c, per_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum(), (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum(), (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
+    if ind_cols_in_df:
+        new_c, res_c, per_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum(), (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum(), (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
+    else:
+        new_c, res_c, per_c = 0, 0, 0
     
     st.markdown("##### 📈 Daily Action Status")
     cc1, cc2, cc3, cc4 = st.columns(4)
@@ -299,7 +302,8 @@ with tab4:
     st.markdown("<h3 style='text-align: center; background-color: #d4edda; color: #155724; padding: 10px; border-radius: 10px; border: 2px solid #000;'>NTEP - AMC DIFF CARE</h3>", unsafe_allow_html=True)
     
     if not df_dtb_care.empty:
-        if 'Follow Up Due' not in df_dtb_care.columns:
+        # 🎯 Crash-Proof Safety Check
+        if 'Follow Up Due' not in df_dtb_care.columns or 'Diagnosis Date' not in df_dtb_care.columns:
             st.error("⚠️ **Streamlit ડેશબોર્ડ અપડેટ થઈ ગયું છે, પણ તમારો GitHub ડેટા જૂનો છે!**")
             st.warning("👉 કૃપા કરીને **Google Colab** માં જઈને તમારો નવો માસ્ટર કોડ એકવાર રન કરી દો.")
         else:
@@ -398,7 +402,6 @@ with tab4:
                 with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
                 with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
 
-                # 🎯 CRASH-PROOF MATRIX (Safe Reordering)
                 st.markdown("##### 📊 Zone-wise Due Matrix")
                 df_matrix = df_filtered.groupby(['ZONE', 'Follow Up Due']).size().unstack(fill_value=0)
                 
@@ -410,7 +413,7 @@ with tab4:
                 df_matrix = df_matrix.reset_index()
                 df_matrix.at[len(df_matrix)-1, 'ZONE'] = 'Grand Total'
                 
-                # કડક કોલમ નહિ, જે હાજર છે એ જ દેખાશે!
+                # 🎯 Crash-Proof Matrix Reordering
                 existing_cols = df_matrix.columns.tolist()
                 desired_order = ['ZONE', 'Completed', 'BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH', 'Grand Total']
                 final_order = [c for c in desired_order if c in existing_cols] + [c for c in existing_cols if c not in desired_order]
