@@ -101,7 +101,7 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-# 🎯 BUG FIX: એક્સેલ ફંક્શન હવે ખાલી ડેટા પર ક્રેશ નહિ થાય!
+# 🎯 BUG FIX: 100% Crash-Proof Excel Function
 def convert_df_to_excel(df, sheet_name="Data"):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -119,7 +119,8 @@ def convert_df_to_excel(df, sheet_name="Data"):
             if len(df) == 0:
                 column_len = len(str(col)) + 2
             else:
-                max_val_len = df[col].astype(str).map(len).max()
+                # 🎯 PyArrow સાથે ઝઘડો ના થાય એટલે .str.len() વાપર્યું છે
+                max_val_len = df[col].astype(str).str.len().max()
                 column_len = max(max_val_len if pd.notna(max_val_len) else 0, len(str(col))) + 2
                 
             if column_len > 30: column_len = 30 
