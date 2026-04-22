@@ -58,7 +58,6 @@ if not st.session_state.auth:
     st.stop()
 
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
-
 st.markdown(f"<div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>👤 Logged in as: <span style='color: #0b2e13; font-size: 18px;'>{st.session_state.target} ({st.session_state.role})</span></div>", unsafe_allow_html=True)
 
 with st.expander("⚙️ Account Settings & Change Password"):
@@ -101,32 +100,97 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-# 🎯 BUG FIX: 100% Crash-Proof Excel Function
+# 🎯 ફંક્શન 1: એક્સેલ માટે
 def convert_df_to_excel(df, sheet_name="Data"):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
-        
         header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center', 'fg_color': '#1f618d', 'font_color': 'white', 'border': 1})
         cell_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
-        
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_format)
-            
         for i, col in enumerate(df.columns):
-            if len(df) == 0:
-                column_len = len(str(col)) + 2
+            if len(df) == 0: column_len = len(str(col)) + 2
             else:
-                # 🎯 PyArrow સાથે ઝઘડો ના થાય એટલે .str.len() વાપર્યું છે
                 max_val_len = df[col].astype(str).str.len().max()
                 column_len = max(max_val_len if pd.notna(max_val_len) else 0, len(str(col))) + 2
-                
             if column_len > 30: column_len = 30 
             worksheet.set_column(i, i, int(column_len), cell_format)
-            
     return output.getvalue()
+
+# 🎯 ફંક્શન 2: PPT જનરેટર (તમારા 8 સ્લાઈડ લોજીક મુજબ)
+def generate_outcome_ppt(df_master):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+    except ImportError:
+        st.error("⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ કરેલ નથી. કૃપા કરીને requirements.txt માં 'python-pptx' ઉમેરો.")
+        return None
+
+    prs = Presentation()
+    
+    # સ્ટેપ 1: Jan 2025 થી March 2025 સુધીનો Outcome નો ડેટા ફિલ્ટર કરવો
+    mask = (
+        df_master['Pending Status'].astype(str).str.contains('Outcome', na=False) &
+        (df_master['Outcome Date'] >= pd.to_datetime('2025-01-01', dayfirst=True)) &
+        (df_master['Outcome Date'] <= pd.to_datetime('2025-03-31', dayfirst=True))
+    )
+    df_filtered = df_master[mask].copy()
+
+    # ટેબલ બનાવવાનું ફંક્શન
+    def add_table_slide(slide_title, data_df, cols):
+        slide = prs.slides.add_slide(prs.slide_layouts[5]) # Title Only Layout
+        title = slide.shapes.title
+        title.text = slide_title
+        title.text_frame.paragraphs[0].font.size = Pt(32)
+        
+        if data_df.empty:
+            txBox = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
+            txBox.text_frame.text = "કોઈ દર્દી પેન્ડિંગ નથી."
+            return
+            
+        rows = len(data_df) + 1
+        columns = len(cols)
+        left = Inches(1.5)
+        top = Inches(2.0)
+        width = Inches(7.0)
+        height = Inches(0.8)
+        
+        table_shape = slide.shapes.add_table(rows, columns, left, top, width, height)
+        table = table_shape.table
+        table.columns[0].width = Inches(4.5)
+        table.columns[1].width = Inches(2.5)
+        
+        # હેડર
+        for i, col_name in enumerate(cols):
+            cell = table.cell(0, i)
+            cell.text = col_name
+            cell.text_frame.paragraphs[0].font.bold = True
+            
+        # ડેટા
+        for i, (_, row) in enumerate(data_df.iterrows()):
+            table.cell(i+1, 0).text = str(row.iloc[0])
+            table.cell(i+1, 1).text = str(row.iloc[1])
+
+    # સ્લાઈડ 1: All Zone Wise
+    zone_summary = df_filtered.groupby('ZONE').size().reset_index(name='Outcome Pending (Q1 2025)')
+    zone_summary = zone_summary.sort_values(by='Outcome Pending (Q1 2025)', ascending=False)
+    add_table_slide("All Zones - Outcome Pending (Quarter 1 2025)", zone_summary, ['Zone Name', 'Outcome Pending (Q1 2025)'])
+    
+    # સ્લાઈડ્સ 2 થી 8: દરેક ઝોનના PHI મુજબ
+    zones = sorted(df_filtered['ZONE'].dropna().unique())
+    for zone in zones:
+        phi_df = df_filtered[df_filtered['ZONE'] == zone]
+        phi_summary = phi_df.groupby('PHI').size().reset_index(name='Outcome Pending (Q1 2025)')
+        phi_summary = phi_summary.sort_values(by='Outcome Pending (Q1 2025)', ascending=False)
+        add_table_slide(f"{zone} Zone - PHI Wise Outcome Pending (Q1 2025)", phi_summary, ['PHI Name', 'Outcome Pending (Q1 2025)'])
+        
+    output = io.BytesIO()
+    prs.save(output)
+    return output.getvalue()
+
 
 def parse_dt_safe(s):
     try: return pd.to_datetime(s, errors='coerce', dayfirst=True)
@@ -235,100 +299,4 @@ with tab1:
     with st.expander("🔽 Tap to show other reports"):
         oc_cols = st.columns(4)
         for i, (k, v) in enumerate(others):
-            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
-    
-    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` (અથવા Mac માં `Cmd + P`) દબાવીને 'Save as PDF' સિલેક્ટ કરો.")
-    st.dataframe(df_disp, use_container_width=True, hide_index=True)
-    
-    if not df_disp.empty:
-        excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
-        st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Report"))
-
-with tab2:
-    st.markdown("#### 🔄 Comparison Matrix")
-    with st.expander("🔽 Filters"):
-        c1, c2, c3 = st.columns(3)
-        df_c = df_comp.copy()
-        with c1: 
-            if st.session_state.role == "ADMIN":
-                s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
-                if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
-            if st.session_state.role in ["ADMIN", "ZONE"]:
-                s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
-                if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
-        with c2: 
-            available_facs2 = df_c['Facility Type'].str.upper().unique()
-            fac_opts2 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs2)]
-            s2_ft_raw = st.multiselect("Facility Category", fac_opts2, key='fc2')
-            if s2_ft_raw:
-                if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
-                elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
-            if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
-        with c3: 
-            ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
-            s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
-            s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
-            
-    if s2_ind or s2_stat:
-        mask = pd.Series(False, index=df_c.index)
-        for ind in (s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]):
-            if ind in df_c.columns: mask = mask | df_c[ind].isin(s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"])
-        df_c = df_c[mask]
-        
-    ind_cols_in_df = [c for c in df_c.columns if c not in ignore_cols]
-    if ind_cols_in_df:
-        new_c, res_c, per_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum(), (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum(), (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
-    else:
-        new_c, res_c, per_c = 0, 0, 0
-    
-    st.markdown("##### 📈 Daily Action Status")
-    cc1, cc2, cc3, cc4 = st.columns(4)
-    with cc1: st.markdown(draw_card("TOTAL PENDENCY", new_c + per_c, "#1f618d", "📄"), unsafe_allow_html=True)
-    with cc2: st.markdown(draw_card("🔴 NEW", new_c, "#E74C3C", "🚨"), unsafe_allow_html=True)
-    with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
-    with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
-
-    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` દબાવો.")
-    st.dataframe(df_c, use_container_width=True, hide_index=True)
-    
-    if not df_c.empty:
-        excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
-        st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Comparison"))
-
-with tab3:
-    st.markdown("#### 🏥 Current TB Patients")
-    with st.expander("🔽 Filters"):
-        c1, c2, c3 = st.columns(3)
-        df_t3 = df_curr_tb.copy()
-        with c1:
-            if st.session_state.role == "ADMIN":
-                s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
-                if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
-            if st.session_state.role in ["ADMIN", "ZONE"]:
-                s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
-                if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
-        with c2:
-            available_facs3 = df_t3['Facility Type'].str.upper().unique()
-            fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
-            s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
-            if s3_ft_raw:
-                if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
-                elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
-            if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
-
-    st.markdown("##### 📈 Patient Overview")
-    c_t3, _, _, _ = st.columns(4)
-    with c_t3: st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
-
-    t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
-    
-    st.info("💡 **Tip:** ડાઉનલોડ થયેલી Excel ને Google Drive માં અપલોડ કરશો, એટલે એ મસ્ત ફોર્મેટવાળી ગુગલ શીટ બની જશે!")
-    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
-    
-    if not df_t3.empty:
-        excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
-        st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Current Patients"))
+            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True
