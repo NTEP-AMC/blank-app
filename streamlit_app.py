@@ -341,7 +341,7 @@ with tab4:
                 s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_t4, 'Treatment Outcome Display', 'tab4'), key='to4'))
                 if s4_to: df_t4 = df_t4[df_t4['Treatment Outcome Display'].isin(s4_to)]
                 
-                # 🎯 અહીં મેં બાય ડિફોલ્ટ 'Completed' કાઢી નાખ્યું છે! 
+                # 🎯 By Default Exclude Completed Logic
                 all_due_opts = get_options_with_counts(df_t4, 'Follow Up Due', 'tab4')
                 default_due_opts = [opt for opt in all_due_opts if "Completed" not in opt]
                 
@@ -359,7 +359,6 @@ with tab4:
                 s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_t4, 'Outcome Month', 'tab4'), key='om4'))
                 if s4_om: df_t4 = df_t4[df_t4['Outcome Month'].isin(s4_om)]
 
-        # 🎯 8 KPI BOXES (માત્ર Pending માટે)
         st.markdown("##### 🩺 Follow Up Pending Summary")
         kpi_b = len(df_t4[df_t4['Follow Up Due'].str.contains('BASELINE', na=False)])
         kpi_1 = len(df_t4[df_t4['Follow Up Due'].str.contains('1ST MONTH', na=False)])
@@ -404,11 +403,12 @@ with tab4:
             df_matrix.at['Total', 'ZONE'] = 'Grand Total'
             st.dataframe(df_matrix, use_container_width=True, hide_index=True)
         
-        display_cols = [c for c in df_t4.columns if "Month" not in c and c not in ["Follow Up Due", "Treatment Status", "Treatment Outcome Display"]]
-        display_cols.append('Follow Up Due') 
+        # 🎯 તમારું માંગેલું ચોક્કસ પેશન્ટ લિસ્ટ!
+        display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'Type of Case', 'TB_regimen']
+        final_display_cols = [c for c in display_cols if c in df_t4.columns]
         
         st.markdown("##### 📄 Patient Line List")
-        st.dataframe(df_t4[display_cols], use_container_width=True, hide_index=True)
-        st.download_button("📥 Download Differentiated Care Report", df_t4[display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
+        st.dataframe(df_t4[final_display_cols], use_container_width=True, hide_index=True)
+        st.download_button("📥 Download Differentiated Care Report", df_t4[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
     else:
         st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી.")
