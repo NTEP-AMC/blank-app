@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import base64
 import os
+import io
 from datetime import datetime
 import pytz
 
@@ -100,6 +101,32 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
+# 🎯 NEW FUNCTION: મસ્ત ડીઝાઈન વાળી Excel બનાવવા માટે 
+def convert_df_to_excel(df, sheet_name="Data"):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        workbook = writer.book
+        worksheet = writer.sheets[sheet_name]
+        
+        # ડીઝાઈન ફોર્મેટ (રંગ, બોર્ડર, એલાઈનમેન્ટ)
+        header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center', 'fg_color': '#1f618d', 'font_color': 'white', 'border': 1})
+        cell_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
+        
+        # હેડર માં ફોર્મેટ લગાવો
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+            
+        # ડેટામાં ફોર્મેટ અને કોલમની સાઈઝ સેટ કરો
+        for i, col in enumerate(df.columns):
+            column_len = max(df[col].astype(str).map(len).max(), len(str(col))) + 2
+            # જો કોઈ કોલમ બહુ મોટી હોય તો લિમિટ સેટ કરો
+            if column_len > 30: column_len = 30 
+            worksheet.set_column(i, i, column_len, cell_format)
+            
+    processed_data = output.getvalue()
+    return processed_data
+
 def parse_dt_safe(s):
     try: return pd.to_datetime(s, errors='coerce', dayfirst=True)
     except: return pd.NaT
@@ -111,10 +138,8 @@ try:
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     df_time = pd.read_csv("Update_Timestamps.csv")
-    df_dtb_care = pd.read_csv("Differentiated_Care.csv")
 except Exception as e:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
-    df_dtb_care = pd.DataFrame()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -125,7 +150,6 @@ def filter_by_role(df, role, target):
 df_master = filter_by_role(df_master, st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
-df_dtb_care = filter_by_role(df_dtb_care, st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -161,7 +185,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "⚕️ Differentiated TB Care"])
+tab1, tab2, tab3 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients"])
 
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
@@ -206,14 +230,12 @@ with tab1:
     with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
     with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
-
-    with st.expander("🔽 Tap to show other reports"):
-        oc_cols = st.columns(4)
-        for i, (k, v) in enumerate(others):
-            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
+    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` (અથવા Mac માં `Cmd + P`) દબાવીને 'Save as PDF' સિલેક્ટ કરો.")
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download This Report", df_disp.to_csv(index=False).encode('utf-8'), "Master_Report.csv", "text/csv", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Master Report"))
+    
+    excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
+    st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Report"))
 
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -261,8 +283,11 @@ with tab2:
     with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
 
+    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` દબાવો.")
     st.dataframe(df_c, use_container_width=True, hide_index=True)
-    st.download_button("📥 Download Comparison", df_c.to_csv(index=False).encode('utf-8'), "Comparison_Matrix.csv", "text/csv", key='dl2', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Comparison Report"))
+    
+    excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
+    st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Comparison"))
 
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
@@ -292,142 +317,9 @@ with tab3:
     with c_t3: st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
 
     t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
-    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
-    st.download_button("📥 Download Patient List", df_t3[t3_final_cols].to_csv(index=False).encode('utf-8'), "Current_Patients.csv", "text/csv", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Current Patients List"))
-
-# ==========================================
-# 🟣 TAB 4: DIFFERENTIATED TB CARE 
-# ==========================================
-with tab4:
-    st.markdown("<h3 style='text-align: center; background-color: #d4edda; color: #155724; padding: 10px; border-radius: 10px; border: 2px solid #000;'>NTEP - AMC DIFF CARE</h3>", unsafe_allow_html=True)
     
-    if not df_dtb_care.empty:
-        # 🎯 Crash-Proof Safety Check
-        if 'Follow Up Due' not in df_dtb_care.columns or 'Diagnosis Date' not in df_dtb_care.columns:
-            st.error("⚠️ **Streamlit ડેશબોર્ડ અપડેટ થઈ ગયું છે, પણ તમારો GitHub ડેટા જૂનો છે!**")
-            st.warning("👉 કૃપા કરીને **Google Colab** માં જઈને તમારો નવો માસ્ટર કોડ એકવાર રન કરી દો.")
-        else:
-            df_t4 = df_dtb_care.copy()
-            
-            for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                if col in df_t4.columns: df_t4[col] = df_t4[col].apply(parse_dt_safe)
-            
-            df_t4['Notification Month'] = df_t4['Diagnosis Date'].dt.strftime('%b-%Y').fillna("N/A")
-            df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
-            df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
-            df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
-            df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace(["", "NAN", "N/A", "NONE", "<NA>"], "BLANK (ACTIVE)")
-
-            df_filtered = df_t4.copy()
-
-            with st.expander("🔽 Looker Studio Filters", expanded=True):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if st.session_state.role == "ADMIN":
-                        s4_z = clean_selection(st.multiselect("ZONE", get_options_with_counts(df_filtered, 'ZONE', 'tab4'), key='z4'))
-                        if s4_z: df_filtered = df_filtered[df_filtered['ZONE'].isin(s4_z)]
-                    
-                    s4_nm = clean_selection(st.multiselect("NOTIFICATION MONTH", get_options_with_counts(df_filtered, 'Notification Month', 'tab4'), key='nm4'))
-                    if s4_nm: df_filtered = df_filtered[df_filtered['Notification Month'].isin(s4_nm)]
-                    
-                    s4_im = clean_selection(st.multiselect("TREATMENT INITIATION MONTH", get_options_with_counts(df_filtered, 'Initiation Month', 'tab4'), key='im4'))
-                    if s4_im: df_filtered = df_filtered[df_filtered['Initiation Month'].isin(s4_im)]
-                    
-                    if 'Age' in df_filtered.columns:
-                        s4_age = clean_selection(st.multiselect("AGE", get_options_with_counts(df_filtered, 'Age', 'tab4'), key='age4'))
-                        if s4_age: df_filtered = df_filtered[df_filtered['Age'].isin(s4_age)]
-
-                with c2:
-                    if st.session_state.role in ["ADMIN", "ZONE"]:
-                        s4_tu = clean_selection(st.multiselect("CURRENT TB UNIT", get_options_with_counts(df_filtered, 'TB Unit', 'tab4'), key='tu4'))
-                        if s4_tu: df_filtered = df_filtered[df_filtered['TB Unit'].isin(s4_tu)]
-                    
-                    s4_tc = clean_selection(st.multiselect("TYPE OF CASE", get_options_with_counts(df_filtered, 'Type of Case', 'tab4'), key='tc4'))
-                    if s4_tc: df_filtered = df_filtered[df_filtered['Type of Case'].isin(s4_tc)]
-                    
-                    s4_sd = clean_selection(st.multiselect("SITE OF DISEASE", get_options_with_counts(df_filtered, 'Site of Disease', 'tab4'), key='sd4'))
-                    if s4_sd: df_filtered = df_filtered[df_filtered['Site of Disease'].isin(s4_sd)]
-                    
-                    s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_filtered, 'Treatment Outcome Display', 'tab4'), key='to4'))
-                    if s4_to: df_filtered = df_filtered[df_filtered['Treatment Outcome Display'].isin(s4_to)]
-
-                with c3:
-                    s4_phi = clean_selection(st.multiselect("HEALTH FACILITY", get_options_with_counts(df_filtered, 'PHI', 'tab4'), key='phi4'))
-                    if s4_phi: df_filtered = df_filtered[df_filtered['PHI'].isin(s4_phi)]
-                    
-                    avail_facs4 = df_filtered['Facility Type'].str.upper().unique()
-                    fac_opts4 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in avail_facs4)]
-                    s4_ft = st.multiselect("TYPE OF HEALTH FACILITY", fac_opts4, key='ft4')
-                    if s4_ft:
-                        if "PUBLIC" in s4_ft and "PRIVATE" in s4_ft: pass
-                        elif "PUBLIC" in s4_ft: df_filtered = df_filtered[df_filtered['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                        elif "PRIVATE" in s4_ft: df_filtered = df_filtered[~df_filtered['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                    
-                    s4_ts = clean_selection(st.multiselect("TREATMENT STATUS", get_options_with_counts(df_filtered, 'Treatment Status', 'tab4'), key='ts4'))
-                    if s4_ts: df_filtered = df_filtered[df_filtered['Treatment Status'].isin(s4_ts)]
-                    
-                    s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_filtered, 'Outcome Month', 'tab4'), key='om4'))
-                    if s4_om: df_filtered = df_filtered[df_filtered['Outcome Month'].isin(s4_om)]
-
-                st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
-                
-                # 🎯 CASCADING FILTER
-                all_due_opts = get_options_with_counts(df_filtered, 'Follow Up Due', 'tab4')
-                s4_fd_raw = st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4')
-                s4_fd = clean_selection(s4_fd_raw)
-                
-                if len(s4_fd_raw) > 0: 
-                    df_filtered = df_filtered[df_filtered['Follow Up Due'].isin(s4_fd)]
-
-            if not df_filtered.empty:
-                st.markdown("##### 🩺 Follow Up Pending Summary")
-                kpi_b = len(df_filtered[df_filtered['Follow Up Due'].str.contains('BASELINE', na=False)])
-                kpi_1 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('1ST MONTH', na=False)])
-                kpi_2 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('2ND MONTH', na=False)])
-                kpi_3 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('3RD MONTH', na=False)])
-                kpi_4 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('4TH MONTH', na=False)])
-                kpi_5 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('5TH MONTH', na=False)])
-                kpi_6 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('6TH MONTH', na=False)])
-                kpi_total = len(df_filtered[df_filtered['Follow Up Due'] != 'Completed'])
-                
-                kb1, kb2, kb3, kb4 = st.columns(4)
-                with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
-                with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
-                with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
-                with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
-                
-                kb5, kb6, kb7, kb8 = st.columns(4)
-                with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
-                with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
-                with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
-                with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
-
-                st.markdown("##### 📊 Zone-wise Due Matrix")
-                df_matrix = df_filtered.groupby(['ZONE', 'Follow Up Due']).size().unstack(fill_value=0)
-                
-                if 'Completed' in df_matrix.columns and len(s4_fd_raw) > 0 and 'Completed' not in s4_fd:
-                    df_matrix = df_matrix.drop(columns=['Completed'])
-                
-                df_matrix['Grand Total'] = df_matrix.sum(axis=1)
-                df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
-                df_matrix = df_matrix.reset_index()
-                df_matrix.at[len(df_matrix)-1, 'ZONE'] = 'Grand Total'
-                
-                # 🎯 Crash-Proof Matrix Reordering
-                existing_cols = df_matrix.columns.tolist()
-                desired_order = ['ZONE', 'Completed', 'BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH', 'Grand Total']
-                final_order = [c for c in desired_order if c in existing_cols] + [c for c in existing_cols if c not in desired_order]
-                df_matrix = df_matrix[final_order]
-                
-                st.dataframe(df_matrix, use_container_width=True, hide_index=True)
-                
-                display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Age', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome Display', 'Type of Case', 'TB_regimen', 'Follow Up Due']
-                final_display_cols = [c for c in display_cols if c in df_filtered.columns]
-                
-                st.markdown("##### 📄 Patient Line List")
-                st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
-                st.download_button("📥 Download Differentiated Care Report", df_filtered[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
-            else:
-                st.info("ℹ️ આપે પસંદ કરેલા ફિલ્ટર મુજબ કોઈ ડેટા ઉપલબ્ધ નથી.")
-    else:
-        st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી.")
+    st.info("💡 **Tip:** ડાઉનલોડ થયેલી Excel ને Google Drive માં અપલોડ કરશો, એટલે એ ફોર્મેટવાળી ગુગલ શીટ બની જશે!")
+    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
+    
+    excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
+    st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Excel Current Patients"))
