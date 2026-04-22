@@ -3,7 +3,7 @@ import pandas as pd
 import base64
 import os
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pytz
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
@@ -119,6 +119,7 @@ try:
         if col in df_master.columns: df_master[col] = df_master[col].apply(parse_dt_safe)
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
+    df_time = pd.read_csv("Update_Timestamps.csv")
 except Exception as e:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
 
@@ -132,26 +133,193 @@ df_master = filter_by_role(df_master, st.session_state.role, st.session_state.ta
 df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
 
+def draw_card(title, value, color, icon):
+    return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
+
+def get_options_with_counts(df, column_name, tab_name="tab1"):
+    if df.empty or column_name not in df.columns: return []
+    try:
+        if tab_name == "tab1" and 'Pending Status' in df.columns:
+            df_temp = df.copy()
+            df_temp['act_cnt'] = df_temp['Pending Status'].astype(str).apply(lambda x: len([s for s in x.split('+') if s.strip()]))
+            counts = df_temp.groupby(column_name)['act_cnt'].sum()
+        elif tab_name == "tab2":
+            std_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+            ind_cols = [c for c in df.columns if c not in std_cols]
+            df_temp = df.copy()
+            df_temp['act_cnt'] = df_temp[ind_cols].apply(lambda row: sum(row.astype(str).str.strip() != ""), axis=1)
+            counts = df_temp.groupby(column_name)['act_cnt'].sum()
+        else:
+            counts = df[column_name].value_counts()
+        counts = counts[counts > 0].sort_values(ascending=False)
+        return [f"{val} ({int(count)})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
+    except: return []
+
+def clean_selection(selected_list): return [item.rsplit(" (", 1)[0] for item in selected_list]
+
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
 st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
 
+if not df_time.empty:
+    with st.expander("🕒 Register Last Sync Timestamps (IST)"):
+        t_cols = st.columns(5)
+        for i, row in df_time.iterrows():
+            with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
+
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator"])
 
+# ==========================================
+# 🟢 TAB 1: MASTER DASHBOARD (ALL FILTERS BACK!)
+# ==========================================
 with tab1:
-    st.info("💡 બાકીના રિપોર્ટ અને ફોર્મેટેડ એક્સેલ માટે ફિલ્ટર યુઝ કરો.")
-    if not df_master.empty:
-        st.dataframe(df_master.head(100), use_container_width=True, hide_index=True)
+    with st.expander("🔽 Filters & Sorting"):
+        c1, c2, c3 = st.columns(3)
+        df_disp = df_master.copy()
+        with c1:
+            if st.session_state.role == "ADMIN":
+                s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_disp, 'ZONE', 'tab1'), key='z1'))
+                if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
+            if st.session_state.role in ["ADMIN", "ZONE"]:
+                s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit', 'tab1'), key='tu1'))
+                if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
+        with c2:
+            available_facs = df_disp['Facility Type'].str.upper().unique()
+            fac_opts = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs)]
+            s_ft_raw = st.multiselect("Facility Category", fac_opts, key='fc1')
+            if s_ft_raw:
+                if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
+                elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
+            inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
+            f_rep = st.multiselect("Report Type", inds, key='rep1')
+        with c3:
+            diag_dt = st.date_input("Diagnosis Date Range", value=[], key="d1")
+            init_dt = st.date_input("Initiation Date Range", value=[], key="d2")
+            out_dt = st.date_input("Outcome Date Range", value=[], key="d3")
+        if len(diag_dt) == 2: df_disp = df_disp[df_disp['Diagnosis Date'].notna() & df_disp['Diagnosis Date'].dt.date.between(diag_dt[0], diag_dt[1])]
+        if len(init_dt) == 2: df_disp = df_disp[df_disp['Initiation Date'].notna() & df_disp['Initiation Date'].dt.date.between(init_dt[0], init_dt[1])]
+        if len(out_dt) == 2: df_disp = df_disp[df_disp['Outcome Date'].notna() & df_disp['Outcome Date'].dt.date.between(out_dt[0], out_dt[1])]
+        if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
+    f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
+    sorted_counts = sorted(f_counts.items(), key=lambda x: x[1], reverse=True)
+    top_3, others = sorted_counts[:3], sorted_counts[3:]
+    colors = {"Outcome": "#F39C12", "UDST": "#C0392B", "Not Put On": "#27AE60", "SLPA": "#8E44AD", "Consent": "#D35400", "HIV": "#C0392B", "ART": "#2980B9", "CPT": "#2980B9", "RBS": "#16A085", "ADT": "#E67E22"}
+    
+    st.markdown("##### 📈 Top 3 Highest Pending Actions")
+    cc1, cc2, cc3, cc4 = st.columns(4)
+    with cc1: st.markdown(draw_card("Total Pendency", sum(f_counts.values()), "#1f618d", "📄"), unsafe_allow_html=True)
+    with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
+    with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
+    with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
+
+    with st.expander("🔽 Tap to show other reports"):
+        oc_cols = st.columns(4)
+        for i, (k, v) in enumerate(others):
+            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
+    
+    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` દબાવો.")
+    st.dataframe(df_disp, use_container_width=True, hide_index=True)
+    
+    if not df_disp.empty:
+        excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
+        st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
+
+# ==========================================
+# 🟢 TAB 2: DAILY COMPARISON
+# ==========================================
 with tab2:
-    st.info("💡 Daily Comparison Data")
-    if not df_comp.empty:
-        st.dataframe(df_comp.head(100), use_container_width=True, hide_index=True)
+    st.markdown("#### 🔄 Comparison Matrix")
+    with st.expander("🔽 Filters"):
+        c1, c2, c3 = st.columns(3)
+        df_c = df_comp.copy()
+        with c1: 
+            if st.session_state.role == "ADMIN":
+                s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
+                if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
+            if st.session_state.role in ["ADMIN", "ZONE"]:
+                s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
+                if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
+        with c2: 
+            available_facs2 = df_c['Facility Type'].str.upper().unique()
+            fac_opts2 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs2)]
+            s2_ft_raw = st.multiselect("Facility Category", fac_opts2, key='fc2')
+            if s2_ft_raw:
+                if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
+                elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+            s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
+            if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
+        with c3: 
+            ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+            s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
+            s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
+            
+    if s2_ind or s2_stat:
+        mask = pd.Series(False, index=df_c.index)
+        for ind in (s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]):
+            if ind in df_c.columns: mask = mask | df_c[ind].isin(s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"])
+        df_c = df_c[mask]
+        
+    ind_cols_in_df = [c for c in df_c.columns if c not in ignore_cols]
+    if ind_cols_in_df:
+        new_c, res_c, per_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum(), (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum(), (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
+    else:
+        new_c, res_c, per_c = 0, 0, 0
+    
+    st.markdown("##### 📈 Daily Action Status")
+    cc1, cc2, cc3, cc4 = st.columns(4)
+    with cc1: st.markdown(draw_card("TOTAL PENDENCY", new_c + per_c, "#1f618d", "📄"), unsafe_allow_html=True)
+    with cc2: st.markdown(draw_card("🔴 NEW", new_c, "#E74C3C", "🚨"), unsafe_allow_html=True)
+    with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
+    with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
 
+    st.dataframe(df_c, use_container_width=True, hide_index=True)
+    
+    if not df_c.empty:
+        excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
+        st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
+
+# ==========================================
+# 🟢 TAB 3: CURRENT TB PATIENTS
+# ==========================================
 with tab3:
-    st.info("💡 Active Patients Line List")
-    if not df_curr_tb.empty:
-        st.dataframe(df_curr_tb.head(100), use_container_width=True, hide_index=True)
+    st.markdown("#### 🏥 Current TB Patients")
+    with st.expander("🔽 Filters"):
+        c1, c2, c3 = st.columns(3)
+        df_t3 = df_curr_tb.copy()
+        with c1:
+            if st.session_state.role == "ADMIN":
+                s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
+                if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
+            if st.session_state.role in ["ADMIN", "ZONE"]:
+                s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
+                if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
+        with c2:
+            available_facs3 = df_t3['Facility Type'].str.upper().unique()
+            fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
+            s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
+            if s3_ft_raw:
+                if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
+                elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
+            if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
+
+    st.markdown("##### 📈 Patient Overview")
+    c_t3, _, _, _ = st.columns(4)
+    with c_t3: st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
+
+    t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
+    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
+    
+    if not df_t3.empty:
+        excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
+        st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
+
 
 # ==========================================
 # 🟣 TAB 4: ADVANCED SMART PPT GENERATOR
@@ -224,14 +392,13 @@ with tab4:
             m2 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
             df_p2 = df[m2].copy()
 
-        # 🎯 BUG FIX: અહી મેં high_bad ને બદલે high_is_bad કરી દીધું છે!
         def get_bg_color(val, max_val):
             if max_val == 0 or pd.isna(val) or val == 0: return RGBColor(255, 255, 255)
             ratio = val / max_val
             if not high_is_bad: ratio = 1 - ratio 
-            if ratio > 0.66: return RGBColor(241, 148, 138)    # Red
-            elif ratio > 0.33: return RGBColor(249, 231, 159)  # Yellow
-            else: return RGBColor(171, 235, 198)               # Green
+            if ratio > 0.66: return RGBColor(241, 148, 138)
+            elif ratio > 0.33: return RGBColor(249, 231, 159)
+            else: return RGBColor(171, 235, 198)
 
         def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
             slide = prs.slides.add_slide(prs.slide_layouts[5])
@@ -303,32 +470,50 @@ with tab4:
                     c_target.fill.solid()
                     c_target.fill.fore_color.rgb = get_bg_color(val_target, max_value)
 
-        z_curr = df_p1.groupby('ZONE').size().reset_index(name=p1_name)
-        z_prev = df_p2.groupby('ZONE').size().reset_index(name=p2_name) if compare_mode else pd.DataFrame()
-        add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
-        
-        zones = sorted(pd.concat([df_p1['ZONE'], df_p2['ZONE'] if compare_mode else pd.Series()]).dropna().unique())
-        for z in zones:
-            z_curr_df = df_p1[df_p1['ZONE'] == z]
-            z_prev_df = df_p2[df_p2['ZONE'] == z] if compare_mode else pd.DataFrame()
-            
-            def get_phi_summary(temp_df, val_name):
-                if temp_df.empty: return pd.DataFrame(columns=['PHI', val_name])
+        def get_summary(temp_df, group_col, val_name):
+            if temp_df.empty: return pd.DataFrame(columns=[group_col, val_name])
+            if group_col == 'PHI':
                 pub_mask = temp_df['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])
-                pub_df = temp_df[pub_mask]
-                priv_df = temp_df[~pub_mask]
-                
-                pub_sum = pub_df.groupby('PHI').size().reset_index(name=val_name)
-                priv_count = len(priv_df)
+                pub_sum = temp_df[pub_mask].groupby('PHI').size().reset_index(name=val_name)
+                priv_count = len(temp_df[~pub_mask])
                 if priv_count > 0:
                     priv_row = pd.DataFrame({'PHI': ['PRIVATE FACILITIES (TOTAL)'], val_name: [priv_count]})
                     return pd.concat([pub_sum, priv_row], ignore_index=True)
                 return pub_sum
+            else:
+                return temp_df.groupby(group_col).size().reset_index(name=val_name)
 
-            phi_curr = get_phi_summary(z_curr_df, p1_name)
-            phi_prev = get_phi_summary(z_prev_df, p2_name) if compare_mode else pd.DataFrame()
+        # 🎯 ROLE-BASED SMART SLIDES LOGIC
+        if st.session_state.role == "ZONE":
+            # Slide 1: All TUs in Zone
+            tu_curr = get_summary(df_p1, 'TB Unit', p1_name)
+            tu_prev = get_summary(df_p2, 'TB Unit', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending (TU Wise)", tu_curr, tu_prev, 'TB Unit')
             
-            add_slide_table(f"{z} Zone - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+            # Slides 2+: PHI Wise per TU
+            tus = sorted(pd.concat([df_p1['TB Unit'], df_p2['TB Unit'] if compare_mode else pd.Series()]).dropna().unique())
+            for tu in tus:
+                phi_curr = get_summary(df_p1[df_p1['TB Unit'] == tu], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2['TB Unit'] == tu], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                add_slide_table(f"TU: {tu} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+
+        elif st.session_state.role == "ADMIN":
+            # Slide 1: All Zones
+            z_curr = get_summary(df_p1, 'ZONE', p1_name)
+            z_prev = get_summary(df_p2, 'ZONE', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
+            
+            # Slides 2+: PHI Wise per Zone
+            zones = sorted(pd.concat([df_p1['ZONE'], df_p2['ZONE'] if compare_mode else pd.Series()]).dropna().unique())
+            for z in zones:
+                phi_curr = get_summary(df_p1[df_p1['ZONE'] == z], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2['ZONE'] == z], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                add_slide_table(f"Zone: {z} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+        else:
+            # For TB_UNIT Role (Just show PHI slide)
+            phi_curr = get_summary(df_p1, 'PHI', p1_name)
+            phi_prev = get_summary(df_p2, 'PHI', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"{st.session_state.target} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
 
         out_io = io.BytesIO()
         prs.save(out_io)
