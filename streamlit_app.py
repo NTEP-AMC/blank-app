@@ -192,13 +192,11 @@ with tab4:
             color_rule = st.radio("Color Scale Rules:", ["High is Bad (Red) 🔴", "High is Good (Green) 🟢"])
             high_is_bad = True if "Bad" in color_rule else False
             
-            # 🎯 કયા કોલમ પર કલર લગાવવો છે એનું ચોક્કસ કંટ્રોલ!
             if compare_mode:
                 color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
             else:
                 color_target = p1_name
 
-    # 🎯 તારીખ પ્રમાણે ડેટા ફિલ્ટર કરવાનું સ્માર્ટ ફંક્શન
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
         if len(diag) == 2: mask &= df['Diagnosis Date'].dt.date.between(diag[0], diag[1])
@@ -216,38 +214,33 @@ with tab4:
 
         prs = Presentation()
         
-        # Period 1 ડેટા ફિલ્ટર
         m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
         m1 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
         df_p1 = df[m1].copy()
 
-        # Period 2 ડેટા ફિલ્ટર 
         df_p2 = pd.DataFrame()
         if compare_mode:
             m2 = apply_date_filters(df, p2_diag, p2_init, p2_out)
             m2 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
             df_p2 = df[m2].copy()
 
-        # કલર ગણવાનું લોજીક
+        # 🎯 BUG FIX: અહી મેં high_bad ને બદલે high_is_bad કરી દીધું છે!
         def get_bg_color(val, max_val):
             if max_val == 0 or pd.isna(val) or val == 0: return RGBColor(255, 255, 255)
             ratio = val / max_val
-            if not high_bad: ratio = 1 - ratio 
+            if not high_is_bad: ratio = 1 - ratio 
             if ratio > 0.66: return RGBColor(241, 148, 138)    # Red
             elif ratio > 0.33: return RGBColor(249, 231, 159)  # Yellow
             else: return RGBColor(171, 235, 198)               # Green
 
-        # 🎯 મસ્ત ટેબલ અને લોગો બનાવવાનું ફંક્શન
         def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
             slide = prs.slides.add_slide(prs.slide_layouts[5])
             
-            # 🖼️ સ્લાઈડમાં AMC અને NTEP ના લોગો એડ કરો 
             if os.path.exists("images/amc.png"):
                 slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
             if os.path.exists("images/ntep.jpg"):
                 slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
             
-            # ટાઈટલ સેટિંગ 
             title = slide.shapes.title
             title.text = title_text
             title.text_frame.paragraphs[0].font.size = Pt(28)
@@ -258,7 +251,6 @@ with tab4:
                 tx.text_frame.text = "આ તારીખો માટે કોઈ દર્દી પેન્ડિંગ નથી."
                 return
                 
-            # 🎯 ટેબલ ડેટા મર્જ અને ગણતરી (Q1, Q2, Grand Total)
             if compare_mode:
                 final_df = pd.merge(curr_df, prev_df, on=entity_col_name, how='outer').fillna(0)
                 final_df['Grand Total'] = final_df[p1_name] + final_df[p2_name]
@@ -273,7 +265,6 @@ with tab4:
             table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.5), Inches(8.4), Inches(0.4))
             table = table_shape.table
             
-            # કોલમની પહોળાઈ
             if cols == 2:
                 table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
             elif cols == 4:
@@ -289,39 +280,33 @@ with tab4:
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
                 
-            # કલર કયા કોલમ પર લગાવવો છે? એ ચેક કરો
             target_idx = col_names.index(color_target)
             max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
             
             for i, (_, row) in enumerate(final_df.iterrows()):
                 name_val = str(row[entity_col_name])
                 
-                # વેલ્યુ લખો
                 table.cell(i+1, 0).text = name_val
                 table.cell(i+1, 1).text = str(int(row[p1_name]))
                 if cols == 4:
                     table.cell(i+1, 2).text = str(int(row[p2_name]))
                     table.cell(i+1, 3).text = str(int(row['Grand Total']))
                 
-                # પ્રાઇવેટ લાઈન ગ્રે કલરમાં
                 if "PRIVATE FACILITIES" in name_val:
                     for j in range(cols):
                         c = table.cell(i+1, j)
                         c.fill.solid(); c.fill.fore_color.rgb = RGBColor(235, 237, 239)
                         c.text_frame.paragraphs[0].font.bold = True
                 else:
-                    # માત્ર સિલેક્ટ કરેલા કોલમમાં જ કલર સ્કેલ ભરો! 🎨
                     c_target = table.cell(i+1, target_idx)
                     val_target = row.iloc[target_idx]
                     c_target.fill.solid()
                     c_target.fill.fore_color.rgb = get_bg_color(val_target, max_value)
 
-        # સ્લાઈડ 1: All Zones
         z_curr = df_p1.groupby('ZONE').size().reset_index(name=p1_name)
         z_prev = df_p2.groupby('ZONE').size().reset_index(name=p2_name) if compare_mode else pd.DataFrame()
         add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
         
-        # સ્લાઈડ્સ 2 થી 8: PHI Wise 
         zones = sorted(pd.concat([df_p1['ZONE'], df_p2['ZONE'] if compare_mode else pd.Series()]).dropna().unique())
         for z in zones:
             z_curr_df = df_p1[df_p1['ZONE'] == z]
