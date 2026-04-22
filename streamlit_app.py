@@ -100,10 +100,14 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
+def parse_dt_safe(s):
+    try: return pd.to_datetime(s, errors='coerce', dayfirst=True)
+    except: return pd.NaT
+
 try:
     df_master = pd.read_csv("Master_Line_List.csv")
     for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-        if col in df_master.columns: df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
+        if col in df_master.columns: df_master[col] = df_master[col].apply(parse_dt_safe)
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     df_time = pd.read_csv("Update_Timestamps.csv")
@@ -127,7 +131,7 @@ def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
 
 def get_options_with_counts(df, column_name, tab_name="tab1"):
-    if df.empty: return []
+    if df.empty or column_name not in df.columns: return []
     try:
         if tab_name == "tab1" and 'Pending Status' in df.columns:
             df_temp = df.copy()
@@ -295,110 +299,129 @@ with tab4:
     st.markdown("<h3 style='text-align: center; background-color: #d4edda; color: #155724; padding: 10px; border-radius: 10px; border: 2px solid #000;'>NTEP - AMC DIFF CARE</h3>", unsafe_allow_html=True)
     
     if not df_dtb_care.empty:
-        df_t4 = df_dtb_care.copy()
-        
-        for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if col in df_t4.columns: df_t4[col] = pd.to_datetime(df_t4[col], errors='coerce')
-        
-        df_t4['Notification Month'] = df_t4['Diagnosis Date'].dt.strftime('%b-%Y').fillna("N/A")
-        df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
-        df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
-        df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
-        df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace(["", "NAN", "N/A", "NONE", "<NA>"], "BLANK (ACTIVE)")
-
-        with st.expander("🔽 Looker Studio Filters", expanded=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if st.session_state.role == "ADMIN":
-                    s4_z = clean_selection(st.multiselect("ZONE", get_options_with_counts(df_t4, 'ZONE', 'tab4'), key='z4'))
-                    if s4_z: df_t4 = df_t4[df_t4['ZONE'].isin(s4_z)]
-                
-                avail_facs4 = df_t4['Facility Type'].str.upper().unique()
-                fac_opts4 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in avail_facs4)]
-                s4_ft = st.multiselect("TYPE OF HEALTH FACILITY", fac_opts4, key='ft4')
-                if s4_ft:
-                    if "PUBLIC" in s4_ft and "PRIVATE" in s4_ft: pass
-                    elif "PUBLIC" in s4_ft: df_t4 = df_t4[df_t4['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                    elif "PRIVATE" in s4_ft: df_t4 = df_t4[~df_t4['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                
-                s4_nm = clean_selection(st.multiselect("NOTIFICATION MONTH", get_options_with_counts(df_t4, 'Notification Month', 'tab4'), key='nm4'))
-                if s4_nm: df_t4 = df_t4[df_t4['Notification Month'].isin(s4_nm)]
-                
-                s4_im = clean_selection(st.multiselect("TREATMENT INITIATION MONTH", get_options_with_counts(df_t4, 'Initiation Month', 'tab4'), key='im4'))
-                if s4_im: df_t4 = df_t4[df_t4['Initiation Month'].isin(s4_im)]
-
-            with c2:
-                if st.session_state.role in ["ADMIN", "ZONE"]:
-                    s4_tu = clean_selection(st.multiselect("CURRENT TB UNIT", get_options_with_counts(df_t4, 'TB Unit', 'tab4'), key='tu4'))
-                    if s4_tu: df_t4 = df_t4[df_t4['TB Unit'].isin(s4_tu)]
-                
-                s4_tc = clean_selection(st.multiselect("TYPE OF CASE", get_options_with_counts(df_t4, 'Type of Case', 'tab4'), key='tc4'))
-                if s4_tc: df_t4 = df_t4[df_t4['Type of Case'].isin(s4_tc)]
-                
-                s4_sd = clean_selection(st.multiselect("SITE OF DISEASE", get_options_with_counts(df_t4, 'Site of Disease', 'tab4'), key='sd4'))
-                if s4_sd: df_t4 = df_t4[df_t4['Site of Disease'].isin(s4_sd)]
-                
-                s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_t4, 'Treatment Outcome Display', 'tab4'), key='to4'))
-                if s4_to: df_t4 = df_t4[df_t4['Treatment Outcome Display'].isin(s4_to)]
-                
-                all_due_opts = get_options_with_counts(df_t4, 'Follow Up Due', 'tab4')
-                s4_fd_raw = st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4')
-                s4_fd = clean_selection(s4_fd_raw)
-                
-                # 🎯 ફિક્સ: જો ફિલ્ટર ખાલી હોય તો બધો ડેટા દેખાશે! 
-                if len(s4_fd_raw) > 0: 
-                    df_t4 = df_t4[df_t4['Follow Up Due'].isin(s4_fd)]
-
-            with c3:
-                s4_phi = clean_selection(st.multiselect("HEALTH FACILITY", get_options_with_counts(df_t4, 'PHI', 'tab4'), key='phi4'))
-                if s4_phi: df_t4 = df_t4[df_t4['PHI'].isin(s4_phi)]
-                
-                s4_ts = clean_selection(st.multiselect("TREATMENT STATUS", get_options_with_counts(df_t4, 'Treatment Status', 'tab4'), key='ts4'))
-                if s4_ts: df_t4 = df_t4[df_t4['Treatment Status'].isin(s4_ts)]
-                
-                s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_t4, 'Outcome Month', 'tab4'), key='om4'))
-                if s4_om: df_t4 = df_t4[df_t4['Outcome Month'].isin(s4_om)]
-
-        st.markdown("##### 🩺 Follow Up Pending Summary")
-        kpi_b = len(df_t4[df_t4['Follow Up Due'].str.contains('BASELINE', na=False)])
-        kpi_1 = len(df_t4[df_t4['Follow Up Due'].str.contains('1ST MONTH', na=False)])
-        kpi_2 = len(df_t4[df_t4['Follow Up Due'].str.contains('2ND MONTH', na=False)])
-        kpi_3 = len(df_t4[df_t4['Follow Up Due'].str.contains('3RD MONTH', na=False)])
-        kpi_4 = len(df_t4[df_t4['Follow Up Due'].str.contains('4TH MONTH', na=False)])
-        kpi_5 = len(df_t4[df_t4['Follow Up Due'].str.contains('5TH MONTH', na=False)])
-        kpi_6 = len(df_t4[df_t4['Follow Up Due'].str.contains('6TH MONTH', na=False)])
-        kpi_total = len(df_t4[df_t4['Follow Up Due'] != 'Completed'])
-        
-        kb1, kb2, kb3, kb4 = st.columns(4)
-        with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
-        with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
-        with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
-        with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
-        
-        kb5, kb6, kb7, kb8 = st.columns(4)
-        with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
-        with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
-        with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
-        with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
-
-        # 🎯 Looker Studio 100% Exact Matrix Layout (તમારા જૂના ફોટા જેવું જ)
-        st.markdown("##### 📊 Zone-wise Due Matrix")
-        if not df_t4.empty:
-            df_matrix = df_t4.groupby(['ZONE', 'Follow Up Due']).size().unstack(fill_value=0)
-            if 'Completed' in df_matrix.columns and len(s4_fd_raw) > 0 and 'Completed' not in s4_fd:
-                df_matrix = df_matrix.drop(columns=['Completed']) # જો ફિલ્ટર કર્યું હોય તો Completed કાઢી નાખવું
+        # 🎯 SAFETY NET: જો જૂનો ડેટાબેઝ હોય અને Follow Up Due કોલમ ના હોય, તો ચેતવણી આપો.
+        if 'Follow Up Due' not in df_dtb_care.columns:
+            st.error("⚠️ **Streamlit ડેશબોર્ડ અપડેટ થઈ ગયું છે, પણ તમારો GitHub ડેટા જૂનો છે!**")
+            st.warning("👉 કૃપા કરીને **Google Colab** માં જઈને તમારો નવો માસ્ટર કોડ એકવાર રન કરી દો. કોડ રન થશે એટલે નવો ડેટા (જેમાં Follow Up Due કોલમ હશે) જાતે જ GitHub પર આવી જશે અને આ એરર સોલ્વ થઈ જશે.")
+        else:
+            df_t4 = df_dtb_care.copy()
             
-            df_matrix['Grand Total'] = df_matrix.sum(axis=1)
-            df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
-            df_matrix = df_matrix.reset_index()
-            df_matrix.at[len(df_matrix)-1, 'ZONE'] = 'Grand Total'
-            st.dataframe(df_matrix, use_container_width=True, hide_index=True)
-        
-        display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome Display', 'Type of Case', 'TB_regimen', 'Follow Up Due']
-        final_display_cols = [c for c in display_cols if c in df_t4.columns]
-        
-        st.markdown("##### 📄 Patient Line List")
-        st.dataframe(df_t4[final_display_cols], use_container_width=True, hide_index=True)
-        st.download_button("📥 Download Differentiated Care Report", df_t4[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
+            for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+                if col in df_t4.columns: df_t4[col] = df_t4[col].apply(parse_dt_safe)
+            
+            df_t4['Notification Month'] = df_t4['Diagnosis Date'].dt.strftime('%b-%Y').fillna("N/A")
+            df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
+            df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
+            df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
+            df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace(["", "NAN", "N/A", "NONE", "<NA>"], "BLANK (ACTIVE)")
+
+            df_filtered = df_t4.copy()
+
+            with st.expander("🔽 Looker Studio Filters", expanded=True):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    if st.session_state.role == "ADMIN":
+                        s4_z = clean_selection(st.multiselect("ZONE", get_options_with_counts(df_filtered, 'ZONE', 'tab4'), key='z4'))
+                        if s4_z: df_filtered = df_filtered[df_filtered['ZONE'].isin(s4_z)]
+                    
+                    s4_nm = clean_selection(st.multiselect("NOTIFICATION MONTH", get_options_with_counts(df_filtered, 'Notification Month', 'tab4'), key='nm4'))
+                    if s4_nm: df_filtered = df_filtered[df_filtered['Notification Month'].isin(s4_nm)]
+                    
+                    s4_im = clean_selection(st.multiselect("TREATMENT INITIATION MONTH", get_options_with_counts(df_filtered, 'Initiation Month', 'tab4'), key='im4'))
+                    if s4_im: df_filtered = df_filtered[df_filtered['Initiation Month'].isin(s4_im)]
+                    
+                    if 'Age' in df_filtered.columns:
+                        s4_age = clean_selection(st.multiselect("AGE", get_options_with_counts(df_filtered, 'Age', 'tab4'), key='age4'))
+                        if s4_age: df_filtered = df_filtered[df_filtered['Age'].isin(s4_age)]
+
+                with c2:
+                    if st.session_state.role in ["ADMIN", "ZONE"]:
+                        s4_tu = clean_selection(st.multiselect("CURRENT TB UNIT", get_options_with_counts(df_filtered, 'TB Unit', 'tab4'), key='tu4'))
+                        if s4_tu: df_filtered = df_filtered[df_filtered['TB Unit'].isin(s4_tu)]
+                    
+                    s4_tc = clean_selection(st.multiselect("TYPE OF CASE", get_options_with_counts(df_filtered, 'Type of Case', 'tab4'), key='tc4'))
+                    if s4_tc: df_filtered = df_filtered[df_filtered['Type of Case'].isin(s4_tc)]
+                    
+                    s4_sd = clean_selection(st.multiselect("SITE OF DISEASE", get_options_with_counts(df_filtered, 'Site of Disease', 'tab4'), key='sd4'))
+                    if s4_sd: df_filtered = df_filtered[df_filtered['Site of Disease'].isin(s4_sd)]
+                    
+                    s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_filtered, 'Treatment Outcome Display', 'tab4'), key='to4'))
+                    if s4_to: df_filtered = df_filtered[df_filtered['Treatment Outcome Display'].isin(s4_to)]
+
+                with c3:
+                    s4_phi = clean_selection(st.multiselect("HEALTH FACILITY", get_options_with_counts(df_filtered, 'PHI', 'tab4'), key='phi4'))
+                    if s4_phi: df_filtered = df_filtered[df_filtered['PHI'].isin(s4_phi)]
+                    
+                    avail_facs4 = df_filtered['Facility Type'].str.upper().unique()
+                    fac_opts4 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in avail_facs4)]
+                    s4_ft = st.multiselect("TYPE OF HEALTH FACILITY", fac_opts4, key='ft4')
+                    if s4_ft:
+                        if "PUBLIC" in s4_ft and "PRIVATE" in s4_ft: pass
+                        elif "PUBLIC" in s4_ft: df_filtered = df_filtered[df_filtered['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                        elif "PRIVATE" in s4_ft: df_filtered = df_filtered[~df_filtered['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                    
+                    s4_ts = clean_selection(st.multiselect("TREATMENT STATUS", get_options_with_counts(df_filtered, 'Treatment Status', 'tab4'), key='ts4'))
+                    if s4_ts: df_filtered = df_filtered[df_filtered['Treatment Status'].isin(s4_ts)]
+                    
+                    s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_filtered, 'Outcome Month', 'tab4'), key='om4'))
+                    if s4_om: df_filtered = df_filtered[df_filtered['Outcome Month'].isin(s4_om)]
+
+                st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
+                all_due_opts = get_options_with_counts(df_filtered, 'Follow Up Due', 'tab4')
+                s4_fd = clean_selection(st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4'))
+                if s4_fd: df_filtered = df_filtered[df_filtered['Follow Up Due'].isin(s4_fd)]
+
+            st.markdown("##### 🩺 Follow Up Pending Summary")
+            kpi_b = len(df_filtered[df_filtered['Follow Up Due'].str.contains('BASELINE', na=False)])
+            kpi_1 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('1ST MONTH', na=False)])
+            kpi_2 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('2ND MONTH', na=False)])
+            kpi_3 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('3RD MONTH', na=False)])
+            kpi_4 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('4TH MONTH', na=False)])
+            kpi_5 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('5TH MONTH', na=False)])
+            kpi_6 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('6TH MONTH', na=False)])
+            kpi_total = len(df_filtered[df_filtered['Follow Up Due'] != 'Completed'])
+            
+            kb1, kb2, kb3, kb4 = st.columns(4)
+            with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
+            with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
+            with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
+            with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
+            
+            kb5, kb6, kb7, kb8 = st.columns(4)
+            with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
+            with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
+            with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
+            with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
+
+            st.markdown("##### 📊 Zone-wise Due Matrix")
+            zones = df_filtered['ZONE'].unique()
+            matrix_data = []
+            for z in zones:
+                z_df = df_filtered[df_filtered['ZONE'] == z]
+                matrix_data.append({
+                    'ZONE': z,
+                    'Completed': len(z_df[z_df['Follow Up Due'] == 'Completed']),
+                    'BASELINE': len(z_df[z_df['Follow Up Due'].str.contains('BASELINE', na=False)]),
+                    '1ST MONTH': len(z_df[z_df['Follow Up Due'].str.contains('1ST MONTH', na=False)]),
+                    '2ND MONTH': len(z_df[z_df['Follow Up Due'].str.contains('2ND MONTH', na=False)]),
+                    '3RD MONTH': len(z_df[z_df['Follow Up Due'].str.contains('3RD MONTH', na=False)]),
+                    '4TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('4TH MONTH', na=False)]),
+                    '5TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('5TH MONTH', na=False)]),
+                    '6TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('6TH MONTH', na=False)]),
+                    'Grand Total': len(z_df)
+                })
+            if matrix_data:
+                df_matrix = pd.DataFrame(matrix_data)
+                df_matrix = df_matrix[['ZONE', 'Completed', 'BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH', 'Grand Total']]
+                df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
+                df_matrix.at['Total', 'ZONE'] = 'Grand Total'
+                st.dataframe(df_matrix, use_container_width=True, hide_index=True)
+            
+            display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Age', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome Display', 'Type of Case', 'TB_regimen', 'Follow Up Due']
+            final_display_cols = [c for c in display_cols if c in df_filtered.columns]
+            
+            st.markdown("##### 📄 Patient Line List")
+            st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
+            st.download_button("📥 Download Differentiated Care Report", df_filtered[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
     else:
         st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી.")
