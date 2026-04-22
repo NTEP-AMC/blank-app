@@ -304,8 +304,6 @@ with tab4:
         df_t4['Initiation Month'] = df_t4['Initiation Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Outcome Month'] = df_t4['Outcome Date'].dt.strftime('%b-%Y').fillna("N/A")
         df_t4['Treatment Status'] = df_t4['Treatment Outcome'].apply(lambda x: "Active" if pd.isna(x) or x in ["", "N/A", "NAN", "NONE"] else "Outcome Assigned")
-        
-        # 🎯 BLANK (ACTIVE) દર્શાવવા માટે નવું નામ:
         df_t4['Treatment Outcome Display'] = df_t4['Treatment Outcome'].replace("N/A", "BLANK (ACTIVE)")
 
         with st.expander("🔽 Looker Studio Filters", expanded=True):
@@ -340,11 +338,15 @@ with tab4:
                 s4_sd = clean_selection(st.multiselect("SITE OF DISEASE", get_options_with_counts(df_t4, 'Site of Disease', 'tab4'), key='sd4'))
                 if s4_sd: df_t4 = df_t4[df_t4['Site of Disease'].isin(s4_sd)]
                 
-                # 🎯 BLANK વાળું નવું ફિલ્ટર!
                 s4_to = clean_selection(st.multiselect("TREATMENT OUTCOME", get_options_with_counts(df_t4, 'Treatment Outcome Display', 'tab4'), key='to4'))
                 if s4_to: df_t4 = df_t4[df_t4['Treatment Outcome Display'].isin(s4_to)]
                 
-                s4_fd = clean_selection(st.multiselect("FOLLOW UP DUE", get_options_with_counts(df_t4, 'Follow Up Due', 'tab4'), key='fd4'))
+                # 🎯 અહીં મેં બાય ડિફોલ્ટ 'Completed' કાઢી નાખ્યું છે! 
+                all_due_opts = get_options_with_counts(df_t4, 'Follow Up Due', 'tab4')
+                default_due_opts = [opt for opt in all_due_opts if "Completed" not in opt]
+                
+                s4_fd_raw = st.multiselect("FOLLOW UP DUE", all_due_opts, default=default_due_opts, key='fd4')
+                s4_fd = clean_selection(s4_fd_raw)
                 if s4_fd: df_t4 = df_t4[df_t4['Follow Up Due'].isin(s4_fd)]
 
             with c3:
@@ -357,7 +359,7 @@ with tab4:
                 s4_om = clean_selection(st.multiselect("TREATMENT OUTCOME MONTH", get_options_with_counts(df_t4, 'Outcome Month', 'tab4'), key='om4'))
                 if s4_om: df_t4 = df_t4[df_t4['Outcome Month'].isin(s4_om)]
 
-        # 🎯 8 KPI BOXES (Follow Up Pending)
+        # 🎯 8 KPI BOXES (માત્ર Pending માટે)
         st.markdown("##### 🩺 Follow Up Pending Summary")
         kpi_b = len(df_t4[df_t4['Follow Up Due'].str.contains('BASELINE', na=False)])
         kpi_1 = len(df_t4[df_t4['Follow Up Due'].str.contains('1ST MONTH', na=False)])
@@ -380,7 +382,6 @@ with tab4:
         with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
         with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
 
-        # 🎯 Looker Studio જેવું PIVOT ટેબલ!
         st.markdown("##### 📊 Zone-wise Due Matrix")
         zones = df_t4['ZONE'].unique()
         matrix_data = []
@@ -404,7 +405,7 @@ with tab4:
             st.dataframe(df_matrix, use_container_width=True, hide_index=True)
         
         display_cols = [c for c in df_t4.columns if "Month" not in c and c not in ["Follow Up Due", "Treatment Status", "Treatment Outcome Display"]]
-        display_cols.append('Follow Up Due') # લાઈન લિસ્ટમાં જોવા માટે 
+        display_cols.append('Follow Up Due') 
         
         st.markdown("##### 📄 Patient Line List")
         st.dataframe(df_t4[display_cols], use_container_width=True, hide_index=True)
