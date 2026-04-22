@@ -3,7 +3,7 @@ import pandas as pd
 import base64
 import os
 import io
-from datetime import datetime
+from datetime import datetime, date, timedelta  # 🎯 FIX: 'date' અને 'timedelta' ઉમેર્યું
 import pytz
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
@@ -119,7 +119,6 @@ try:
         if col in df_master.columns: df_master[col] = df_master[col].apply(parse_dt_safe)
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
-    df_time = pd.read_csv("Update_Timestamps.csv")
 except Exception as e:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
 
@@ -133,20 +132,9 @@ df_master = filter_by_role(df_master, st.session_state.role, st.session_state.ta
 df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
 
-def draw_card(title, value, color, icon):
-    return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
-
-def clean_selection(selected_list): return [item.rsplit(" (", 1)[0] for item in selected_list]
-
-b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
-st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
-st.markdown("<div style='background-color:#1f618d; color:white; text-align:center; padding:12px; border-radius:5px; margin:15px 0;'>TB Monitoring Dashboard - Ahmedabad</div>", unsafe_allow_html=True)
-
-# 🎯 NEW TABS: PPT Generator ઉમેરાયું 
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator"])
 
 with tab1:
-    # (તમારો જૂનો Tab 1 નો બધો કોડ અહીં જ રહેશે, કોઈ ફેરફાર નહિ)
     st.info("💡 બાકીના રિપોર્ટ અને ફોર્મેટેડ એક્સેલ માટે ફિલ્ટર યુઝ કરો.")
     if not df_master.empty:
         st.dataframe(df_master.head(100), use_container_width=True, hide_index=True)
@@ -162,11 +150,11 @@ with tab3:
         st.dataframe(df_curr_tb.head(100), use_container_width=True, hide_index=True)
 
 # ==========================================
-# 🟣 TAB 4: SMART PPT GENERATOR (NEW)
+# 🟣 TAB 4: SMART PPT GENERATOR (WITH COMPARISON)
 # ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Automated PPT Report Generator</h3>", unsafe_allow_html=True)
-    st.markdown("આ પેનલમાંથી તમે કોઈ પણ રિપોર્ટની 8-સ્લાઈડ વાળી મસ્ત કલરફુલ PPT એક ક્લિકમાં બનાવી શકો છો.")
+    st.markdown("આ પેનલમાંથી તમે કોઈ પણ રિપોર્ટની મસ્ત કલરફુલ PPT એક ક્લિકમાં બનાવી શકો છો.")
     
     with st.container():
         c1, c2, c3 = st.columns(3)
@@ -174,8 +162,6 @@ with tab4:
         with c1:
             all_inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             sel_report = st.selectbox("📌 1. Select Report Type", all_inds)
-            
-            # ડેટ કોલમ કયું વાપરવું?
             date_col_map = {"Outcome": "Outcome Date"}
             sel_date_col = date_col_map.get(sel_report, "Diagnosis Date")
             
@@ -186,16 +172,15 @@ with tab4:
             with col_d2: end_d = st.date_input("To Date", date(2025, 3, 31))
             
         with c3:
-            st.write("🎨 3. Color Scale Rule")
-            color_rule = st.radio(
-                "વધુ આંકડાને કયો કલર આપવો છે?",
-                ["High is Bad (Red) 🔴", "High is Good (Green) 🟢"],
-                help="જો પેન્ડિંગ રિપોર્ટ હોય તો 'High is Bad' રાખો જેથી સૌથી વધુ પેન્ડિંગ વાળા PHI લાલ દેખાય."
-            )
+            st.write("🎨 3. Presentation Settings")
+            color_rule = st.radio("Color Scale Rule:", ["High is Bad (Red) 🔴", "High is Good (Green) 🟢"])
             high_is_bad = True if "Bad" in color_rule else False
+            
+            # 🎯 NEW COMPARISON CHECKBOX
+            compare_mode = st.checkbox("📊 Add Comparison Column (vs Previous Period)", value=True, help="અગાઉના સમયગાળા સાથે ડેટા સરખાવો")
 
-    # 🎯 PPT જનરેટ કરવાનું ફંક્શન
-    def generate_smart_ppt(df, report_name, date_col, s_date, e_date, high_bad):
+    # 🎯 PPT જનરેટ કરવાનું ફંક્શન (હવે Comparison સાથે)
+    def generate_smart_ppt(df, report_name, date_col, s_date, e_date, high_bad, compare_mode):
         try:
             from pptx import Presentation
             from pptx.util import Inches, Pt
@@ -205,7 +190,7 @@ with tab4:
 
         prs = Presentation()
         
-        # 1. ડેટા ફિલ્ટર કરો
+        # Current Period Data
         mask = (
             df['Pending Status'].astype(str).str.contains(report_name, na=False) &
             (df[date_col].notna()) &
@@ -214,97 +199,135 @@ with tab4:
         )
         df_filt = df[mask].copy()
 
-        # 2. કલર ગણવા માટેનું સ્માર્ટ લોજીક
-        def get_bg_color(val, max_val):
-            if max_val == 0 or pd.isna(val): return RGBColor(255, 255, 255) # White
-            ratio = val / max_val
-            if not high_bad: ratio = 1 - ratio # Rule ઊલટો કરી દો
+        # 🎯 Previous Period Data (જો Comparison ચાલુ હોય તો જ)
+        df_prev_filt = pd.DataFrame()
+        if compare_mode:
+            duration = e_date - s_date
+            prev_e_date = s_date - timedelta(days=1)
+            prev_s_date = prev_e_date - duration
             
-            if ratio > 0.66: return RGBColor(241, 148, 138)    # Light Red
-            elif ratio > 0.33: return RGBColor(249, 231, 159)  # Light Yellow
-            else: return RGBColor(171, 235, 198)               # Light Green
+            prev_mask = (
+                df['Pending Status'].astype(str).str.contains(report_name, na=False) &
+                (df[date_col].notna()) &
+                (df[date_col].dt.date >= prev_s_date) &
+                (df[date_col].dt.date <= prev_e_date)
+            )
+            df_prev_filt = df[prev_mask].copy()
 
-        # 3. ટેબલ બનાવવાનું ફંક્શન
-        def add_slide_table(title_text, data_df, col_names):
+        def get_bg_color(val, max_val):
+            if max_val == 0 or pd.isna(val): return RGBColor(255, 255, 255)
+            ratio = val / max_val
+            if not high_bad: ratio = 1 - ratio 
+            if ratio > 0.66: return RGBColor(241, 148, 138)
+            elif ratio > 0.33: return RGBColor(249, 231, 159)
+            else: return RGBColor(171, 235, 198)
+
+        def get_trend_str(diff):
+            if pd.isna(diff): return "0 ➖"
+            if diff > 0: return f"+{int(diff)} {'🔴' if high_bad else '🟢'} 🔼"
+            elif diff < 0: return f"{int(diff)} {'🟢' if high_bad else '🔴'} 🔽"
+            return "0 ➖"
+
+        # ડાયનેમિક ટેબલ ફંક્શન
+        def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
             slide = prs.slides.add_slide(prs.slide_layouts[5])
             title = slide.shapes.title
             title.text = title_text
-            title.text_frame.paragraphs[0].font.size = Pt(28)
+            title.text_frame.paragraphs[0].font.size = Pt(24)
             
-            if data_df.empty:
+            if curr_df.empty and prev_df.empty:
                 tx = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
                 tx.text_frame.text = "કોઈ દર્દી પેન્ડિંગ નથી."
                 return
                 
-            rows = len(data_df) + 1
+            # 🎯 Merge Logic For Comparison
+            if compare_mode:
+                final_df = pd.merge(curr_df, prev_df, on=entity_col_name, how='outer').fillna(0)
+                final_df['Difference'] = final_df['Current'] - final_df['Previous']
+                final_df['Trend'] = final_df['Difference'].apply(get_trend_str)
+                final_df = final_df.sort_values(by='Current', ascending=False)
+                col_names = [entity_col_name, 'Current Pending', 'Previous Pending', 'Trend']
+            else:
+                final_df = curr_df.sort_values(by='Current', ascending=False)
+                col_names = [entity_col_name, 'Current Pending']
+
+            rows = len(final_df) + 1
             cols = len(col_names)
-            table_shape = slide.shapes.add_table(rows, cols, Inches(1.5), Inches(1.5), Inches(7.0), Inches(0.4))
+            table_shape = slide.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9.0), Inches(0.4))
             table = table_shape.table
-            table.columns[0].width = Inches(4.5)
-            table.columns[1].width = Inches(2.5)
             
-            # હેડર
+            # કોલમ સાઈઝ 
+            if cols == 2:
+                table.columns[0].width = Inches(5.0); table.columns[1].width = Inches(3.0)
+            elif cols == 4:
+                table.columns[0].width = Inches(4.0)
+                table.columns[1].width = Inches(1.8)
+                table.columns[2].width = Inches(1.8)
+                table.columns[3].width = Inches(1.4)
+            
             for i, c_name in enumerate(col_names):
                 cell = table.cell(0, i)
                 cell.text = c_name
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = RGBColor(31, 97, 141) # Dark Blue Header
+                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
                 
-            # ડેટા અને કલર સ્કેલ
-            max_value = data_df[col_names[1]].max()
-            for i, (_, row) in enumerate(data_df.iterrows()):
-                name_val = str(row.iloc[0])
-                count_val = row.iloc[1]
+            max_value = final_df['Current'].max() if not final_df.empty else 0
+            
+            for i, (_, row) in enumerate(final_df.iterrows()):
+                name_val = str(row[entity_col_name])
+                curr_val = row['Current']
                 
-                # Name Column
-                c1 = table.cell(i+1, 0)
-                c1.text = name_val
+                c1 = table.cell(i+1, 0); c1.text = name_val
+                c2 = table.cell(i+1, 1); c2.text = str(int(curr_val))
                 
-                # Count Column
-                c2 = table.cell(i+1, 1)
-                c2.text = str(count_val)
+                if cols == 4:
+                    c3 = table.cell(i+1, 2); c3.text = str(int(row['Previous']))
+                    c4 = table.cell(i+1, 3); c4.text = str(row['Trend'])
                 
-                # પબ્લિક/પ્રાઇવેટ મુજબ કલર અને બોલ્ડ
                 if "PRIVATE FACILITIES" in name_val:
-                    c1.fill.solid(); c1.fill.fore_color.rgb = RGBColor(235, 237, 239) # Grey
+                    c1.fill.solid(); c1.fill.fore_color.rgb = RGBColor(235, 237, 239)
                     c2.fill.solid(); c2.fill.fore_color.rgb = RGBColor(235, 237, 239)
                     c1.text_frame.paragraphs[0].font.bold = True
                     c2.text_frame.paragraphs[0].font.bold = True
+                    if cols == 4:
+                        c3.fill.solid(); c3.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                        c4.fill.solid(); c4.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                        c3.text_frame.paragraphs[0].font.bold = True
+                        c4.text_frame.paragraphs[0].font.bold = True
                 else:
-                    # કલર સ્કેલ લગાવો
                     c2.fill.solid()
-                    c2.fill.fore_color.rgb = get_bg_color(count_val, max_value)
+                    c2.fill.fore_color.rgb = get_bg_color(curr_val, max_value)
 
         # સ્લાઈડ 1: All Zones
-        z_sum = df_filt.groupby('ZONE').size().reset_index(name='Pending Count')
-        z_sum = z_sum.sort_values(by='Pending Count', ascending=False)
-        add_slide_table(f"All Zones - {sel_report} Pending", z_sum, ['Zone Name', f'{sel_report} Pending'])
+        z_curr = df_filt.groupby('ZONE').size().reset_index(name='Current')
+        z_prev = df_prev_filt.groupby('ZONE').size().reset_index(name='Previous') if compare_mode else pd.DataFrame()
+        slide_sub = f"(vs {prev_s_date.strftime('%d-%b')} to {prev_e_date.strftime('%d-%b')})" if compare_mode else ""
+        add_slide_table(f"All Zones - {sel_report} Pending {slide_sub}", z_curr, z_prev, 'ZONE')
         
-        # સ્લાઈડ્સ 2 થી 8: PHI Wise (પબ્લિક પહેલા, પ્રાઇવેટ છેલ્લે ટોટલ)
+        # સ્લાઈડ્સ 2 થી 8: PHI Wise 
         zones = sorted(df_filt['ZONE'].dropna().unique())
         for z in zones:
-            z_df = df_filt[df_filt['ZONE'] == z]
+            z_curr_df = df_filt[df_filt['ZONE'] == z]
+            z_prev_df = df_prev_filt[df_prev_filt['ZONE'] == z] if compare_mode else pd.DataFrame()
             
-            # પબ્લિક અને પ્રાઇવેટ અલગ પાડો
-            pub_mask = z_df['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])
-            pub_df = z_df[pub_mask]
-            priv_df = z_df[~pub_mask]
-            
-            # પબ્લિકનું લિસ્ટ 
-            pub_sum = pub_df.groupby('PHI').size().reset_index(name='Pending Count')
-            pub_sum = pub_sum.sort_values(by='Pending Count', ascending=False)
-            
-            # પ્રાઇવેટનું સીધું ટોટલ
-            priv_count = len(priv_df)
-            if priv_count > 0:
-                priv_row = pd.DataFrame({'PHI': ['PRIVATE FACILITIES (TOTAL)'], 'Pending Count': [priv_count]})
-                final_phi_summary = pd.concat([pub_sum, priv_row], ignore_index=True)
-            else:
-                final_phi_summary = pub_sum
+            def get_phi_summary(temp_df):
+                if temp_df.empty: return pd.DataFrame(columns=['PHI', 'Count'])
+                pub_mask = temp_df['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])
+                pub_df = temp_df[pub_mask]
+                priv_df = temp_df[~pub_mask]
                 
-            add_slide_table(f"{z} Zone - {sel_report} Pending", final_phi_summary, ['PHI Name', f'{sel_report} Pending'])
+                pub_sum = pub_df.groupby('PHI').size().reset_index(name='Count')
+                priv_count = len(priv_df)
+                if priv_count > 0:
+                    priv_row = pd.DataFrame({'PHI': ['PRIVATE FACILITIES (TOTAL)'], 'Count': [priv_count]})
+                    return pd.concat([pub_sum, priv_row], ignore_index=True)
+                return pub_sum
+
+            phi_curr = get_phi_summary(z_curr_df).rename(columns={'Count': 'Current'})
+            phi_prev = get_phi_summary(z_prev_df).rename(columns={'Count': 'Previous'}) if compare_mode else pd.DataFrame()
+            
+            add_slide_table(f"{z} Zone - {sel_report} Pending {slide_sub}", phi_curr, phi_prev, 'PHI')
 
         out_io = io.BytesIO()
         prs.save(out_io)
@@ -313,10 +336,10 @@ with tab4:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("✨ Generate & Download PPT ✨", use_container_width=True):
         with st.spinner("Generating beautiful PPT slides... Please wait..."):
-            ppt_bytes, status = generate_smart_ppt(df_master, sel_report, sel_date_col, start_d, end_d, high_is_bad)
+            ppt_bytes, status = generate_smart_ppt(df_master, sel_report, sel_date_col, start_d, end_d, high_is_bad, compare_mode)
             
             if ppt_bytes:
-                file_name = f"{sel_report}_Report_{start_d}_to_{end_d}.pptx"
+                file_name = f"{sel_report}_Comparison_Report.pptx" if compare_mode else f"{sel_report}_Report.pptx"
                 st.success("✅ PPT 100% તૈયાર છે! નીચેના બટન પર ક્લિક કરીને ડાઉનલોડ કરો.")
                 st.download_button(label=f"📥 Download {file_name}", data=ppt_bytes, file_name=file_name, mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
             else:
