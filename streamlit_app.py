@@ -299,10 +299,9 @@ with tab4:
     st.markdown("<h3 style='text-align: center; background-color: #d4edda; color: #155724; padding: 10px; border-radius: 10px; border: 2px solid #000;'>NTEP - AMC DIFF CARE</h3>", unsafe_allow_html=True)
     
     if not df_dtb_care.empty:
-        # 🎯 SAFETY NET: જો જૂનો ડેટાબેઝ હોય અને Follow Up Due કોલમ ના હોય, તો ચેતવણી આપો.
         if 'Follow Up Due' not in df_dtb_care.columns:
             st.error("⚠️ **Streamlit ડેશબોર્ડ અપડેટ થઈ ગયું છે, પણ તમારો GitHub ડેટા જૂનો છે!**")
-            st.warning("👉 કૃપા કરીને **Google Colab** માં જઈને તમારો નવો માસ્ટર કોડ એકવાર રન કરી દો. કોડ રન થશે એટલે નવો ડેટા (જેમાં Follow Up Due કોલમ હશે) જાતે જ GitHub પર આવી જશે અને આ એરર સોલ્વ થઈ જશે.")
+            st.warning("👉 કૃપા કરીને **Google Colab** માં જઈને તમારો નવો માસ્ટર કોડ એકવાર રન કરી દો.")
         else:
             df_t4 = df_dtb_care.copy()
             
@@ -367,61 +366,65 @@ with tab4:
                     if s4_om: df_filtered = df_filtered[df_filtered['Outcome Month'].isin(s4_om)]
 
                 st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
+                
+                # 🎯 CASCADING FILTER
                 all_due_opts = get_options_with_counts(df_filtered, 'Follow Up Due', 'tab4')
-                s4_fd = clean_selection(st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4'))
-                if s4_fd: df_filtered = df_filtered[df_filtered['Follow Up Due'].isin(s4_fd)]
+                s4_fd_raw = st.multiselect("FOLLOW UP DUE", all_due_opts, key='fd4')
+                s4_fd = clean_selection(s4_fd_raw)
+                
+                if len(s4_fd_raw) > 0: 
+                    df_filtered = df_filtered[df_filtered['Follow Up Due'].isin(s4_fd)]
 
-            st.markdown("##### 🩺 Follow Up Pending Summary")
-            kpi_b = len(df_filtered[df_filtered['Follow Up Due'].str.contains('BASELINE', na=False)])
-            kpi_1 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('1ST MONTH', na=False)])
-            kpi_2 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('2ND MONTH', na=False)])
-            kpi_3 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('3RD MONTH', na=False)])
-            kpi_4 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('4TH MONTH', na=False)])
-            kpi_5 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('5TH MONTH', na=False)])
-            kpi_6 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('6TH MONTH', na=False)])
-            kpi_total = len(df_filtered[df_filtered['Follow Up Due'] != 'Completed'])
-            
-            kb1, kb2, kb3, kb4 = st.columns(4)
-            with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
-            with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
-            with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
-            with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
-            
-            kb5, kb6, kb7, kb8 = st.columns(4)
-            with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
-            with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
-            with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
-            with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
+            if not df_filtered.empty:
+                st.markdown("##### 🩺 Follow Up Pending Summary")
+                kpi_b = len(df_filtered[df_filtered['Follow Up Due'].str.contains('BASELINE', na=False)])
+                kpi_1 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('1ST MONTH', na=False)])
+                kpi_2 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('2ND MONTH', na=False)])
+                kpi_3 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('3RD MONTH', na=False)])
+                kpi_4 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('4TH MONTH', na=False)])
+                kpi_5 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('5TH MONTH', na=False)])
+                kpi_6 = len(df_filtered[df_filtered['Follow Up Due'].str.contains('6TH MONTH', na=False)])
+                kpi_total = len(df_filtered[df_filtered['Follow Up Due'] != 'Completed'])
+                
+                kb1, kb2, kb3, kb4 = st.columns(4)
+                with kb1: st.markdown(draw_card("Total Pendency", kpi_total, "#C0392B", "🚨"), unsafe_allow_html=True)
+                with kb2: st.markdown(draw_card("Baseline", kpi_b, "#8E44AD", "📌"), unsafe_allow_html=True)
+                with kb3: st.markdown(draw_card("1st Month", kpi_1, "#2980B9", "📌"), unsafe_allow_html=True)
+                with kb4: st.markdown(draw_card("2nd Month", kpi_2, "#2980B9", "📌"), unsafe_allow_html=True)
+                
+                kb5, kb6, kb7, kb8 = st.columns(4)
+                with kb5: st.markdown(draw_card("3rd Month", kpi_3, "#27AE60", "📌"), unsafe_allow_html=True)
+                with kb6: st.markdown(draw_card("4th Month", kpi_4, "#27AE60", "📌"), unsafe_allow_html=True)
+                with kb7: st.markdown(draw_card("5th Month", kpi_5, "#F39C12", "📌"), unsafe_allow_html=True)
+                with kb8: st.markdown(draw_card("6th Month", kpi_6, "#F39C12", "📌"), unsafe_allow_html=True)
 
-            st.markdown("##### 📊 Zone-wise Due Matrix")
-            zones = df_filtered['ZONE'].unique()
-            matrix_data = []
-            for z in zones:
-                z_df = df_filtered[df_filtered['ZONE'] == z]
-                matrix_data.append({
-                    'ZONE': z,
-                    'Completed': len(z_df[z_df['Follow Up Due'] == 'Completed']),
-                    'BASELINE': len(z_df[z_df['Follow Up Due'].str.contains('BASELINE', na=False)]),
-                    '1ST MONTH': len(z_df[z_df['Follow Up Due'].str.contains('1ST MONTH', na=False)]),
-                    '2ND MONTH': len(z_df[z_df['Follow Up Due'].str.contains('2ND MONTH', na=False)]),
-                    '3RD MONTH': len(z_df[z_df['Follow Up Due'].str.contains('3RD MONTH', na=False)]),
-                    '4TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('4TH MONTH', na=False)]),
-                    '5TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('5TH MONTH', na=False)]),
-                    '6TH MONTH': len(z_df[z_df['Follow Up Due'].str.contains('6TH MONTH', na=False)]),
-                    'Grand Total': len(z_df)
-                })
-            if matrix_data:
-                df_matrix = pd.DataFrame(matrix_data)
-                df_matrix = df_matrix[['ZONE', 'Completed', 'BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH', 'Grand Total']]
+                # 🎯 CRASH-PROOF MATRIX (Safe Reordering)
+                st.markdown("##### 📊 Zone-wise Due Matrix")
+                df_matrix = df_filtered.groupby(['ZONE', 'Follow Up Due']).size().unstack(fill_value=0)
+                
+                if 'Completed' in df_matrix.columns and len(s4_fd_raw) > 0 and 'Completed' not in s4_fd:
+                    df_matrix = df_matrix.drop(columns=['Completed'])
+                
+                df_matrix['Grand Total'] = df_matrix.sum(axis=1)
                 df_matrix.loc['Total'] = df_matrix.sum(numeric_only=True)
-                df_matrix.at['Total', 'ZONE'] = 'Grand Total'
+                df_matrix = df_matrix.reset_index()
+                df_matrix.at[len(df_matrix)-1, 'ZONE'] = 'Grand Total'
+                
+                # કડક કોલમ નહિ, જે હાજર છે એ જ દેખાશે!
+                existing_cols = df_matrix.columns.tolist()
+                desired_order = ['ZONE', 'Completed', 'BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH', 'Grand Total']
+                final_order = [c for c in desired_order if c in existing_cols] + [c for c in existing_cols if c not in desired_order]
+                df_matrix = df_matrix[final_order]
+                
                 st.dataframe(df_matrix, use_container_width=True, hide_index=True)
-            
-            display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Age', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome Display', 'Type of Case', 'TB_regimen', 'Follow Up Due']
-            final_display_cols = [c for c in display_cols if c in df_filtered.columns]
-            
-            st.markdown("##### 📄 Patient Line List")
-            st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
-            st.download_button("📥 Download Differentiated Care Report", df_filtered[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
+                
+                display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Age', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome Display', 'Type of Case', 'TB_regimen', 'Follow Up Due']
+                final_display_cols = [c for c in display_cols if c in df_filtered.columns]
+                
+                st.markdown("##### 📄 Patient Line List")
+                st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
+                st.download_button("📥 Download Differentiated Care Report", df_filtered[final_display_cols].to_csv(index=False).encode('utf-8'), "Differentiated_Care.csv", "text/csv", key='dl4', on_click=log_activity, args=(st.session_state.current_user, st.session_state.role, st.session_state.target, "Downloaded Differentiated Care List"))
+            else:
+                st.info("ℹ️ આપે પસંદ કરેલા ફિલ્ટર મુજબ કોઈ ડેટા ઉપલબ્ધ નથી.")
     else:
         st.warning("⚠️ Differentiated TB Care નો ડેટા હજી અપડેટ થયો નથી.")
