@@ -482,7 +482,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (NTEP LOGIC)
+# 🟢 TAB 5: SUCCESS & DEATH RATE (PPT FORMAT FIX)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -537,6 +537,7 @@ with tab5:
         # 🎯 નિયમ ૫: Death mate total patient same rhse and outcome DIED sathe % niklse
         df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
         
+        # PPT માં ON TREATMENT છે, માટે આ કાઉન્ટ
         df_out['Is_On_Treatment'] = df_out['Treatment Outcome'].str.contains('ON TREATMENT', na=False)
 
         def get_rate_table(df_group, group_col):
@@ -544,18 +545,35 @@ with tab5:
             grp = df_group.groupby(group_col)
 
             summary = pd.DataFrame({
-                'TOTAL PATIENTS': grp.size(), # 🎯 નિયમ ૨ મુજબ: ખાલી Outcome વાળા (અને Regimen વગરના)
+                'TOTAL PATIENTS': grp.size(), 
                 'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
                 'DIED': grp['Is_Dead'].sum(),
                 'ON TREATMENT': grp['Is_On_Treatment'].sum()
             }).reset_index()
 
-            # 🎯 નિયમ ૪: % mate SUCCESSFULLY TREATED ne total patient jode % kadhva
-            summary['% '] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-            summary[' %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+            # 🎯 નિયમ ૪: Streamlit ના બગ (Bug) ને ટાળવા કોલમનું નામ SUCCESS % અને DEATH % રાખ્યું છે.
+            summary['SUCCESS %'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+            summary['DEATH %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
-            final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', '% ', 'DIED', ' %', 'ON TREATMENT']
-            return summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
+            # 🎯 PPT જેવો જ કોલમનો ક્રમ!
+            final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', 'SUCCESS %', 'DIED', 'DEATH %', 'ON TREATMENT']
+            df_table = summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
+
+            # 🎯 સૌથી નીચે "AMC TOTAL" ની લાઈન ઉમેરી (તમારી PPT મુજબ!)
+            if not df_table.empty:
+                total_row = pd.DataFrame({
+                    group_col: ['AMC TOTAL'],
+                    'TOTAL PATIENTS': [df_table['TOTAL PATIENTS'].sum()],
+                    'SUCCESSFULLY TREATED': [df_table['SUCCESSFULLY TREATED'].sum()],
+                    'DIED': [df_table['DIED'].sum()],
+                    'ON TREATMENT': [df_table['ON TREATMENT'].sum()]
+                })
+                total_row['SUCCESS %'] = ((total_row['SUCCESSFULLY TREATED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+                total_row['DEATH %'] = ((total_row['DIED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+                
+                df_table = pd.concat([df_table, total_row], ignore_index=True)
+
+            return df_table
 
         total_patients = len(df_out)
         total_success = df_out['Is_Success'].sum()
