@@ -482,7 +482,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (THE MATH FIX)
+# 🟢 TAB 5: SUCCESS & DEATH RATE (NTEP LOGIC)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -509,7 +509,6 @@ with tab5:
                 if s5_reg: df_out = df_out[df_out['TB_regimen'].isin(clean_selection(s5_reg))]
                 
                 st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
-                # 🎯 FIX: ચેકબોક્સ અહી છે
                 exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -518,42 +517,45 @@ with tab5:
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
-        # 🎯 1. તારીખોનું ફિલ્ટર
+        # 🎯 તારીખોનું ફિલ્ટર 
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
+        # 🎯 નિયમ ૧: Outcome (BK) માં બ્લેન્ક સિવાય બધા લેવા.
         outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
         df_out['Treatment Outcome'] = outcomes
+        df_out = df_out[~df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
 
-        # 🎯 2. REGIMEN REMOVAL LOGIC (તમારું મેન માઇનસ થવાનું લોજીક)
+        # 🎯 નિયમ ૨: જો ઓપ્શન ચાલુ હોય, તો Regimen વાળા દર્દીઓ માઇનસ કરવા
         if exclude_regimen:
-            # આ લાઈન એવા બધા દર્દીઓને કાઢી નાખશે જેમના આઉટકમ માં 'REGIMEN' અથવા 'CHANGED' લખેલું હોય.
-            df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN|CHANGED', na=False)]
+            df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
 
-        # 🎯 3. કોલમ્સ માટે માર્કિંગ (PPT ના એક્ઝેટ નામ)
-        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('COMPLETE|CURED', na=False)
-        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED|DEATH', na=False)
-        # બ્લેન્ક હોય એને પણ ON TREATMENT ગણવા
-        df_out['Is_On_Treatment'] = df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>']) | df_out['Treatment Outcome'].str.contains('ON TREATMENT', na=False)
+        # 🎯 નિયમ ૩: CURED અને TREATMENT COMPLETE નો સરવાળો
+        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('CURED|COMPLETE', na=False)
+
+        # 🎯 નિયમ ૫: Death mate total patient same rhse and outcome DIED sathe % niklse
+        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
+        
+        df_out['Is_On_Treatment'] = df_out['Treatment Outcome'].str.contains('ON TREATMENT', na=False)
 
         def get_rate_table(df_group, group_col):
             if df_group.empty: return pd.DataFrame()
             grp = df_group.groupby(group_col)
 
             summary = pd.DataFrame({
-                'TOTAL PATIENTS (Outcome Given)': grp.size(),
+                'TOTAL PATIENTS': grp.size(), # 🎯 નિયમ ૨ મુજબ: ખાલી Outcome વાળા (અને Regimen વગરના)
                 'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
                 'DIED': grp['Is_Dead'].sum(),
                 'ON TREATMENT': grp['Is_On_Treatment'].sum()
             }).reset_index()
 
-            # 🎯 4. ટકાવારી (Percentage) ની ગણતરી
-            summary['SUCCESS RATE (%)'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS (Outcome Given)']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-            summary['DEATH RATE (%)'] = ((summary['DIED'] / summary['TOTAL PATIENTS (Outcome Given)']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+            # 🎯 નિયમ ૪: % mate SUCCESSFULLY TREATED ne total patient jode % kadhva
+            summary['% '] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+            summary[' %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
-            final_cols = [group_col, 'TOTAL PATIENTS (Outcome Given)', 'SUCCESSFULLY TREATED', 'SUCCESS RATE (%)', 'DIED', 'DEATH RATE (%)', 'ON TREATMENT']
-            return summary[final_cols].sort_values(by='TOTAL PATIENTS (Outcome Given)', ascending=False)
+            final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', '% ', 'DIED', ' %', 'ON TREATMENT']
+            return summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
 
         total_patients = len(df_out)
         total_success = df_out['Is_Success'].sum()
