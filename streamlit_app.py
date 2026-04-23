@@ -110,6 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
+# 🎯 DRIVE DATA FETCH (REGULAR REPORTS)
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -133,6 +134,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
+# 🎯 DIFF CARE HYBRID FETCH (TAB 6 FULL DATA + TAB 2 COMPARISON)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -309,9 +311,11 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
+# 🎯 THE BIG MERGE: Tab 2 Master Matrix + Diff Care Comparison
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
+    
     c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
     for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
         if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
@@ -324,6 +328,7 @@ else:
 
 c_mat.fillna('', inplace=True)
 
+# 🎯 FIX COLUMN ORDER (નામ, ઝોન, PHI હંમેશા આગળ)
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -793,7 +798,7 @@ with tab5:
         st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (WITH 4 NEW FILTERS)
+# 🟢 TAB 6: DIFFERENTIATED CARE 
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -841,7 +846,6 @@ with tab6:
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
-            # 🎯 BUG COMPLETELY FIXED (.str.upper() on string series)
             due = temp_df.get('Due_Status', pd.Series(dtype=str)).fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
