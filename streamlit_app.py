@@ -109,13 +109,12 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 THE DATE FIX: તારીખો હવે એક્ઝેટ સાચી મેચ થશે!
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
         m = pd.read_csv("Master_Line_List.csv")
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') # Removed dayfirst=True
+            if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
             
         c_mat = pd.read_csv("Comparison_Matrix.csv")
         curr = pd.read_csv("Current_TB_Patients.csv")
@@ -123,14 +122,17 @@ def load_all_data():
         
         out_df = pd.read_csv("Outcome_Cohort.csv")
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') # Removed dayfirst=True
+            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') 
             
-        return m, c_mat, curr, t_df, out_df
+        try: dc_df = pd.read_csv("Differentiated_Care.csv")
+        except: dc_df = pd.DataFrame()
+            
+        return m, c_mat, curr, t_df, out_df, dc_df
     except Exception as e:
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw, df_dc_raw = load_all_data()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -142,6 +144,7 @@ df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.sessi
 df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
 df_outcome_full = filter_by_role(df_outcome_full_raw.copy(), st.session_state.role, st.session_state.target)
+df_dc_main = filter_by_role(df_dc_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -171,8 +174,11 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success/Death Rate", "🏥 Diff. Care"])
 
+# ==========================================
+# 🟢 TAB 1: MASTER DASHBOARD
+# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
@@ -192,7 +198,7 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
@@ -227,6 +233,9 @@ with tab1:
         excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
+# ==========================================
+# 🟢 TAB 2: DAILY COMPARISON
+# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters"):
@@ -278,6 +287,9 @@ with tab2:
         excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
         st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
 
+# ==========================================
+# 🟢 TAB 3: CURRENT TB PATIENTS
+# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
@@ -311,6 +323,9 @@ with tab3:
         excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
         st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
 
+# ==========================================
+# 🟢 TAB 4: SMART PPT GENERATOR
+# ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
     
@@ -483,7 +498,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (THE MATH FIX & ON-TREATMENT REMOVED)
+# 🟢 TAB 5: SUCCESS & DEATH RATE 
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -518,17 +533,14 @@ with tab5:
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
-        # 🎯 1. તારીખોનું ફિલ્ટર 
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        # 🎯 2. બ્લેન્ક કાઢો
         outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
         df_out['Treatment Outcome'] = outcomes
         df_out = df_out[~df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
 
-        # 🎯 3. REGIMEN કાઢો
         if exclude_regimen:
             df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
 
@@ -545,14 +557,12 @@ with tab5:
                 'DIED': grp['Is_Dead'].sum()
             }).reset_index()
 
-            # 🎯 'ON TREATMENT' કોલમ કાઢી નાખ્યું
             summary['SUCCESS %'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
             summary['DEATH %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
             final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', 'SUCCESS %', 'DIED', 'DEATH %']
             df_table = summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
 
-            # 🎯 AMC TOTAL ની લાઈન ઉમેરી દીધી
             if not df_table.empty:
                 total_row = pd.DataFrame({
                     group_col: ['AMC TOTAL'],
@@ -600,3 +610,79 @@ with tab5:
         if not df_out.empty:
             excel_data5 = convert_df_to_excel(df_out, "Outcome_Cohort")
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
+
+# ==========================================
+# 🟢 TAB 6: DIFFERENTIATED CARE (NEW)
+# ==========================================
+with tab6:
+    st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
+    
+    if df_dc_main.empty:
+        st.warning("⚠️ Differentiated Care નો ડેટા મળ્યો નથી. કૃપા કરીને Colab માં નવો કોડ રન કરો.")
+    else:
+        with st.expander("🔽 Filters & Parameters", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            df_dc = df_dc_main.copy()
+            
+            with c1:
+                if st.session_state.role == "ADMIN":
+                    s6_z = clean_selection(st.multiselect("Zone", sorted(df_dc['ZONE'].dropna().unique()), key='z6'))
+                    if s6_z: df_dc = df_dc[df_dc['ZONE'].isin(s6_z)]
+                if st.session_state.role in ["ADMIN", "ZONE"]:
+                    s6_tu = clean_selection(st.multiselect("TB Unit", sorted(df_dc['TB Unit'].dropna().unique()), key='tu6'))
+                    if s6_tu: df_dc = df_dc[df_dc['TB Unit'].isin(s6_tu)]
+            with c2:
+                s6_phi = clean_selection(st.multiselect("PHI", sorted(df_dc['PHI'].dropna().unique()), key='phi6'))
+                if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
+
+        def get_dc_summary(temp_df, group_col):
+            if temp_df.empty: return pd.DataFrame()
+            
+            # Pending Logic (જેમાં COMPLETED નથી લખ્યું એ બધા જ)
+            due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
+            not_comp = ~due.str.contains("COMPLETED", na=False)
+            
+            # Total Eligible (Total Rows per Group)
+            summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
+            
+            # 7 Columns Logic
+            periods = ['BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH']
+            for p in periods:
+                summary[p] = temp_df[not_comp & due.str.contains(p, na=False)].groupby(group_col).size().reindex(summary[group_col], fill_value=0).values
+                
+            final_cols = [group_col, 'TOTAL ELIGIBLE'] + periods
+            df_table = summary[final_cols].sort_values(by='TOTAL ELIGIBLE', ascending=False)
+            
+            # AMC TOTAL લાઈન ઉમેરો
+            if not df_table.empty:
+                total_row = pd.DataFrame({group_col: ['AMC TOTAL']})
+                total_row['TOTAL ELIGIBLE'] = [df_table['TOTAL ELIGIBLE'].sum()]
+                for p in periods:
+                    total_row[p] = [df_table[p].sum()]
+                df_table = pd.concat([df_table, total_row], ignore_index=True)
+                
+            return df_table
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        
+        # 🎯 Role મુજબ ડાયનેમિક ટેબલ 
+        if st.session_state.role == "ZONE" or (st.session_state.role == "ADMIN" and 's6_z' in locals() and len(s6_z) > 0):
+            st.markdown("##### 📍 TU Wise Pendency")
+            tu_table = get_dc_summary(df_dc, 'TB Unit')
+            st.dataframe(tu_table, use_container_width=True, hide_index=True)
+            
+            st.markdown("##### 🏥 PHI Wise Pendency")
+            phi_table = get_dc_summary(df_dc, 'PHI')
+            st.dataframe(phi_table, use_container_width=True, hide_index=True)
+        elif st.session_state.role == "ADMIN":
+            st.markdown("##### 🗺️ Zone Wise Pendency")
+            zone_table = get_dc_summary(df_dc, 'ZONE')
+            st.dataframe(zone_table, use_container_width=True, hide_index=True)
+        else:
+            st.markdown("##### 🏥 PHI Wise Pendency")
+            phi_table = get_dc_summary(df_dc, 'PHI')
+            st.dataframe(phi_table, use_container_width=True, hide_index=True)
+
+        if not df_dc.empty:
+            excel_data6 = convert_df_to_excel(df_dc, "Diff_Care_Raw")
+            st.download_button("📥 Download Raw Differentiated Care Data", excel_data6, "Differentiated_Care.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl6')
