@@ -133,9 +133,9 @@ def load_all_data():
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH LOGIC (WITH DATES)
+# 🎯 TAB 6 LIVE FETCH (Zone AR Column Fix)
 @st.cache_data(ttl=600) 
-def load_diff_care_live(zone_dict):
+def load_diff_care_live():
     try:
         sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
         gid = "1152778583"
@@ -157,7 +157,8 @@ def load_diff_care_live(zone_dict):
         phi_idx = cx_col('C')
         id_idx = cx_col('G')
         
-        # 🎯 Date Columns (CJ, CK, CL)
+        zone_idx = cx_col('AR') # 🎯 FIX: સીધો AR કોલમમાંથી ઝોન લેશે!
+        
         diag_idx = cx_col('CJ')
         init_idx = cx_col('CK')
         out_idx = cx_col('CL')
@@ -198,11 +199,14 @@ def load_diff_care_live(zone_dict):
                 elif "RANIP" in tu: tu = "RANIP"
 
                 phi = str(row.iloc[phi_idx]).strip().upper()
-                zone = zone_dict.get(phi, 'N/A')
+                
+                # 🎯 ડાયરેક્ટ ગુગલ શીટના AR કોલમમાંથી ઝોન
+                zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else 'N/A'
+                if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
+                
                 due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
                 eid = str(row.iloc[id_idx]).strip().upper()
                 
-                # Fetch Dates
                 d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
                 i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
                 o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
@@ -222,8 +226,8 @@ def load_diff_care_live(zone_dict):
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 
-zone_mapping_dict = dict(zip(df_master_raw['PHI'], df_master_raw['ZONE'])) if not df_master_raw.empty else {}
-df_dc_raw = load_diff_care_live(zone_mapping_dict)
+# 🎯 No mapping dict needed, direct call
+df_dc_raw = load_diff_care_live()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -286,7 +290,7 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
@@ -587,6 +591,9 @@ with tab4:
                 st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
             else: st.error(status)
 
+# ==========================================
+# 🟢 TAB 5: SUCCESS & DEATH RATE
+# ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
     
@@ -609,7 +616,13 @@ with tab5:
                 if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
                 
                 s5_reg = st.multiselect("TB Regimen", get_options_with_counts(df_out, 'TB_regimen', 'tab5'), key='reg5')
-                if s5_reg: df_out = df_out[df_out['TB_regimen'].isin(clean_selection(s5_reg))]
+                
+                # 🎯 REGIMEN BLANK LOGIC: જો 2HRZE/4HRE સિલેક્ટ હોય તો Blank (N/A) ઓટોમેટિક ખેંચી લેશે!
+                if s5_reg:
+                    sel_regs = clean_selection(s5_reg)
+                    if any("2HRZE/4HRE" in r for r in sel_regs):
+                        sel_regs.extend(["N/A", "", "NAN"])
+                    df_out = df_out[df_out['TB_regimen'].isin(sel_regs)]
                 
                 st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
                 exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True)
@@ -699,7 +712,7 @@ with tab5:
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE SHEET + DATE FILTERS)
+# 🟢 TAB 6: DIFFERENTIATED CARE (DIRECT AR ZONE MAP)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -722,7 +735,6 @@ with tab6:
                 s6_phi = clean_selection(st.multiselect("PHI", sorted(df_dc['PHI'].dropna().unique()), key='phi6'))
                 if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
                 
-            # 🎯 TAB 6 DATE FILTERS ADDED HERE
             with c3:
                 cd1, cd2, cd3 = st.columns(3)
                 with cd1: diag_dt6 = st.date_input("Diagnosis Date", value=[], key="d1_6")
@@ -736,7 +748,6 @@ with tab6:
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
             
-            # Pending Logic (COMPLETED ના હોય તેવા)
             due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
@@ -758,7 +769,6 @@ with tab6:
             final_cols = [group_col, 'TOTAL ELIGIBLE'] + list(periods_map.keys())
             df_table = summary[final_cols].sort_values(by='TOTAL ELIGIBLE', ascending=False)
             
-            # AMC TOTAL
             if not df_table.empty:
                 total_row = pd.DataFrame({group_col: ['AMC TOTAL']})
                 total_row['TOTAL ELIGIBLE'] = [df_table['TOTAL ELIGIBLE'].sum()]
