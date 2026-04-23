@@ -117,6 +117,11 @@ def load_all_data():
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
             
         c_mat = pd.read_csv("Comparison_Matrix.csv")
+        # 🎯 TAB 2 ડેટ ફિલ્ટર માટે c_mat માં તારીખો જોડી દીધી
+        if not c_mat.empty and not m.empty:
+            dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
+            c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
+
         curr = pd.read_csv("Current_TB_Patients.csv")
         t_df = pd.read_csv("Update_Timestamps.csv")
         
@@ -124,15 +129,87 @@ def load_all_data():
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') 
             
-        try: dc_df = pd.read_csv("Differentiated_Care.csv")
-        except: dc_df = pd.DataFrame()
-            
-        return m, c_mat, curr, t_df, out_df, dc_df
+        return m, c_mat, curr, t_df, out_df
     except Exception as e:
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw, df_dc_raw = load_all_data()
+# 🎯 TAB 6 માટે સીધું ગૂગલ શીટ પરથી ડેટા લાવવાનું ફંક્શન
+@st.cache_data(ttl=600) # 10 મિનિટ સુધી ફાસ્ટ લોડ થશે
+def load_diff_care_live(zone_dict):
+    try:
+        sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
+        gid = "1152778583"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+        df = pd.read_csv(url)
+
+        def cx_col(col_let):
+            num = 0
+            for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
+            return num - 1
+
+        max_col = cx_col('DD')
+        if len(df.columns) <= max_col:
+            for i in range(len(df.columns), max_col + 1): df[str(i)] = ""
+
+        elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
+        ci_idx = cx_col('CI')
+        tu_idx = cx_col('A')
+        phi_idx = cx_col('C')
+        id_idx = cx_col('G')
+
+        diff_data = []
+        for _, row in df.iterrows():
+            is_elig = False
+            for c in elig_cols:
+                if c < len(row):
+                    val = str(row.iloc[c]).strip().upper()
+                    if "ELIG" in val and "NOT" not in val:
+                        is_elig = True
+                        break
+            if is_elig:
+                tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip()
+                # TU સફાઈ
+                if "INDIA" in tu: tu = "INDIA COLONY"
+                elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
+                elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
+                elif "NOB" in tu: tu = "NOBLENAGAR"
+                elif "BEHRAM" in tu: tu = "BEHRAMPURA"
+                elif "SAIJ" in tu: tu = "SAIJPUR"
+                elif "DANI" in tu: tu = "DANILIMDA"
+                elif "AMRAI" in tu: tu = "AMRAIWADI"
+                elif "BHAI" in tu: tu = "BHAIPURA"
+                elif "GHAT" in tu: tu = "GHATLODIA"
+                elif "CHAND" in tu: tu = "CHANDKHEDA"
+                elif "VEJAL" in tu: tu = "VEJALPUR"
+                elif "ISAN" in tu: tu = "ISANPUR"
+                elif "ASAR" in tu: tu = "ASARVA"
+                elif "BAPU" in tu: tu = "BAPUNAGAR"
+                elif "VIRAT" in tu: tu = "VIRATNAGAR"
+                elif "RAKH" in tu: tu = "RAKHIAL"
+                elif "JAMAL" in tu: tu = "JAMALPUR"
+                elif "VASNA" in tu: tu = "VASNA"
+                elif "VATVA" in tu: tu = "VATVA"
+                elif "JODH" in tu: tu = "JODHPUR"
+                elif "SHAH" in tu: tu = "SHAHPUR"
+                elif "RANIP" in tu: tu = "RANIP"
+
+                phi = str(row.iloc[phi_idx]).strip().upper()
+                zone = zone_dict.get(phi, 'N/A')
+                due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
+                eid = str(row.iloc[id_idx]).strip().upper()
+
+                diff_data.append({'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val})
+
+        return pd.DataFrame(diff_data)
+    except Exception as e:
+        return pd.DataFrame()
+
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
+
+# 🎯 ઝોન મેપિંગ બનાવીને સીધું ગૂગલ શીટમાંથી ખેંચો 
+zone_mapping_dict = dict(zip(df_master_raw['PHI'], df_master_raw['ZONE'])) if not df_master_raw.empty else {}
+df_dc_raw = load_diff_care_live(zone_mapping_dict)
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -174,11 +251,8 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success/Death Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate", "🏥 Diff. Care"])
 
-# ==========================================
-# 🟢 TAB 1: MASTER DASHBOARD
-# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
@@ -198,7 +272,7 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
@@ -233,12 +307,9 @@ with tab1:
         excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
-# ==========================================
-# 🟢 TAB 2: DAILY COMPARISON
-# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
-    with st.expander("🔽 Filters"):
+    with st.expander("🔽 Filters & Dates"):
         c1, c2, c3 = st.columns(3)
         df_c = df_comp.copy()
         with c1: 
@@ -259,10 +330,20 @@ with tab2:
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
         with c3: 
-            ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+            ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
-            
+        
+        # 🎯 TAB 2 DATE FILTERS
+        cd1, cd2, cd3 = st.columns(3)
+        with cd1: diag_dt2 = st.date_input("Diagnosis Date Range", value=[], key="d1_2")
+        with cd2: init_dt2 = st.date_input("Initiation Date Range", value=[], key="d2_2")
+        with cd3: out_dt2 = st.date_input("Outcome Date Range", value=[], key="d3_2")
+
+        if len(diag_dt2) == 2: df_c = df_c[df_c['Diagnosis Date'].notna() & df_c['Diagnosis Date'].dt.date.between(diag_dt2[0], diag_dt2[1])]
+        if len(init_dt2) == 2: df_c = df_c[df_c['Initiation Date'].notna() & df_c['Initiation Date'].dt.date.between(init_dt2[0], init_dt2[1])]
+        if len(out_dt2) == 2: df_c = df_c[df_c['Outcome Date'].notna() & df_c['Outcome Date'].dt.date.between(out_dt2[0], out_dt2[1])]
+
     if s2_ind or s2_stat:
         mask = pd.Series(False, index=df_c.index)
         for ind in (s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]):
@@ -282,14 +363,13 @@ with tab2:
     with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
 
-    st.dataframe(df_c, use_container_width=True, hide_index=True)
+    display_cols = [c for c in df_c.columns if c not in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']]
+    st.dataframe(df_c[display_cols], use_container_width=True, hide_index=True)
+    
     if not df_c.empty:
-        excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
+        excel_data2 = convert_df_to_excel(df_c[display_cols], "Comparison_Matrix")
         st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
 
-# ==========================================
-# 🟢 TAB 3: CURRENT TB PATIENTS
-# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
@@ -323,9 +403,6 @@ with tab3:
         excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
         st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
 
-# ==========================================
-# 🟢 TAB 4: SMART PPT GENERATOR
-# ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
     
@@ -497,9 +574,6 @@ with tab4:
                 st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
             else: st.error(status)
 
-# ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE 
-# ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
     
@@ -612,13 +686,13 @@ with tab5:
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (NEW)
+# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE GOOGLE SHEET!)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
     
     if df_dc_main.empty:
-        st.warning("⚠️ Differentiated Care નો ડેટા મળ્યો નથી. કૃપા કરીને Colab માં નવો કોડ રન કરો.")
+        st.warning("⚠️ Differentiated Care નો ડેટા મળ્યો નથી. કૃપા કરીને ખાતરી કરો કે ગુગલ શીટ પબ્લિક (Anyone with link) છે.")
     else:
         with st.expander("🔽 Filters & Parameters", expanded=True):
             c1, c2, c3 = st.columns(3)
@@ -638,26 +712,33 @@ with tab6:
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
             
-            # Pending Logic (જેમાં COMPLETED નથી લખ્યું એ બધા જ)
+            # Pending Logic (COMPLETED ના હોય તેવા)
             due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
-            # Total Eligible (Total Rows per Group)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
             
-            # 7 Columns Logic
-            periods = ['BASELINE', '1ST MONTH', '2ND MONTH', '3RD MONTH', '4TH MONTH', '5TH MONTH', '6TH MONTH']
-            for p in periods:
-                summary[p] = temp_df[not_comp & due.str.contains(p, na=False)].groupby(group_col).size().reindex(summary[group_col], fill_value=0).values
+            periods_map = {
+                'BASELINE': 'BASELINE',
+                '1ST MONTH': '1ST MONTH|1 MONTH',
+                '2ND MONTH': '2ND MONTH|2 MONTH',
+                '3RD MONTH': '3RD MONTH|3 MONTH',
+                '4TH MONTH': '4TH MONTH|4 MONTH',
+                '5TH MONTH': '5TH MONTH|5 MONTH',
+                '6TH MONTH': '6TH MONTH|6 MONTH'
+            }
+            
+            for p_name, p_regex in periods_map.items():
+                summary[p_name] = temp_df[not_comp & due.str.contains(p_regex, na=False)].groupby(group_col).size().reindex(summary[group_col], fill_value=0).values
                 
-            final_cols = [group_col, 'TOTAL ELIGIBLE'] + periods
+            final_cols = [group_col, 'TOTAL ELIGIBLE'] + list(periods_map.keys())
             df_table = summary[final_cols].sort_values(by='TOTAL ELIGIBLE', ascending=False)
             
-            # AMC TOTAL લાઈન ઉમેરો
+            # AMC TOTAL
             if not df_table.empty:
                 total_row = pd.DataFrame({group_col: ['AMC TOTAL']})
                 total_row['TOTAL ELIGIBLE'] = [df_table['TOTAL ELIGIBLE'].sum()]
-                for p in periods:
+                for p in periods_map.keys():
                     total_row[p] = [df_table[p].sum()]
                 df_table = pd.concat([df_table, total_row], ignore_index=True)
                 
@@ -665,7 +746,6 @@ with tab6:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # 🎯 Role મુજબ ડાયનેમિક ટેબલ 
         if st.session_state.role == "ZONE" or (st.session_state.role == "ADMIN" and 's6_z' in locals() and len(s6_z) > 0):
             st.markdown("##### 📍 TU Wise Pendency")
             tu_table = get_dc_summary(df_dc, 'TB Unit')
