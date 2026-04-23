@@ -482,7 +482,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (PPT FORMAT FIX)
+# 🟢 TAB 5: SUCCESS & DEATH RATE (ON TREATMENT REMOVED)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -513,32 +513,24 @@ with tab5:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with c3:
+                # 🎯 DIAGNOSIS DATE પર ચોકડી દબાવવાનું યાદ કરાવું છું!
                 diag_dt5 = st.date_input("Diagnosis Date", value=[], key="d1_5")
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
-        # 🎯 તારીખોનું ફિલ્ટર 
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        # 🎯 નિયમ ૧: Outcome (BK) માં બ્લેન્ક સિવાય બધા લેવા.
         outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
         df_out['Treatment Outcome'] = outcomes
         df_out = df_out[~df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
 
-        # 🎯 નિયમ ૨: જો ઓપ્શન ચાલુ હોય, તો Regimen વાળા દર્દીઓ માઇનસ કરવા
         if exclude_regimen:
             df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
 
-        # 🎯 નિયમ ૩: CURED અને TREATMENT COMPLETE નો સરવાળો
         df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('CURED|COMPLETE', na=False)
-
-        # 🎯 નિયમ ૫: Death mate total patient same rhse and outcome DIED sathe % niklse
         df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
-        
-        # PPT માં ON TREATMENT છે, માટે આ કાઉન્ટ
-        df_out['Is_On_Treatment'] = df_out['Treatment Outcome'].str.contains('ON TREATMENT', na=False)
 
         def get_rate_table(df_group, group_col):
             if df_group.empty: return pd.DataFrame()
@@ -547,26 +539,23 @@ with tab5:
             summary = pd.DataFrame({
                 'TOTAL PATIENTS': grp.size(), 
                 'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
-                'DIED': grp['Is_Dead'].sum(),
-                'ON TREATMENT': grp['Is_On_Treatment'].sum()
+                'DIED': grp['Is_Dead'].sum()
             }).reset_index()
 
-            # 🎯 નિયમ ૪: Streamlit ના બગ (Bug) ને ટાળવા કોલમનું નામ SUCCESS % અને DEATH % રાખ્યું છે.
+            # 🎯 ON TREATMENT કાઢી નાખ્યું, અને નામ PPT જેવા કરી દીધા
             summary['SUCCESS %'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
             summary['DEATH %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
-            # 🎯 PPT જેવો જ કોલમનો ક્રમ!
-            final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', 'SUCCESS %', 'DIED', 'DEATH %', 'ON TREATMENT']
+            final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', 'SUCCESS %', 'DIED', 'DEATH %']
             df_table = summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
 
-            # 🎯 સૌથી નીચે "AMC TOTAL" ની લાઈન ઉમેરી (તમારી PPT મુજબ!)
+            # 🎯 AMC TOTAL ની લાઈન ઉમેરી દીધી
             if not df_table.empty:
                 total_row = pd.DataFrame({
                     group_col: ['AMC TOTAL'],
                     'TOTAL PATIENTS': [df_table['TOTAL PATIENTS'].sum()],
                     'SUCCESSFULLY TREATED': [df_table['SUCCESSFULLY TREATED'].sum()],
-                    'DIED': [df_table['DIED'].sum()],
-                    'ON TREATMENT': [df_table['ON TREATMENT'].sum()]
+                    'DIED': [df_table['DIED'].sum()]
                 })
                 total_row['SUCCESS %'] = ((total_row['SUCCESSFULLY TREATED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
                 total_row['DEATH %'] = ((total_row['DIED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
