@@ -120,8 +120,15 @@ try:
     df_comp = pd.read_csv("Comparison_Matrix.csv")
     df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
     df_time = pd.read_csv("Update_Timestamps.csv")
+    
+    # 🎯 NEW: Outcome Cohort લોડ કરો
+    df_outcome_full = pd.read_csv("Outcome_Cohort.csv")
+    for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+        if col in df_outcome_full.columns: df_outcome_full[col] = df_outcome_full[col].apply(parse_dt_safe)
+        
 except Exception as e:
     st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
+    df_outcome_full = pd.DataFrame()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -132,9 +139,12 @@ def filter_by_role(df, role, target):
 df_master = filter_by_role(df_master, st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
+df_outcome_full = filter_by_role(df_outcome_full, st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
+
+def clean_selection(selected_list): return [item.rsplit(" (", 1)[0] for item in selected_list]
 
 def get_options_with_counts(df, column_name, tab_name="tab1"):
     if df.empty or column_name not in df.columns: return []
@@ -143,19 +153,11 @@ def get_options_with_counts(df, column_name, tab_name="tab1"):
             df_temp = df.copy()
             df_temp['act_cnt'] = df_temp['Pending Status'].astype(str).apply(lambda x: len([s for s in x.split('+') if s.strip()]))
             counts = df_temp.groupby(column_name)['act_cnt'].sum()
-        elif tab_name == "tab2":
-            std_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
-            ind_cols = [c for c in df.columns if c not in std_cols]
-            df_temp = df.copy()
-            df_temp['act_cnt'] = df_temp[ind_cols].apply(lambda row: sum(row.astype(str).str.strip() != ""), axis=1)
-            counts = df_temp.groupby(column_name)['act_cnt'].sum()
         else:
             counts = df[column_name].value_counts()
         counts = counts[counts > 0].sort_values(ascending=False)
         return [f"{val} ({int(count)})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
     except: return []
-
-def clean_selection(selected_list): return [item.rsplit(" (", 1)[0] for item in selected_list]
 
 b64_amc, b64_ntep = img_to_b64("images/amc.png"), img_to_b64("images/ntep.jpg")
 st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center;'><img src='data:image/png;base64,{b64_amc}' height='75'><h3 style='margin:0; font-weight:900;'>AMC | NTEP</h3><img src='data:image/jpeg;base64,{b64_ntep}' height='75'></div>", unsafe_allow_html=True)
@@ -167,11 +169,9 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator"])
+# 🎯 NEW TAB 5 ADDED 
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate"])
 
-# ==========================================
-# 🟢 TAB 1: MASTER DASHBOARD (ALL FILTERS BACK!)
-# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
@@ -221,16 +221,11 @@ with tab1:
         for i, (k, v) in enumerate(others):
             with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    st.info("💡 **Tip:** PDF માં સેવ કરવા માટે કીબોર્ડ પર `Ctrl + P` દબાવો.")
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
-    
     if not df_disp.empty:
         excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
-# ==========================================
-# 🟢 TAB 2: DAILY COMPARISON
-# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters"):
@@ -278,14 +273,10 @@ with tab2:
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
 
     st.dataframe(df_c, use_container_width=True, hide_index=True)
-    
     if not df_c.empty:
         excel_data2 = convert_df_to_excel(df_c, "Comparison_Matrix")
         st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
 
-# ==========================================
-# 🟢 TAB 3: CURRENT TB PATIENTS
-# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
@@ -315,31 +306,23 @@ with tab3:
 
     t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
     st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
-    
     if not df_t3.empty:
         excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
         st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
 
-
-# ==========================================
-# 🟣 TAB 4: ADVANCED SMART PPT GENERATOR
-# ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
     
     with st.container():
         c1, c2, c3 = st.columns(3)
-        
         with c1:
             all_inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             sel_report = st.selectbox("📌 1. Select Report Type", all_inds)
-            
             st.markdown("<div style='background-color:#e8f4f8; padding:10px; border-radius:5px;'><b>📅 Period 1 (Current)</b></div>", unsafe_allow_html=True)
             p1_name = st.text_input("Name for Period 1", "Q1 - 2025")
             p1_diag = st.date_input("Diagnosis Date (P1)", value=[])
             p1_init = st.date_input("Treatment Start Date (P1)", value=[])
             p1_out = st.date_input("Outcome Date (P1)", value=[])
-            
         with c2:
             st.write("")
             st.write("")
@@ -353,17 +336,13 @@ with tab4:
             else:
                 p2_name = "None"
                 p2_diag, p2_init, p2_out = [], [], []
-                
         with c3:
             st.markdown("<div style='background-color:#e9ecef; padding:10px; border-radius:5px;'><b>🎨 3. Presentation Rules</b></div>", unsafe_allow_html=True)
             st.write("")
             color_rule = st.radio("Color Scale Rules:", ["High is Bad (Red) 🔴", "High is Good (Green) 🟢"])
             high_is_bad = True if "Bad" in color_rule else False
-            
-            if compare_mode:
-                color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
-            else:
-                color_target = p1_name
+            if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
+            else: color_target = p1_name
 
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
@@ -377,11 +356,9 @@ with tab4:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
-        except ImportError:
-            return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
+        except ImportError: return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
 
         prs = Presentation()
-        
         m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
         m1 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
         df_p1 = df[m1].copy()
@@ -402,22 +379,16 @@ with tab4:
 
         def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
             slide = prs.slides.add_slide(prs.slide_layouts[5])
-            
-            if os.path.exists("images/amc.png"):
-                slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
-            if os.path.exists("images/ntep.jpg"):
-                slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
-            
+            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
+            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
             title = slide.shapes.title
             title.text = title_text
             title.text_frame.paragraphs[0].font.size = Pt(28)
             title.text_frame.paragraphs[0].font.bold = True
-            
             if curr_df.empty and prev_df.empty:
                 tx = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
                 tx.text_frame.text = "આ તારીખો માટે કોઈ દર્દી પેન્ડિંગ નથી."
                 return
-                
             if compare_mode:
                 final_df = pd.merge(curr_df, prev_df, on=entity_col_name, how='outer').fillna(0)
                 final_df['Grand Total'] = final_df[p1_name] + final_df[p2_name]
@@ -431,34 +402,25 @@ with tab4:
             cols = len(col_names)
             table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.5), Inches(8.4), Inches(0.4))
             table = table_shape.table
-            
             if cols == 2:
                 table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
             elif cols == 4:
-                table.columns[0].width = Inches(4.0)
-                table.columns[1].width = Inches(1.5)
-                table.columns[2].width = Inches(1.5)
-                table.columns[3].width = Inches(1.4)
-            
+                table.columns[0].width = Inches(4.0); table.columns[1].width = Inches(1.5); table.columns[2].width = Inches(1.5); table.columns[3].width = Inches(1.4)
             for i, c_name in enumerate(col_names):
                 cell = table.cell(0, i)
                 cell.text = c_name
                 cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
-                
             target_idx = col_names.index(color_target)
             max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
-            
             for i, (_, row) in enumerate(final_df.iterrows()):
                 name_val = str(row[entity_col_name])
-                
                 table.cell(i+1, 0).text = name_val
                 table.cell(i+1, 1).text = str(int(row[p1_name]))
                 if cols == 4:
                     table.cell(i+1, 2).text = str(int(row[p2_name]))
                     table.cell(i+1, 3).text = str(int(row['Grand Total']))
-                
                 if "PRIVATE FACILITIES" in name_val:
                     for j in range(cols):
                         c = table.cell(i+1, j)
@@ -480,17 +442,12 @@ with tab4:
                     priv_row = pd.DataFrame({'PHI': ['PRIVATE FACILITIES (TOTAL)'], val_name: [priv_count]})
                     return pd.concat([pub_sum, priv_row], ignore_index=True)
                 return pub_sum
-            else:
-                return temp_df.groupby(group_col).size().reset_index(name=val_name)
+            else: return temp_df.groupby(group_col).size().reset_index(name=val_name)
 
-        # 🎯 ROLE-BASED SMART SLIDES LOGIC
         if st.session_state.role == "ZONE":
-            # Slide 1: All TUs in Zone
             tu_curr = get_summary(df_p1, 'TB Unit', p1_name)
             tu_prev = get_summary(df_p2, 'TB Unit', p2_name) if compare_mode else pd.DataFrame()
             add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending (TU Wise)", tu_curr, tu_prev, 'TB Unit')
-            
-            # Slides 2+: PHI Wise per TU
             tus = sorted(pd.concat([df_p1['TB Unit'], df_p2['TB Unit'] if compare_mode else pd.Series()]).dropna().unique())
             for tu in tus:
                 phi_curr = get_summary(df_p1[df_p1['TB Unit'] == tu], 'PHI', p1_name)
@@ -498,19 +455,15 @@ with tab4:
                 add_slide_table(f"TU: {tu} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
 
         elif st.session_state.role == "ADMIN":
-            # Slide 1: All Zones
             z_curr = get_summary(df_p1, 'ZONE', p1_name)
             z_prev = get_summary(df_p2, 'ZONE', p2_name) if compare_mode else pd.DataFrame()
             add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
-            
-            # Slides 2+: PHI Wise per Zone
             zones = sorted(pd.concat([df_p1['ZONE'], df_p2['ZONE'] if compare_mode else pd.Series()]).dropna().unique())
             for z in zones:
                 phi_curr = get_summary(df_p1[df_p1['ZONE'] == z], 'PHI', p1_name)
                 phi_prev = get_summary(df_p2[df_p2['ZONE'] == z], 'PHI', p2_name) if compare_mode else pd.DataFrame()
                 add_slide_table(f"Zone: {z} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
         else:
-            # For TB_UNIT Role (Just show PHI slide)
             phi_curr = get_summary(df_p1, 'PHI', p1_name)
             phi_prev = get_summary(df_p2, 'PHI', p2_name) if compare_mode else pd.DataFrame()
             add_slide_table(f"{st.session_state.target} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
@@ -523,9 +476,107 @@ with tab4:
     if st.button("✨ Generate Custom PPT ✨", use_container_width=True):
         with st.spinner("Generating beautiful Enterprise PPT slides... Please wait..."):
             ppt_bytes, status = generate_smart_ppt(df_master, sel_report)
-            
             if ppt_bytes:
                 st.success("✅ PPT 100% તૈયાર છે! નીચેના બટન પર ક્લિક કરીને ડાઉનલોડ કરો.")
                 st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-            else:
-                st.error(status)
+            else: st.error(status)
+
+# ==========================================
+# 🟢 TAB 5: SUCCESS & DEATH RATE (NEW)
+# ==========================================
+with tab5:
+    st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
+    
+    if df_outcome_full.empty:
+        st.warning("⚠️ Outcome નો ડેટા હજી અપડેટ થયો નથી. કૃપા કરીને Colab માં નવો માસ્ટર કોડ રન કરો.")
+    else:
+        df_out = df_outcome_full.copy()
+
+        with st.expander("🔽 Filters & Parameters", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                s5_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_out, 'ZONE', 'tab5'), key='z5'))
+                if s5_z: df_out = df_out[df_out['ZONE'].isin(s5_z)]
+                
+                s5_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_out, 'TB Unit', 'tab5'), key='tu5'))
+                if s5_tu: df_out = df_out[df_out['TB Unit'].isin(s5_tu)]
+            
+            with c2:
+                s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
+                if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
+                
+                st.markdown("<div style='margin-top: 25px;'>", unsafe_allow_html=True)
+                exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True, help="કુલ દર્દીઓમાંથી આ આંકડો બાદ થશે")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            with c3:
+                diag_dt5 = st.date_input("Diagnosis Date", value=[], key="d1_5")
+                init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
+                out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
+                
+        # Apply Date Filters
+        if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
+        if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
+        if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
+
+        # 1. માત્ર Outcome આપેલા દર્દીઓ જ લેવાના
+        df_out = df_out[df_out['Treatment Outcome'].notna() & (df_out['Treatment Outcome'] != '') & (df_out['Treatment Outcome'] != 'N/A')]
+        
+        # 2. Exclude REGIMEN CHANGED
+        if exclude_regimen:
+            df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN CHANGED', na=False)]
+
+        # 3. Identify Success & Death
+        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('COMPLETE|CURED', na=False)
+        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED|DEATH', na=False)
+
+        total_patients = len(df_out)
+        total_success = df_out['Is_Success'].sum()
+        total_death = df_out['Is_Dead'].sum()
+        
+        overall_success_rate = round((total_success / total_patients * 100), 2) if total_patients > 0 else 0
+        overall_death_rate = round((total_death / total_patients * 100), 2) if total_patients > 0 else 0
+
+        # KPI Boxes
+        kb1, kb2 = st.columns(2)
+        with kb1: st.markdown(draw_card("Overall Success Rate", f"{overall_success_rate}%", "#27AE60", "🌟"), unsafe_allow_html=True)
+        with kb2: st.markdown(draw_card("Overall Death Rate", f"{overall_death_rate}%", "#C0392B", "⚠️"), unsafe_allow_html=True)
+
+        def get_rate_table(df_group, group_col):
+            if df_group.empty: return pd.DataFrame()
+            grp = df_group.groupby(group_col)
+            summary = pd.DataFrame({
+                'Total Outcome Given': grp.size(),
+                'Successful Outcomes': grp['Is_Success'].sum(),
+                'Deaths': grp['Is_Dead'].sum()
+            }).reset_index()
+            
+            summary['Success Rate (%)'] = (summary['Successful Outcomes'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
+            summary['Death Rate (%)'] = (summary['Deaths'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
+            
+            # Select required columns
+            return summary[[group_col, 'Total Outcome Given', 'Success Rate (%)', 'Death Rate (%)']].sort_values(by='Total Outcome Given', ascending=False)
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        
+        # 🎯 ડાયનેમિક ટેબલ્સ (Zone/TU/PHI)
+        if st.session_state.role == "ZONE" or len(s5_z) > 0:
+            st.markdown("##### 📍 TU Wise Rates")
+            tu_table = get_rate_table(df_out, 'TB Unit')
+            st.dataframe(tu_table, use_container_width=True, hide_index=True)
+            
+            st.markdown("##### 🏥 PHI Wise Rates")
+            phi_table = get_rate_table(df_out, 'PHI')
+            st.dataframe(phi_table, use_container_width=True, hide_index=True)
+        elif st.session_state.role == "ADMIN":
+            st.markdown("##### 🗺️ Zone Wise Rates")
+            zone_table = get_rate_table(df_out, 'ZONE')
+            st.dataframe(zone_table, use_container_width=True, hide_index=True)
+        else:
+            st.markdown("##### 🏥 PHI Wise Rates")
+            phi_table = get_rate_table(df_out, 'PHI')
+            st.dataframe(phi_table, use_container_width=True, hide_index=True)
+
+        if not df_out.empty:
+            excel_data5 = convert_df_to_excel(df_out, "Outcome_Cohort")
+            st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
