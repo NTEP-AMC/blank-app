@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (WITH EXPLICIT ELIGIBILITY TRACKING)
+# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -234,7 +234,6 @@ def get_live_dc():
                         'Due_Status': due_val, 'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
                         'Facility_Type': hf_val, 'Type_of_Case': case_val, 
                         'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val,
-                        # Adding specific period eligibility
                         'Elig_BASELINE': elig_base, 'Elig_1ST_MONTH': elig_1m, 'Elig_2ND_MONTH': elig_2m,
                         'Elig_3RD_MONTH': elig_3m, 'Elig_4TH_MONTH': elig_4m, 'Elig_5TH_MONTH': elig_5m, 'Elig_6TH_MONTH': elig_6m
                     })
@@ -343,7 +342,7 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER FOR COMPARISON
+# 🎯 FIX COLUMN ORDER
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -733,7 +732,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (NEW UI & LINE LIST)
+# 🟢 TAB 5: DIFFERENTIATED CARE (NEW UI WITH NO MATPLOTLIB ERROR)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -830,9 +829,9 @@ with tab5:
         summary_df = get_dynamic_summary(df_dc, g_col)
         
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
-        # 🟢 Conditional Formatting for % Completed
-        styled_df = summary_df.style.background_gradient(subset=['% Completed'], cmap='RdYlGn', vmin=0, vmax=100).format({'% Completed': "{:.1f}%"})
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        # 🟢 FIX: Removed matplotlib dependency. Formatted normally with simple text.
+        summary_df['% Completed'] = summary_df['% Completed'].apply(lambda x: f"{x:.1f}%")
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
         
         # 🎯 2. Line List Logic (Only for the Selected Period's Pending Patients)
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
