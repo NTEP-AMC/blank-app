@@ -133,47 +133,43 @@ def load_all_data():
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 TAB 6 LIVE FETCH (Zone AR Column Fix)
+# 🎯 LIVE GOOGLE SHEET FETCH LOGIC (PERFECT MAPPING)
 @st.cache_data(ttl=600) 
 def load_diff_care_live():
     try:
         sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
         gid = "1152778583"
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-        df = pd.read_csv(url)
-
-        def cx_col(col_let):
-            num = 0
-            for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
-            return num - 1
-
-        max_col = cx_col('DD')
-        if len(df.columns) <= max_col:
-            for i in range(len(df.columns), max_col + 1): df[str(i)] = ""
-
-        elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
-        ci_idx = cx_col('CI')
-        tu_idx = cx_col('A')
-        phi_idx = cx_col('C')
-        id_idx = cx_col('G')
         
-        zone_idx = cx_col('AR') # 🎯 FIX: સીધો AR કોલમમાંથી ઝોન લેશે!
+        df = pd.read_csv(url, skiprows=0)
         
-        diag_idx = cx_col('CJ')
-        init_idx = cx_col('CK')
-        out_idx = cx_col('CL')
+        # મસ્ત ડાયનેમિક મેપિંગ જેથી કોલમ આડાઅવળા થાય તો પણ ડેટા સાચો મળે!
+        header_map = {}
+        for c in df.columns:
+            cl = str(c).upper().strip()
+            if "SPECTRUM_CURRENT_TBU" in cl: header_map['TB Unit'] = c
+            elif "SPECTRUM_CURRENT_HF" in cl and "TYPE" not in cl: header_map['PHI'] = c
+            elif "EPISODE_ID" in cl: header_map['Episode ID'] = c
+            elif "FOLLOW UP DUE" in cl: header_map['Due_Status'] = c
+            elif "DIAGNOSIS_DATE" in cl: header_map['Diagnosis Date'] = c
+            elif "INITIATION_DATE" in cl: header_map['Initiation Date'] = c
+            elif "OUTCOME DATE" in cl or "DATE_OF_TREATMENT_OUTCOME" in cl: header_map['Outcome Date'] = c
+        
+        zone_col = df.columns[43] if len(df.columns) > 43 else None # કોલમ AR (Index 43)
+
+        elig_cols = [c for c in df.columns if str(c).upper().strip() in ['BASELINE', '1 MONTH', '2 MONTH', '3 MONTH', '4 MONTH', '5 MONTH', '6 MONTH']]
 
         diff_data = []
         for _, row in df.iterrows():
             is_elig = False
             for c in elig_cols:
-                if c < len(row):
-                    val = str(row.iloc[c]).strip().upper()
-                    if "ELIG" in val and "NOT" not in val:
-                        is_elig = True
-                        break
+                val = str(row.get(c, '')).strip().upper()
+                if "ELIG" in val and "NOT" not in val:
+                    is_elig = True
+                    break
+                    
             if is_elig:
-                tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip()
+                tu = str(row.get(header_map.get('TB Unit', ''), '')).upper().replace("-", "").strip()
                 if "INDIA" in tu: tu = "INDIA COLONY"
                 elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
                 elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
@@ -198,18 +194,16 @@ def load_diff_care_live():
                 elif "SHAH" in tu: tu = "SHAHPUR"
                 elif "RANIP" in tu: tu = "RANIP"
 
-                phi = str(row.iloc[phi_idx]).strip().upper()
-                
-                # 🎯 ડાયરેક્ટ ગુગલ શીટના AR કોલમમાંથી ઝોન
-                zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else 'N/A'
+                phi = str(row.get(header_map.get('PHI', ''), '')).strip().upper()
+                zone = str(row[zone_col]).strip().upper() if zone_col else "N/A"
                 if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
                 
-                due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
-                eid = str(row.iloc[id_idx]).strip().upper()
+                due_val = str(row.get(header_map.get('Due_Status', ''), '')).strip().upper()
+                eid = str(row.get(header_map.get('Episode ID', ''), '')).strip().upper()
                 
-                d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
-                i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
-                o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
+                d_val = str(row.get(header_map.get('Diagnosis Date', ''), '')).strip()
+                i_val = str(row.get(header_map.get('Initiation Date', ''), '')).strip()
+                o_val = str(row.get(header_map.get('Outcome Date', ''), '')).strip()
 
                 diff_data.append({
                     'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val,
@@ -226,7 +220,6 @@ def load_diff_care_live():
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 
-# 🎯 No mapping dict needed, direct call
 df_dc_raw = load_diff_care_live()
 
 def filter_by_role(df, role, target):
@@ -269,7 +262,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success/Death Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate", "🏥 Diff. Care"])
 
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
@@ -325,6 +318,9 @@ with tab1:
         excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
+# ==========================================
+# 🟢 TAB 2: DAILY COMPARISON (DATE FILTERS ADDED)
+# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters & Dates"):
@@ -592,7 +588,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE
+# 🟢 TAB 5: SUCCESS & DEATH RATE (BLANK LOGIC FIX)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -615,14 +611,17 @@ with tab5:
                 s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
                 if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
                 
-                s5_reg = st.multiselect("TB Regimen", get_options_with_counts(df_out, 'TB_regimen', 'tab5'), key='reg5')
+                # 🎯 TB REGIMEN: 2HRZE/4HRE ઓટોમેટિક સિલેક્ટ થઈને જ આવશે! 
+                regimen_opts = get_options_with_counts(df_out, 'TB_regimen', 'tab5')
+                def_regs = [r for r in regimen_opts if "2HRZE/4HRE" in r]
                 
-                # 🎯 REGIMEN BLANK LOGIC: જો 2HRZE/4HRE સિલેક્ટ હોય તો Blank (N/A) ઓટોમેટિક ખેંચી લેશે!
+                s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
                 if s5_reg:
                     sel_regs = clean_selection(s5_reg)
+                    # 🎯 જો 2HRZE/4HRE હોય તો Blank(N/A) ને પણ ગણતરીમાં જોડી જ દેવાનું
                     if any("2HRZE/4HRE" in r for r in sel_regs):
-                        sel_regs.extend(["N/A", "", "NAN"])
-                    df_out = df_out[df_out['TB_regimen'].isin(sel_regs)]
+                        sel_regs.extend(["N/A", "", "NAN", "NONE"])
+                    df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
                 
                 st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
                 exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True)
@@ -639,7 +638,8 @@ with tab5:
 
         outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
         df_out['Treatment Outcome'] = outcomes
-        df_out = df_out[~df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
+        
+        # 🚨 અગાઉનું 'Drop Blanks' વાળું લોજીક કાઢી નાખ્યું છે. હવે Blanks પણ Total Patients માં ગણાશે!
 
         if exclude_regimen:
             df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
@@ -712,7 +712,7 @@ with tab5:
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (DIRECT AR ZONE MAP)
+# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE SHEET FROM GOOGLE)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
