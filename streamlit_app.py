@@ -117,7 +117,6 @@ def load_all_data():
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
             
         c_mat = pd.read_csv("Comparison_Matrix.csv")
-        # 🎯 TAB 2 ડેટ ફિલ્ટર માટે c_mat માં તારીખો જોડી દીધી
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
@@ -134,8 +133,8 @@ def load_all_data():
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 TAB 6 માટે સીધું ગૂગલ શીટ પરથી ડેટા લાવવાનું ફંક્શન
-@st.cache_data(ttl=600) # 10 મિનિટ સુધી ફાસ્ટ લોડ થશે
+# 🎯 LIVE GOOGLE SHEET FETCH LOGIC (WITH DATES)
+@st.cache_data(ttl=600) 
 def load_diff_care_live(zone_dict):
     try:
         sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
@@ -157,6 +156,11 @@ def load_diff_care_live(zone_dict):
         tu_idx = cx_col('A')
         phi_idx = cx_col('C')
         id_idx = cx_col('G')
+        
+        # 🎯 Date Columns (CJ, CK, CL)
+        diag_idx = cx_col('CJ')
+        init_idx = cx_col('CK')
+        out_idx = cx_col('CL')
 
         diff_data = []
         for _, row in df.iterrows():
@@ -169,7 +173,6 @@ def load_diff_care_live(zone_dict):
                         break
             if is_elig:
                 tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip()
-                # TU સફાઈ
                 if "INDIA" in tu: tu = "INDIA COLONY"
                 elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
                 elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
@@ -198,16 +201,27 @@ def load_diff_care_live(zone_dict):
                 zone = zone_dict.get(phi, 'N/A')
                 due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
                 eid = str(row.iloc[id_idx]).strip().upper()
+                
+                # Fetch Dates
+                d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
+                i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
+                o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
 
-                diff_data.append({'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val})
+                diff_data.append({
+                    'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val,
+                    'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val
+                })
 
-        return pd.DataFrame(diff_data)
+        df_final = pd.DataFrame(diff_data)
+        if not df_final.empty:
+            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+                df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
+        return df_final
     except Exception as e:
         return pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 
-# 🎯 ઝોન મેપિંગ બનાવીને સીધું ગૂગલ શીટમાંથી ખેંચો 
 zone_mapping_dict = dict(zip(df_master_raw['PHI'], df_master_raw['ZONE'])) if not df_master_raw.empty else {}
 df_dc_raw = load_diff_care_live(zone_mapping_dict)
 
@@ -251,7 +265,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success/Death Rate", "🏥 Diff. Care"])
 
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
@@ -272,7 +286,7 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
@@ -334,7 +348,6 @@ with tab2:
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
         
-        # 🎯 TAB 2 DATE FILTERS
         cd1, cd2, cd3 = st.columns(3)
         with cd1: diag_dt2 = st.date_input("Diagnosis Date Range", value=[], key="d1_2")
         with cd2: init_dt2 = st.date_input("Initiation Date Range", value=[], key="d2_2")
@@ -686,7 +699,7 @@ with tab5:
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE GOOGLE SHEET!)
+# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE SHEET + DATE FILTERS)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -708,6 +721,17 @@ with tab6:
             with c2:
                 s6_phi = clean_selection(st.multiselect("PHI", sorted(df_dc['PHI'].dropna().unique()), key='phi6'))
                 if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
+                
+            # 🎯 TAB 6 DATE FILTERS ADDED HERE
+            with c3:
+                cd1, cd2, cd3 = st.columns(3)
+                with cd1: diag_dt6 = st.date_input("Diagnosis Date", value=[], key="d1_6")
+                with cd2: init_dt6 = st.date_input("Initiation Date", value=[], key="d2_6")
+                with cd3: out_dt6 = st.date_input("Outcome Date", value=[], key="d3_6")
+                
+        if len(diag_dt6) == 2: df_dc = df_dc[df_dc['Diagnosis Date'].notna() & df_dc['Diagnosis Date'].dt.date.between(diag_dt6[0], diag_dt6[1])]
+        if len(init_dt6) == 2: df_dc = df_dc[df_dc['Initiation Date'].notna() & df_dc['Initiation Date'].dt.date.between(init_dt6[0], init_dt6[1])]
+        if len(out_dt6) == 2: df_dc = df_dc[df_dc['Outcome Date'].notna() & df_dc['Outcome Date'].dt.date.between(out_dt6[0], out_dt6[1])]
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
@@ -764,5 +788,6 @@ with tab6:
             st.dataframe(phi_table, use_container_width=True, hide_index=True)
 
         if not df_dc.empty:
-            excel_data6 = convert_df_to_excel(df_dc, "Diff_Care_Raw")
+            display_cols = [c for c in df_dc.columns if c not in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']]
+            excel_data6 = convert_df_to_excel(df_dc[display_cols], "Diff_Care_Raw")
             st.download_button("📥 Download Raw Differentiated Care Data", excel_data6, "Differentiated_Care.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl6')
