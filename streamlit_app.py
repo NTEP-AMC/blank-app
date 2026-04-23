@@ -109,12 +109,13 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
+# 🎯 THE DATE FIX: તારીખો હવે એક્ઝેટ સાચી મેચ થશે!
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
         m = pd.read_csv("Master_Line_List.csv")
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce', dayfirst=True)
+            if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') # Removed dayfirst=True
             
         c_mat = pd.read_csv("Comparison_Matrix.csv")
         curr = pd.read_csv("Current_TB_Patients.csv")
@@ -122,7 +123,7 @@ def load_all_data():
         
         out_df = pd.read_csv("Outcome_Cohort.csv")
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce', dayfirst=True)
+            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') # Removed dayfirst=True
             
         return m, c_mat, curr, t_df, out_df
     except Exception as e:
@@ -191,7 +192,7 @@ with tab1:
                 if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                 elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
                 elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-            s_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
+            s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
@@ -482,7 +483,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (ON TREATMENT REMOVED)
+# 🟢 TAB 5: SUCCESS & DEATH RATE (THE MATH FIX & ON-TREATMENT REMOVED)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -513,19 +514,21 @@ with tab5:
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with c3:
-                # 🎯 DIAGNOSIS DATE પર ચોકડી દબાવવાનું યાદ કરાવું છું!
                 diag_dt5 = st.date_input("Diagnosis Date", value=[], key="d1_5")
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
+        # 🎯 1. તારીખોનું ફિલ્ટર 
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
+        # 🎯 2. બ્લેન્ક કાઢો
         outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
         df_out['Treatment Outcome'] = outcomes
         df_out = df_out[~df_out['Treatment Outcome'].isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
 
+        # 🎯 3. REGIMEN કાઢો
         if exclude_regimen:
             df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
 
@@ -542,7 +545,7 @@ with tab5:
                 'DIED': grp['Is_Dead'].sum()
             }).reset_index()
 
-            # 🎯 ON TREATMENT કાઢી નાખ્યું, અને નામ PPT જેવા કરી દીધા
+            # 🎯 'ON TREATMENT' કોલમ કાઢી નાખ્યું
             summary['SUCCESS %'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
             summary['DEATH %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
