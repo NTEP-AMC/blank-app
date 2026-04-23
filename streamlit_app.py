@@ -109,26 +109,30 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-def parse_dt_safe(s):
-    try: return pd.to_datetime(s, errors='coerce', dayfirst=True)
-    except: return pd.NaT
-
-try:
-    df_master = pd.read_csv("Master_Line_List.csv")
-    for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-        if col in df_master.columns: df_master[col] = df_master[col].apply(parse_dt_safe)
-    df_comp = pd.read_csv("Comparison_Matrix.csv")
-    df_curr_tb = pd.read_csv("Current_TB_Patients.csv")
-    df_time = pd.read_csv("Update_Timestamps.csv")
-    
-    # 🎯 NEW: Outcome Cohort લોડ કરો
-    df_outcome_full = pd.read_csv("Outcome_Cohort.csv")
-    for col in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-        if col in df_outcome_full.columns: df_outcome_full[col] = df_outcome_full[col].apply(parse_dt_safe)
+# 🚀 1. SUPERFAST CACHE SYSTEM: ડેટા વારંવાર નહિ વાંચે!
+@st.cache_data(ttl=3600)
+def load_all_data():
+    try:
+        # Vectorized parsing (સીધી આખી કોલમ જ કન્વર્ટ થશે, 10 ગણું ઝડપી!)
+        m = pd.read_csv("Master_Line_List.csv")
+        for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+            if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce', dayfirst=True)
+            
+        c_mat = pd.read_csv("Comparison_Matrix.csv")
+        curr = pd.read_csv("Current_TB_Patients.csv")
+        t_df = pd.read_csv("Update_Timestamps.csv")
         
-except Exception as e:
-    st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
-    df_outcome_full = pd.DataFrame()
+        out_df = pd.read_csv("Outcome_Cohort.csv")
+        for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce', dayfirst=True)
+            
+        return m, c_mat, curr, t_df, out_df
+    except Exception as e:
+        st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+# 🚀 2. ફાસ્ટ મેમરીમાંથી ડેટા લોડ કરો 
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -136,10 +140,10 @@ def filter_by_role(df, role, target):
     elif role == "ZONE" and 'ZONE' in df.columns: return df[df['ZONE'].astype(str).str.strip().str.upper().isin([target, 'N/A', 'NAN', 'NONE'])]
     return df
 
-df_master = filter_by_role(df_master, st.session_state.role, st.session_state.target)
-df_comp = filter_by_role(df_comp, st.session_state.role, st.session_state.target)
-df_curr_tb = filter_by_role(df_curr_tb, st.session_state.role, st.session_state.target)
-df_outcome_full = filter_by_role(df_outcome_full, st.session_state.role, st.session_state.target)
+df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
+df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target)
+df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
+df_outcome_full = filter_by_role(df_outcome_full_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -169,7 +173,6 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-# 🎯 NEW TAB 5 ADDED 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate"])
 
 with tab1:
@@ -481,9 +484,6 @@ with tab4:
                 st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
             else: st.error(status)
 
-# ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (NEW)
-# ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
     
@@ -514,19 +514,15 @@ with tab5:
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
-        # Apply Date Filters
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        # 1. માત્ર Outcome આપેલા દર્દીઓ જ લેવાના
         df_out = df_out[df_out['Treatment Outcome'].notna() & (df_out['Treatment Outcome'] != '') & (df_out['Treatment Outcome'] != 'N/A')]
         
-        # 2. Exclude REGIMEN CHANGED
         if exclude_regimen:
             df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN CHANGED', na=False)]
 
-        # 3. Identify Success & Death
         df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('COMPLETE|CURED', na=False)
         df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED|DEATH', na=False)
 
@@ -537,7 +533,6 @@ with tab5:
         overall_success_rate = round((total_success / total_patients * 100), 2) if total_patients > 0 else 0
         overall_death_rate = round((total_death / total_patients * 100), 2) if total_patients > 0 else 0
 
-        # KPI Boxes
         kb1, kb2 = st.columns(2)
         with kb1: st.markdown(draw_card("Overall Success Rate", f"{overall_success_rate}%", "#27AE60", "🌟"), unsafe_allow_html=True)
         with kb2: st.markdown(draw_card("Overall Death Rate", f"{overall_death_rate}%", "#C0392B", "⚠️"), unsafe_allow_html=True)
@@ -554,12 +549,10 @@ with tab5:
             summary['Success Rate (%)'] = (summary['Successful Outcomes'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
             summary['Death Rate (%)'] = (summary['Deaths'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
             
-            # Select required columns
             return summary[[group_col, 'Total Outcome Given', 'Success Rate (%)', 'Death Rate (%)']].sort_values(by='Total Outcome Given', ascending=False)
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # 🎯 ડાયનેમિક ટેબલ્સ (Zone/TU/PHI)
         if st.session_state.role == "ZONE" or len(s5_z) > 0:
             st.markdown("##### 📍 TU Wise Rates")
             tu_table = get_rate_table(df_out, 'TB Unit')
