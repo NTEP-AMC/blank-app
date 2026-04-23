@@ -482,7 +482,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS & DEATH RATE (MATH FIXED)
+# 🟢 TAB 5: SUCCESS & DEATH RATE (MATH & REGIMEN FIX)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -505,7 +505,6 @@ with tab5:
                 s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
                 if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
                 
-                # 🎯 નવું ફિલ્ટર: માત્ર 1st Line TB (જેથી આંકડા 830 એક્ઝેટ મેચ થાય!)
                 s5_reg = st.multiselect("TB Regimen", get_options_with_counts(df_out, 'TB_regimen', 'tab5'), key='reg5')
                 if s5_reg: df_out = df_out[df_out['TB_regimen'].isin(clean_selection(s5_reg))]
                 
@@ -518,39 +517,41 @@ with tab5:
                 init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
                 out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
                 
-        # 🎯 તારીખોનું ફિલ્ટર લગાવો 
         if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        # 🎯 માઈનસ કરવાનું લોજીક (Exclude Regimen Changed)
+        # 🎯 1. આઉટકમ વગરના બ્લેન્ક દર્દીઓ કાઢી નાખો
+        outcomes = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
+        df_out = df_out[~outcomes.isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])]
+        
+        # 🎯 2. જો ચેકબોક્સ ચાલુ હોય, તો REGIMEN વાળા દર્દીઓ આખા ડેટામાંથી જ માઇનસ (-) કરો
         if exclude_regimen:
-            df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN CHANGED', na=False)]
+            df_out = df_out[~df_out['Treatment Outcome'].astype(str).str.upper().str.contains('REGIMEN', na=False)]
 
-        outcomes = df_out['Treatment Outcome'].fillna('').str.upper().str.strip()
+        final_outcomes = df_out['Treatment Outcome'].astype(str).str.upper()
 
-        # 🎯 નવી ગણતરી (બરાબર PPT મુજબ)
-        df_out['Is_Success'] = outcomes.str.contains('COMPLETE|CURED', na=False)
-        df_out['Is_Dead'] = outcomes.str.contains('DIED|DEATH', na=False)
-        df_out['Is_On_Treatment'] = outcomes.isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])
+        # 🎯 3. ગણતરી માટે ફ્લેગ
+        df_out['Is_Success'] = final_outcomes.str.contains('COMPLETE|CURED', na=False)
+        df_out['Is_Dead'] = final_outcomes.str.contains('DIED|DEATH', na=False)
+        df_out['Is_On_Treatment'] = final_outcomes.str.contains('ON TREATMENT', na=False)
 
-        # 🎯 ગણતરી માટેનું ફંક્શન 
         def get_rate_table(df_group, group_col):
             if df_group.empty: return pd.DataFrame()
             grp = df_group.groupby(group_col)
 
             summary = pd.DataFrame({
-                'TOTAL PATIENTS': grp.size(), # હવે આંકડો કુલ દર્દીઓનો લેવાશે 
+                'TOTAL PATIENTS': grp.size(),
                 'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
                 'DIED': grp['Is_Dead'].sum(),
                 'ON TREATMENT': grp['Is_On_Treatment'].sum()
             }).reset_index()
 
-            # ટકાવારી TOTAL PATIENTS પર નીકળશે! (Your Math Fix)
+            # 🎯 ટકાવારી TOTAL PATIENTS પર નીકળશે (જેમાંથી Regimen માઇનસ થઈ ચૂક્યું છે)
             summary['% '] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
             summary[' %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
 
-            # બિલકુલ PPT જેવો જ ક્રમ!
+            # બિલકુલ PPT જેવો જ કોલમનો ક્રમ!
             final_cols = [group_col, 'TOTAL PATIENTS', 'SUCCESSFULLY TREATED', '% ', 'DIED', ' %', 'ON TREATMENT']
             return summary[final_cols].sort_values(by='TOTAL PATIENTS', ascending=False)
 
