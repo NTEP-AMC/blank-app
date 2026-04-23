@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCHING (Colab CSVs)
+# 🎯 DATA LOAD
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -139,7 +139,6 @@ def load_all_data():
 def get_live_dc():
     try:
         def fetch_sheet(url):
-            # 100% Bulletproof: Index based mapping to avoid duplicate header error
             df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
             df = df.iloc[1:].reset_index(drop=True) 
 
@@ -157,7 +156,7 @@ def get_live_dc():
             tu_idx = cx_col('A')   
             phi_idx = cx_col('C')  
             id_idx = cx_col('G')   
-            name_idx = cx_col('H') # 🎯 Patient Name (Column H)
+            name_idx = cx_col('H') 
             zone_idx = cx_col('AR')
             diag_idx = cx_col('CJ')
             init_idx = cx_col('CK')
@@ -233,7 +232,6 @@ def get_live_dc():
                     df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
             return df_final
 
-        # 🎯 Old & New Data Links for Diff Care
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
         
@@ -246,7 +244,6 @@ def get_live_dc():
             '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'
         }
         
-        # 🎯 Tab 2 માટે Differentiated Care ની Comparison ગણતરી
         def get_pend_dict(df):
             pend = {}
             if df.empty: return pend
@@ -306,13 +303,11 @@ df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
 # 🎯 THE BIG MERGE: Drive Comparison + Google Sheet Diff Care Comparison
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
-    # Force Episode ID to strict string format before merging to avoid 'લોચા' (Errors)
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     
     c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
     
-    # Overlapping columns ને ભેગા કરો
     for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
         if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
             c_mat[col] = c_mat[col + '_x'].combine_first(c_mat[col + '_y'])
@@ -323,7 +318,14 @@ else:
     c_mat = df_comp_raw.copy()
 
 c_mat.fillna('', inplace=True)
-df_comp_final = c_mat
+
+# 🎯 FIX COLUMN ORDER FOR COMPARISON MATRIX (Demographic columns always on the left!)
+front_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+dates_cols = ['Diagnosis Date', 'Initiation Date', 'Outcome Date']
+existing_front = [c for c in front_cols if c in c_mat.columns]
+existing_dates = [c for c in dates_cols if c in c_mat.columns]
+existing_other = [c for c in c_mat.columns if c not in existing_front + existing_dates]
+df_comp_final = c_mat[existing_front + existing_dates + existing_other]
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -368,7 +370,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success & Death Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success Rate", "🏥 Diff. Care"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -428,7 +430,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (NOW WITH DIFF CARE!)
+# 🟢 TAB 2: DAILY COMPARISON (DIFF CARE MERGED AND REORDERED!)
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -454,7 +456,6 @@ with tab2:
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
         with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
-            # Diff care reports automatically become "Report Type" filters!
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
         
@@ -706,7 +707,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS RATE (TYPO FIXED `.str.upper()`)
+# 🟢 TAB 5: SUCCESS RATE 
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -742,7 +743,6 @@ with tab5:
     if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
     if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-    # 🎯 THE BUG FIX: .astype(str).str.upper()  <--- .str ઉમેર્યું છે!
     df_out['Treatment Outcome'] = df_out['Treatment Outcome'].fillna('').astype(str).str.upper()
     if exclude_regimen: df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
 
@@ -783,7 +783,7 @@ with tab5:
         st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (WITH 4 NEW FILTERS)
+# 🟢 TAB 6: DIFFERENTIATED CARE (BUG FIXED: .str.upper())
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -831,7 +831,8 @@ with tab6:
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
-            due = temp_df['Due_Status'].fillna('').astype(str).upper()
+            # 🎯 THE BUG FIX: .str.upper() instead of .upper()
+            due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
             periods = {'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH', '3RD MONTH': '3RD MONTH|3 MONTH', '4TH MONTH': '4TH MONTH|4 MONTH', '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'}
