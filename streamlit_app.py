@@ -226,24 +226,22 @@ def get_live_dc():
                         'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val
                     })
 
-            return pd.DataFrame(diff_data)
+            df_final = pd.DataFrame(diff_data)
+            if not df_final.empty:
+                for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+                    df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
+            return df_final
 
         # 🎯 Old & New Data Links for Diff Care
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
         
         df_new = fetch_sheet(url_new)
-        
-        # TAB 6 માટે આખો ડેટા તૈયાર કરો (કોઈ ફિલ્ટર વિના)
-        df_new_full = df_new.copy()
-        if not df_new_full.empty:
-            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                df_new_full[c] = pd.to_datetime(df_new_full[c], errors='coerce')
-                
-        # TAB 2 કમ્પેરિઝન માટે જૂનો ડેટા ખેંચો
         df_old = fetch_sheet(url_old)
 
-        # 🎯 હાર્ડકોડેડ ડેટ ફિલ્ટર માત્ર કમ્પેરિઝન માટે (Sept 1, 2025 to April 23, 2026)
+        df_new_full = df_new.copy()
+
+        # 🎯 કમ્પેરિઝન ફિલ્ટર (Sept 1, 2025 to April 23, 2026)
         start_dt = pd.to_datetime('2025-09-01')
         end_dt = pd.to_datetime('2026-04-23')
 
@@ -336,12 +334,10 @@ else:
 c_mat.fillna('', inplace=True)
 
 # 🎯 COLUMN REORDER LOGIC (દર્દીનું નામ અને ઝોન હંમેશા આગળ!)
-front_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type']
-dates_cols = ['Diagnosis Date', 'Initiation Date', 'Outcome Date']
-existing_front = [c for c in front_cols if c in c_mat.columns]
-existing_dates = [c for c in dates_cols if c in c_mat.columns]
-existing_other = [c for c in c_mat.columns if c not in existing_front + existing_dates]
-df_comp_final = c_mat[existing_front + existing_dates + existing_other]
+std_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
+existing_std = [c for c in std_cols if c in c_mat.columns]
+existing_other = [c for c in c_mat.columns if c not in existing_std]
+df_comp_final = c_mat[existing_std + existing_other]
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -446,7 +442,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON 
+# 🟢 TAB 2: DAILY COMPARISON
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -744,7 +740,7 @@ with tab5:
             s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
             if s5_reg:
                 sel_regs = clean_selection(s5_reg)
-                if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN", "NONE"])
+                if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN"])
                 df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
             
             st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
