@@ -3,7 +3,6 @@ import pandas as pd
 import base64
 import os
 import io
-import re
 from datetime import datetime, date, timedelta
 import pytz
 
@@ -110,217 +109,136 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
+# 🎯 THE ERROR FIX: બધી જ ફાઈલોમાં Episode ID ને ફરજિયાત String (શબ્દ) તરીકે વંચાવો
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
-        m = pd.read_csv("Master_Line_List.csv")
+        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
             
-        c_mat = pd.read_csv("Comparison_Matrix.csv")
+        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
 
-        curr = pd.read_csv("Current_TB_Patients.csv")
+        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
         
-        out_df = pd.read_csv("Outcome_Cohort.csv")
+        out_df = pd.read_csv("Outcome_Cohort.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') 
             
         return m, c_mat, curr, t_df, out_df
     except Exception as e:
-        st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
+        st.error(f"⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 DUAL LIVE GOOGLE SHEET FETCH (FOR TAB 2 AND TAB 6)
+# 🎯 LIVE GOOGLE SHEET FETCH FOR TAB 6 (WITH 4 FILTERS)
 @st.cache_data(ttl=300) 
-def get_live_dc():
+def load_diff_care_live():
     try:
-        def fetch_dc(url):
-            try:
-                df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
-                df = df.iloc[1:].reset_index(drop=True) 
-
-                def cx_col(col_let):
-                    num = 0
-                    for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
-                    return num - 1
-
-                max_col = cx_col('DD')
-                if len(df.columns) <= max_col:
-                    for i in range(len(df.columns), max_col + 1): df[i] = ""
-
-                elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
-                ci_idx = cx_col('CI')  
-                tu_idx = cx_col('A')   
-                phi_idx = cx_col('C')  
-                id_idx = cx_col('G')   
-                zone_idx = cx_col('AR')
-                diag_idx = cx_col('CJ')
-                init_idx = cx_col('CK')
-                out_idx = cx_col('CL')
-                hf_idx = cx_col('B')   
-                case_idx = cx_col('Z') 
-                site_idx = cx_col('AA')
-                out_col_idx = cx_col('AD') 
-
-                diff_data = []
-                for _, row in df.iterrows():
-                    is_elig = False
-                    for c in elig_cols:
-                        val = str(row.iloc[c]).strip().upper() if c < len(row) else ""
-                        if "ELIG" in val and "NOT" not in val:
-                            is_elig = True
-                            break
-                            
-                    if is_elig:
-                        tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip() if tu_idx < len(row) else ""
-                        if "INDIA" in tu: tu = "INDIA COLONY"
-                        elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
-                        elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
-                        elif "NOB" in tu: tu = "NOBLENAGAR"
-                        elif "BEHRAM" in tu: tu = "BEHRAMPURA"
-                        elif "SAIJ" in tu: tu = "SAIJPUR"
-                        elif "DANI" in tu: tu = "DANILIMDA"
-                        elif "AMRAI" in tu: tu = "AMRAIWADI"
-                        elif "BHAI" in tu: tu = "BHAIPURA"
-                        elif "GHAT" in tu: tu = "GHATLODIA"
-                        elif "CHAND" in tu: tu = "CHANDKHEDA"
-                        elif "VEJAL" in tu: tu = "VEJALPUR"
-                        elif "ISAN" in tu: tu = "ISANPUR"
-                        elif "ASAR" in tu: tu = "ASARVA"
-                        elif "BAPU" in tu: tu = "BAPUNAGAR"
-                        elif "VIRAT" in tu: tu = "VIRATNAGAR"
-                        elif "RAKH" in tu: tu = "RAKHIAL"
-                        elif "JAMAL" in tu: tu = "JAMALPUR"
-                        elif "VASNA" in tu: tu = "VASNA"
-                        elif "VATVA" in tu: tu = "VATVA"
-                        elif "JODH" in tu: tu = "JODHPUR"
-                        elif "SHAH" in tu: tu = "SHAHPUR"
-                        elif "RANIP" in tu: tu = "RANIP"
-
-                        phi = str(row.iloc[phi_idx]).strip().upper() if phi_idx < len(row) else ""
-                        zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else "N/A"
-                        if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
-                        
-                        due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
-                        eid = str(row.iloc[id_idx]).strip().upper() if id_idx < len(row) else ""
-                        d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
-                        i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
-                        o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
-                        hf_val = str(row.iloc[hf_idx]).strip().upper() if hf_idx < len(row) else ""
-                        case_val = str(row.iloc[case_idx]).strip().upper() if case_idx < len(row) else ""
-                        site_val = str(row.iloc[site_idx]).strip().upper() if site_idx < len(row) else ""
-                        out_col_val = str(row.iloc[out_col_idx]).strip().upper() if out_col_idx < len(row) else ""
-
-                        diff_data.append({
-                            'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val,
-                            'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
-                            'Facility_Type': hf_val, 'Type_of_Case': case_val, 
-                            'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val
-                        })
-
-                df_final = pd.DataFrame(diff_data)
-                if not df_final.empty:
-                    for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                        df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
-                return df_final
-            except Exception as e:
-                return pd.DataFrame()
-
-        # 🎯 Old & New Data Links
-        url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
-        url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
+        sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
+        gid = "1152778583"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
         
-        df_new = fetch_dc(url_new)
-        df_old = fetch_dc(url_old)
+        # સીધું ઇન્ડેક્સિંગ, કોલમના ડબલ નામનો પ્રોબ્લેમ સોલ્વ!
+        df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
+        df = df.iloc[1:].reset_index(drop=True) 
 
-        periods_map = {
-            'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH',
-            '3RD MONTH': '3RD MONTH|3 MONTH', '4TH MONTH': '4TH MONTH|4 MONTH', 
-            '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'
-        }
-        
-        def get_pend_dict(df):
-            pend = {}
-            if df.empty: return pend
-            for _, row in df.iterrows():
-                eid = row['Episode ID']
-                due = str(row['Due_Status']).upper()
-                if "COMPLETED" in due:
-                    pend[eid] = []
-                    continue
-                cur_p = []
-                for p_name, p_regex in periods_map.items():
-                    if re.search(p_regex, due):
-                        cur_p.append(p_name)
-                pend[eid] = cur_p
-            return pend
+        def cx_col(col_let):
+            num = 0
+            for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
+            return num - 1
 
-        old_pend = get_pend_dict(df_old)
-        new_pend = get_pend_dict(df_new)
+        max_col = cx_col('DD')
+        if len(df.columns) <= max_col:
+            for i in range(len(df.columns), max_col + 1): df[i] = ""
+
+        elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
+        ci_idx = cx_col('CI')  
+        tu_idx = cx_col('A')   
+        phi_idx = cx_col('C')  
+        id_idx = cx_col('G')   
+        zone_idx = cx_col('AR')
+        diag_idx = cx_col('CJ')
+        init_idx = cx_col('CK')
+        out_idx = cx_col('CL') 
         
-        all_eids = set(list(old_pend.keys()) + list(new_pend.keys()))
-        comp_rows = []
-        for eid in all_eids:
-            po = old_pend.get(eid, [])
-            pn = new_pend.get(eid, [])
-            row = {'Episode ID': eid}
-            has_act = False
-            for p_name in periods_map.keys():
-                in_old = p_name in po
-                in_new = p_name in pn
-                if in_old and in_new: row[p_name] = "🟡 PERSISTENT"; has_act = True
-                elif not in_old and in_new: row[p_name] = "🔴 NEW"; has_act = True
-                elif in_old and not in_new: row[p_name] = "🟢 RESOLVED"; has_act = True
-                else: row[p_name] = ""
+        # 🎯 4 New Filter Columns mapping
+        hf_idx = cx_col('B')   
+        case_idx = cx_col('Z') 
+        site_idx = cx_col('AA')
+        out_col_idx = cx_col('AD') 
+
+        diff_data = []
+        for _, row in df.iterrows():
+            is_elig = False
+            for c in elig_cols:
+                val = str(row.iloc[c]).strip().upper() if c < len(row) else ""
+                if "ELIG" in val and "NOT" not in val:
+                    is_elig = True
+                    break
+                    
+            if is_elig:
+                tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip() if tu_idx < len(row) else ""
+                if "INDIA" in tu: tu = "INDIA COLONY"
+                elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
+                elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
+                elif "NOB" in tu: tu = "NOBLENAGAR"
+                elif "BEHRAM" in tu: tu = "BEHRAMPURA"
+                elif "SAIJ" in tu: tu = "SAIJPUR"
+                elif "DANI" in tu: tu = "DANILIMDA"
+                elif "AMRAI" in tu: tu = "AMRAIWADI"
+                elif "BHAI" in tu: tu = "BHAIPURA"
+                elif "GHAT" in tu: tu = "GHATLODIA"
+                elif "CHAND" in tu: tu = "CHANDKHEDA"
+                elif "VEJAL" in tu: tu = "VEJALPUR"
+                elif "ISAN" in tu: tu = "ISANPUR"
+                elif "ASAR" in tu: tu = "ASARVA"
+                elif "BAPU" in tu: tu = "BAPUNAGAR"
+                elif "VIRAT" in tu: tu = "VIRATNAGAR"
+                elif "RAKH" in tu: tu = "RAKHIAL"
+                elif "JAMAL" in tu: tu = "JAMALPUR"
+                elif "VASNA" in tu: tu = "VASNA"
+                elif "VATVA" in tu: tu = "VATVA"
+                elif "JODH" in tu: tu = "JODHPUR"
+                elif "SHAH" in tu: tu = "SHAHPUR"
+                elif "RANIP" in tu: tu = "RANIP"
+
+                phi = str(row.iloc[phi_idx]).strip().upper() if phi_idx < len(row) else ""
+                zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else "N/A"
+                if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
                 
-            if has_act:
-                r_new = df_new[df_new['Episode ID'] == eid]
-                r_old = df_old[df_old['Episode ID'] == eid]
-                base = r_new.iloc[0] if not r_new.empty else r_old.iloc[0]
-                row['ZONE'] = base.get('ZONE', '')
-                row['TB Unit'] = base.get('TB Unit', '')
-                row['PHI'] = base.get('PHI', '')
-                row['Facility Type'] = base.get('Facility_Type', '')
-                row['Diagnosis Date'] = base.get('Diagnosis Date', pd.NaT)
-                row['Initiation Date'] = base.get('Initiation Date', pd.NaT)
-                row['Outcome Date'] = base.get('Outcome Date', pd.NaT)
-                comp_rows.append(row)
+                due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
+                eid = str(row.iloc[id_idx]).strip().upper() if id_idx < len(row) else ""
                 
-        df_dc_comp = pd.DataFrame(comp_rows)
-        return df_new, df_dc_comp
+                d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
+                i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
+                o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
+                
+                hf_val = str(row.iloc[hf_idx]).strip().upper() if hf_idx < len(row) else ""
+                case_val = str(row.iloc[case_idx]).strip().upper() if case_idx < len(row) else ""
+                site_val = str(row.iloc[site_idx]).strip().upper() if site_idx < len(row) else ""
+                out_col_val = str(row.iloc[out_col_idx]).strip().upper() if out_col_idx < len(row) else ""
+
+                diff_data.append({
+                    'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val,
+                    'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
+                    'Facility_Type': hf_val, 'Type_of_Case': case_val, 
+                    'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val
+                })
+
+        df_final = pd.DataFrame(diff_data)
+        if not df_final.empty:
+            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+                df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
+        return df_final
     except Exception as e:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
-df_dc_main_raw, df_dc_comp_raw = get_live_dc()
-
-# 🎯 MERGING MASTER COMPARISON WITH DIFF CARE COMPARISON
-if not df_comp_raw.empty and not df_dc_comp_raw.empty:
-    c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer', suffixes=('', '_dc'))
-    for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-        if col + '_dc' in c_mat.columns:
-            c_mat[col] = c_mat[col].combine_first(c_mat[col + '_dc'])
-            c_mat.drop(columns=[col + '_dc'], inplace=True)
-elif not df_dc_comp_raw.empty:
-    c_mat = df_dc_comp_raw
-else:
-    c_mat = df_comp_raw
-
-if not c_mat.empty and not df_master_raw.empty:
-    names_df = df_master_raw[['Episode ID', 'Patient Name']].drop_duplicates('Episode ID')
-    if 'Patient Name' not in c_mat.columns:
-        c_mat = c_mat.merge(names_df, on='Episode ID', how='left')
-    else:
-        c_mat = c_mat.merge(names_df, on='Episode ID', how='left', suffixes=('', '_m'))
-        c_mat['Patient Name'] = c_mat['Patient Name'].combine_first(c_mat.get('Patient Name_m', pd.Series(dtype=str)))
-        c_mat.drop(columns=['Patient Name_m'], errors='ignore', inplace=True)
-
-c_mat.fillna('', inplace=True)
-df_comp_final = c_mat
+df_dc_raw = load_diff_care_live()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -332,10 +250,10 @@ def filter_by_role(df, role, target):
     return df
 
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
-df_comp = filter_by_role(df_comp_final.copy(), st.session_state.role, st.session_state.target)
+df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
 df_outcome_full = filter_by_role(df_outcome_full_raw.copy(), st.session_state.role, st.session_state.target)
-df_dc_main = filter_by_role(df_dc_main_raw.copy(), st.session_state.role, st.session_state.target)
+df_dc_main = filter_by_role(df_dc_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -365,7 +283,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success & Death Rate", "🏥 Diff. Care"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -425,7 +343,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (DIFF CARE MERGED!)
+# 🟢 TAB 2: DAILY COMPARISON
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -492,7 +410,7 @@ with tab2:
         st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
 
 # ==========================================
-# 🟢 TAB 3: CURRENT TB PATIENTS
+# 🟢 TAB 3: CURRENT PATIENTS
 # ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
@@ -507,13 +425,13 @@ with tab3:
                 s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
                 if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
         with c2:
-            available_facs3 = df_t3['Facility Type'].str.upper().unique()
+            available_facs3 = df_t3['Facility Type'].astype(str).str.upper().unique()
             fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
             s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
             if s3_ft_raw:
                 if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
-                elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+                elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
             s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
             if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
 
@@ -707,7 +625,7 @@ with tab4:
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
     df_out = df_outcome_full.copy()
-    with st.expander("🔽 Filters", expanded=True):
+    with st.expander("🔽 Filters & Parameters", expanded=True):
         c1, c2, c3 = st.columns(3)
         with c1:
             s5_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_out, 'ZONE', 'tab5'), key='z5'))
@@ -834,6 +752,7 @@ with tab6:
             for p_name, p_regex in periods.items():
                 summary[p_name] = temp_df[not_comp & due.str.contains(p_regex, na=False)].groupby(group_col).size().reindex(summary[group_col], fill_value=0).values
             
+            # Add AMC Total
             total_row = pd.DataFrame({group_col: ['AMC TOTAL'], 'TOTAL ELIGIBLE': [summary['TOTAL ELIGIBLE'].sum()]})
             for p in periods.keys(): total_row[p] = [summary[p].sum()]
             return pd.concat([summary, total_row], ignore_index=True)
