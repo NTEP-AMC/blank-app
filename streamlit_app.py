@@ -133,40 +133,50 @@ def load_all_data():
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH LOGIC (SMART MAPPING & ZONE FROM AR)
-@st.cache_data(ttl=300) 
+# 🎯 TAB 6 LIVE FETCH (100% BULLETPROOF INDEX MAPPING)
+@st.cache_data(ttl=600) 
 def load_diff_care_live():
     try:
         sheet_id = "1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU"
         gid = "1152778583"
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-        df = pd.read_csv(url, skiprows=0)
-
-        header_map = {}
-        for c in df.columns:
-            cl = str(c).upper().strip()
-            if "SPECTRUM_CURRENT_TBU" in cl: header_map['TB Unit'] = c
-            elif "SPECTRUM_CURRENT_HF" in cl and "TYPE" not in cl: header_map['PHI'] = c
-            elif "EPISODE_ID" in cl: header_map['Episode ID'] = c
-            elif "FOLLOW UP DUE" in cl: header_map['Due_Status'] = c
-            elif "DIAGNOSIS_DATE" in cl: header_map['Diagnosis Date'] = c
-            elif "INITIATION_DATE" in cl: header_map['Initiation Date'] = c
-            elif "OUTCOME DATE" in cl or "DATE_OF_TREATMENT_OUTCOME" in cl: header_map['Outcome Date'] = c
         
-        zone_col = df.columns[43] if len(df.columns) > 43 else None # Column AR (Index 43)
+        # 🎯 header=None થી પાયથોન કોલમના નામ ચેક નહિ કરે, સીધા નંબર જ જોશે!
+        df = pd.read_csv(url, header=None, low_memory=False)
+        df = df.iloc[1:].reset_index(drop=True) # પહેલી લાઈન કાઢી નાખી
+        
+        def cx_col(col_let):
+            num = 0
+            for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
+            return num - 1
 
-        elig_cols = [c for c in df.columns if str(c).upper().strip() in ['BASELINE', '1 MONTH', '2 MONTH', '3 MONTH', '4 MONTH', '5 MONTH', '6 MONTH']]
+        max_col = cx_col('DD')
+        if len(df.columns) <= max_col:
+            for i in range(len(df.columns), max_col + 1): df[i] = ""
+
+        # 🎯 સીધા જ કોલમના નંબરો વાપરીશું
+        elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
+        ci_idx = cx_col('CI')
+        tu_idx = cx_col('A')
+        phi_idx = cx_col('C')
+        id_idx = cx_col('G')
+        zone_idx = cx_col('AR')
+        diag_idx = cx_col('CJ')
+        init_idx = cx_col('CK')
+        out_idx = cx_col('CL')
 
         diff_data = []
         for _, row in df.iterrows():
             is_elig = False
             for c in elig_cols:
-                val = str(row.get(c, '')).strip().upper()
+                val = str(row.iloc[c]).strip().upper() if c < len(row) else ""
+                # એલિજિબલ ચેક
                 if "ELIG" in val and "NOT" not in val:
                     is_elig = True
                     break
+                    
             if is_elig:
-                tu = str(row.get(header_map.get('TB Unit', ''), '')).upper().replace("-", "").strip()
+                tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip() if tu_idx < len(row) else ""
                 if "INDIA" in tu: tu = "INDIA COLONY"
                 elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
                 elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
@@ -191,16 +201,16 @@ def load_diff_care_live():
                 elif "SHAH" in tu: tu = "SHAHPUR"
                 elif "RANIP" in tu: tu = "RANIP"
 
-                phi = str(row.get(header_map.get('PHI', ''), '')).strip().upper()
-                zone = str(row[zone_col]).strip().upper() if zone_col else "N/A"
+                phi = str(row.iloc[phi_idx]).strip().upper() if phi_idx < len(row) else ""
+                zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else "N/A"
                 if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
                 
-                due_val = str(row.get(header_map.get('Due_Status', ''), '')).strip().upper()
-                eid = str(row.get(header_map.get('Episode ID', ''), '')).strip().upper()
+                due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
+                eid = str(row.iloc[id_idx]).strip().upper() if id_idx < len(row) else ""
                 
-                d_val = str(row.get(header_map.get('Diagnosis Date', ''), '')).strip()
-                i_val = str(row.get(header_map.get('Initiation Date', ''), '')).strip()
-                o_val = str(row.get(header_map.get('Outcome Date', ''), '')).strip()
+                d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
+                i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
+                o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
 
                 diff_data.append({
                     'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Due_Status': due_val,
@@ -216,6 +226,7 @@ def load_diff_care_live():
         return pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
+
 df_dc_raw = load_diff_care_live()
 
 def filter_by_role(df, role, target):
@@ -261,11 +272,8 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success & Death Rate", "🏥 Diff. Care"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT Generator", "📊 Success & Death Rate", "🏥 Diff. Care"])
 
-# ==========================================
-# 🟢 TAB 1: MASTER DASHBOARD
-# ==========================================
 with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
@@ -320,9 +328,6 @@ with tab1:
         excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
-# ==========================================
-# 🟢 TAB 2: DAILY COMPARISON
-# ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters & Dates"):
@@ -385,9 +390,6 @@ with tab2:
         excel_data2 = convert_df_to_excel(df_c[display_cols], "Comparison_Matrix")
         st.download_button("📥 Download Formatted Excel", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
 
-# ==========================================
-# 🟢 TAB 3: CURRENT PATIENTS
-# ==========================================
 with tab3:
     st.markdown("#### 🏥 Current TB Patients")
     with st.expander("🔽 Filters"):
@@ -421,9 +423,6 @@ with tab3:
         excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
         st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
 
-# ==========================================
-# 🟢 TAB 4: PPT GENERATOR
-# ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
     
@@ -596,7 +595,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS RATE (BLANKS INCLUDED, REGIMEN 2HRZE DEFAULT)
+# 🟢 TAB 5: SUCCESS RATE & DEATH RATE
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -619,7 +618,6 @@ with tab5:
                 s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
                 if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
                 
-                # 🎯 TB Regimen: 2HRZE/4HRE ડિફોલ્ટ, જો પસંદ હોય તો Blanks પણ સાથે ખેંચશે
                 regimen_opts = get_options_with_counts(df_out, 'TB_regimen', 'tab5')
                 def_regs = [r for r in regimen_opts if "2HRZE/4HRE" in r]
                 
@@ -643,7 +641,6 @@ with tab5:
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        # 🎯 Treatment Outcome બ્લેન્ક હોય તો પણ Total Patients માં ગણાશે
         df_out['Treatment Outcome'] = df_out['Treatment Outcome'].fillna('').astype(str).str.upper().str.strip()
 
         if exclude_regimen:
@@ -717,13 +714,13 @@ with tab5:
             st.download_button("📥 Download Raw Outcome Cohort", excel_data5, "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (LIVE FETCH + DATES)
+# 🟢 TAB 6: DIFFERENTIATED CARE (THE PERFECT FETCH)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
     
     if df_dc_main.empty:
-        st.warning("⚠️ Differentiated Care નો ડેટા મળ્યો નથી. કૃપા કરીને ખાતરી કરો કે ગુગલ શીટ પબ્લિક (Anyone with link) છે.")
+        st.warning("⚠️ Differentiated Care નો ડેટા મળ્યો નથી. ગુગલ શીટની લિંક અને પરમિશન ચેક કરો.")
     else:
         with st.expander("🔽 Filters & Parameters", expanded=True):
             c1, c2, c3 = st.columns(3)
@@ -753,7 +750,6 @@ with tab6:
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
             
-            # 🎯 Pendency Logic
             due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
