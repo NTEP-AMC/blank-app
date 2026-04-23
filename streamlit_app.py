@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH (REGULAR REPORTS)
+# 🎯 DRIVE DATA FETCH (From your amazing Colab code)
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -125,16 +125,12 @@ def load_all_data():
 
         curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
-        
-        out_df = pd.read_csv("Outcome_Cohort.csv", dtype={'Episode ID': str})
-        for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-            if c in out_df.columns: out_df[c] = pd.to_datetime(out_df[c], errors='coerce') 
             
-        return m, c_mat, curr, t_df, out_df
+        return m, c_mat, curr, t_df
     except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 DIFF CARE HYBRID FETCH (TAB 6 FULL DATA + TAB 2 COMPARISON)
+# 🎯 DIFF CARE HYBRID FETCH (TAB 5 FULL DATA + TAB 2 COMPARISON)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -239,6 +235,7 @@ def get_live_dc():
 
         df_new_full = df_new.copy()
 
+        # 🎯 Hard-coded Date Filter for Comparison (Sept 1, 2025 to April 23, 2026)
         start_dt = pd.to_datetime('2025-09-01')
         end_dt = pd.to_datetime('2026-04-23')
 
@@ -308,7 +305,7 @@ def get_live_dc():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
 
-df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
 # 🎯 THE BIG MERGE: Tab 2 Master Matrix + Diff Care Comparison
@@ -328,7 +325,7 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER (નામ, ઝોન, PHI હંમેશા આગળ)
+# 🎯 FIX COLUMN ORDER
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -346,7 +343,6 @@ def filter_by_role(df, role, target):
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp_final.copy(), st.session_state.role, st.session_state.target)
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
-df_outcome_full = filter_by_role(df_outcome_full_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_main = filter_by_role(df_dc_main_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
@@ -377,7 +373,8 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "📊 Success Rate", "🏥 Diff. Care"])
+# 🎯 Success Rate Tab Removed as requested
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -718,89 +715,9 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS RATE
+# 🟢 TAB 5: DIFFERENTIATED CARE
 # ==========================================
 with tab5:
-    st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
-    df_out = df_outcome_full.copy()
-    with st.expander("🔽 Filters & Parameters", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            s5_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_out, 'ZONE', 'tab5'), key='z5'))
-            if s5_z: df_out = df_out[df_out['ZONE'].isin(s5_z)]
-            s5_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_out, 'TB Unit', 'tab5'), key='tu5'))
-            if s5_tu: df_out = df_out[df_out['TB Unit'].isin(s5_tu)]
-        with c2:
-            s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
-            if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
-            
-            if 'TB_regimen' in df_out.columns:
-                regimen_opts = get_options_with_counts(df_out, 'TB_regimen', 'tab5')
-                def_regs = [r for r in regimen_opts if "2HRZE/4HRE" in r]
-                s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
-                if s5_reg:
-                    sel_regs = clean_selection(s5_reg)
-                    if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN", "NONE"])
-                    df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
-            
-            st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
-            exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c3:
-            diag_dt5 = st.date_input("Diagnosis Date", value=[], key="d1_5")
-            init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
-            out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
-            
-    if len(diag_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt5[0], diag_dt5[1])]
-    if len(init_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Initiation Date'), errors='coerce').dt.date.between(init_dt5[0], init_dt5[1])]
-    if len(out_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Outcome Date'), errors='coerce').dt.date.between(out_dt5[0], out_dt5[1])]
-
-    if 'Treatment Outcome' in df_out.columns:
-        df_out['Treatment Outcome'] = df_out['Treatment Outcome'].fillna('').astype(str).str.upper()
-        if exclude_regimen: df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
-        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('CURED|COMPLETE', na=False)
-        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
-    else:
-        df_out['Is_Success'] = False
-        df_out['Is_Dead'] = False
-
-    def get_rate_table(df_group, group_col):
-        if df_group.empty: return pd.DataFrame()
-        grp = df_group.groupby(group_col)
-        summary = pd.DataFrame({
-            'TOTAL PATIENTS': grp.size(), 
-            'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
-            'DIED': grp['Is_Dead'].sum()
-        }).reset_index()
-        summary['SUCCESS %'] = ((summary['SUCCESSFULLY TREATED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-        summary['DEATH %'] = ((summary['DIED'] / summary['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-        
-        total_row = pd.DataFrame({group_col: ['AMC TOTAL'], 'TOTAL PATIENTS': [summary['TOTAL PATIENTS'].sum()], 'SUCCESSFULLY TREATED': [summary['SUCCESSFULLY TREATED'].sum()], 'DIED': [summary['DIED'].sum()]})
-        total_row['SUCCESS %'] = ((total_row['SUCCESSFULLY TREATED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-        total_row['DEATH %'] = ((total_row['DIED'] / total_row['TOTAL PATIENTS']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
-        return pd.concat([summary, total_row], ignore_index=True)
-
-    g_col = 'TB Unit' if st.session_state.role == "ZONE" or len(s5_z) > 0 else 'ZONE' if st.session_state.role == "ADMIN" else 'PHI'
-    
-    total_patients = len(df_out)
-    total_success = df_out['Is_Success'].sum()
-    total_death = df_out['Is_Dead'].sum()
-    overall_success_rate = round((total_success / total_patients * 100), 2) if total_patients > 0 else 0
-    overall_death_rate = round((total_death / total_patients * 100), 2) if total_patients > 0 else 0
-
-    kb1, kb2 = st.columns(2)
-    with kb1: st.markdown(draw_card("OVERALL SUCCESS RATE", f"{overall_success_rate}%", "#27AE60", "🌟"), unsafe_allow_html=True)
-    with kb2: st.markdown(draw_card("OVERALL DEATH RATE", f"{overall_death_rate}%", "#C0392B", "⚠️"), unsafe_allow_html=True)
-    st.markdown("<hr>", unsafe_allow_html=True)
-    
-    st.dataframe(get_rate_table(df_out, g_col), use_container_width=True, hide_index=True)
-    if not df_out.empty:
-        st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
-
-# ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE 
-# ==========================================
-with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
     
     if df_dc_main.empty:
