@@ -161,7 +161,6 @@ def get_live_dc():
             diag_idx = cx_col('CJ')
             init_idx = cx_col('CK')
             out_idx = cx_col('CL') 
-            
             hf_idx = cx_col('B')   
             case_idx = cx_col('Z') 
             site_idx = cx_col('AA')
@@ -232,16 +231,14 @@ def get_live_dc():
                     df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
             return df_final
 
-        # 🎯 Old & New Data Links for Diff Care
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
         
         df_new = fetch_sheet(url_new)
         df_old = fetch_sheet(url_old)
-
         df_new_full = df_new.copy()
 
-        # 🎯 કમ્પેરિઝન ફિલ્ટર (Sept 1, 2025 to April 23, 2026)
+        # Hard-coded Date Filter for Comparison (Sept 1, 2025 to April 23, 2026)
         start_dt = pd.to_datetime('2025-09-01')
         end_dt = pd.to_datetime('2026-04-23')
 
@@ -269,8 +266,7 @@ def get_live_dc():
                     continue
                 cur_p = []
                 for p_name, p_regex in periods_map.items():
-                    if re.search(p_regex, due):
-                        cur_p.append(p_name)
+                    if re.search(p_regex, due): cur_p.append(p_name)
                 pend[eid] = cur_p
             return pend
 
@@ -315,13 +311,12 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
-# 🎯 THE BIG MERGE: Drive Comparison + Diff Care Comparison
+# 🎯 THE BIG MERGE: Tab 2 Master Matrix + Diff Care Comparison
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     
     c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
-    
     for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
         if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
             c_mat[col] = c_mat[col + '_x'].combine_first(c_mat[col + '_y'])
@@ -333,8 +328,8 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 COLUMN REORDER LOGIC (દર્દીનું નામ અને ઝોન હંમેશા આગળ!)
-std_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
+# 🎯 FIX COLUMN ORDER (નામ, ઝોન, PHI હંમેશા આગળ)
+std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
 df_comp_final = c_mat[existing_std + existing_other]
@@ -399,13 +394,14 @@ with tab1:
                 s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit', 'tab1'), key='tu1'))
                 if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
         with c2:
-            available_facs = df_disp['Facility Type'].str.upper().unique()
-            fac_opts = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs)]
-            s_ft_raw = st.multiselect("Facility Category", fac_opts, key='fc1')
-            if s_ft_raw:
-                if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
-                elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])]
+            if 'Facility Type' in df_disp.columns:
+                available_facs = df_disp['Facility Type'].astype(str).str.upper().unique()
+                fac_opts = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs)]
+                s_ft_raw = st.multiselect("Facility Category", fac_opts, key='fc1')
+                if s_ft_raw:
+                    if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
+                    elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+                    elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
             s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -414,27 +410,28 @@ with tab1:
             diag_dt = st.date_input("Diagnosis Date Range", value=[], key="d1")
             init_dt = st.date_input("Initiation Date Range", value=[], key="d2")
             out_dt = st.date_input("Outcome Date Range", value=[], key="d3")
-        if len(diag_dt) == 2: df_disp = df_disp[df_disp['Diagnosis Date'].notna() & df_disp['Diagnosis Date'].dt.date.between(diag_dt[0], diag_dt[1])]
-        if len(init_dt) == 2: df_disp = df_disp[df_disp['Initiation Date'].notna() & df_disp['Initiation Date'].dt.date.between(init_dt[0], init_dt[1])]
-        if len(out_dt) == 2: df_disp = df_disp[df_disp['Outcome Date'].notna() & df_disp['Outcome Date'].dt.date.between(out_dt[0], out_dt[1])]
-        if f_rep: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
+        if len(diag_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt[0], diag_dt[1])]
+        if len(init_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Initiation Date'), errors='coerce').dt.date.between(init_dt[0], init_dt[1])]
+        if len(out_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Outcome Date'), errors='coerce').dt.date.between(out_dt[0], out_dt[1])]
+        if f_rep and 'Pending Status' in df_disp.columns: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
-    f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
-    sorted_counts = sorted(f_counts.items(), key=lambda x: x[1], reverse=True)
-    top_3, others = sorted_counts[:3], sorted_counts[3:]
-    colors = {"Outcome": "#F39C12", "UDST": "#C0392B", "Not Put On": "#27AE60", "SLPA": "#8E44AD", "Consent": "#D35400", "HIV": "#C0392B", "ART": "#2980B9", "CPT": "#2980B9", "RBS": "#16A085", "ADT": "#E67E22"}
-    
-    st.markdown("##### 📈 Top 3 Highest Pending Actions")
-    cc1, cc2, cc3, cc4 = st.columns(4)
-    with cc1: st.markdown(draw_card("Total Pendency", sum(f_counts.values()), "#1f618d", "📄"), unsafe_allow_html=True)
-    with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
-    with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
-    with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
+    if 'Pending Status' in df_disp.columns:
+        f_counts = {k: len(df_disp[df_disp['Pending Status'].str.contains(k, na=False)]) for k in inds}
+        sorted_counts = sorted(f_counts.items(), key=lambda x: x[1], reverse=True)
+        top_3, others = sorted_counts[:3], sorted_counts[3:]
+        colors = {"Outcome": "#F39C12", "UDST": "#C0392B", "Not Put On": "#27AE60", "SLPA": "#8E44AD", "Consent": "#D35400", "HIV": "#C0392B", "ART": "#2980B9", "CPT": "#2980B9", "RBS": "#16A085", "ADT": "#E67E22"}
+        
+        st.markdown("##### 📈 Top 3 Highest Pending Actions")
+        cc1, cc2, cc3, cc4 = st.columns(4)
+        with cc1: st.markdown(draw_card("Total Pendency", sum(f_counts.values()), "#1f618d", "📄"), unsafe_allow_html=True)
+        with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
+        with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
+        with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
 
-    with st.expander("🔽 Tap to show other reports"):
-        oc_cols = st.columns(4)
-        for i, (k, v) in enumerate(others):
-            with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
+        with st.expander("🔽 Tap to show other reports"):
+            oc_cols = st.columns(4)
+            for i, (k, v) in enumerate(others):
+                with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     if not df_disp.empty:
@@ -442,7 +439,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON
+# 🟢 TAB 2: DAILY COMPARISON 
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -457,13 +454,14 @@ with tab2:
                 s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
                 if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
         with c2: 
-            available_facs2 = df_c['Facility Type'].astype(str).str.upper().unique()
-            fac_opts2 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs2)]
-            s2_ft_raw = st.multiselect("Facility Category", fac_opts2, key='fc2')
-            if s2_ft_raw:
-                if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
-                elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+            if 'Facility Type' in df_c.columns:
+                available_facs2 = df_c['Facility Type'].astype(str).str.upper().unique()
+                fac_opts2 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs2)]
+                s2_ft_raw = st.multiselect("Facility Category", fac_opts2, key='fc2')
+                if s2_ft_raw:
+                    if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
+                    elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+                    elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
         with c3: 
@@ -476,9 +474,9 @@ with tab2:
         with cd2: init_dt2 = st.date_input("Initiation Date Range", value=[], key="d2_2")
         with cd3: out_dt2 = st.date_input("Outcome Date Range", value=[], key="d3_2")
 
-        if len(diag_dt2) == 2: df_c = df_c[pd.to_datetime(df_c['Diagnosis Date'], errors='coerce').notna() & pd.to_datetime(df_c['Diagnosis Date'], errors='coerce').dt.date.between(diag_dt2[0], diag_dt2[1])]
-        if len(init_dt2) == 2: df_c = df_c[pd.to_datetime(df_c['Initiation Date'], errors='coerce').notna() & pd.to_datetime(df_c['Initiation Date'], errors='coerce').dt.date.between(init_dt2[0], init_dt2[1])]
-        if len(out_dt2) == 2: df_c = df_c[pd.to_datetime(df_c['Outcome Date'], errors='coerce').notna() & pd.to_datetime(df_c['Outcome Date'], errors='coerce').dt.date.between(out_dt2[0], out_dt2[1])]
+        if len(diag_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt2[0], diag_dt2[1])]
+        if len(init_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').dt.date.between(init_dt2[0], init_dt2[1])]
+        if len(out_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').dt.date.between(out_dt2[0], out_dt2[1])]
 
     if s2_ind or s2_stat:
         mask = pd.Series(False, index=df_c.index)
@@ -524,13 +522,14 @@ with tab3:
                 s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
                 if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
         with c2:
-            available_facs3 = df_t3['Facility Type'].astype(str).str.upper().unique()
-            fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
-            s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
-            if s3_ft_raw:
-                if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
-                elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-                elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+            if 'Facility Type' in df_t3.columns:
+                available_facs3 = df_t3['Facility Type'].astype(str).str.upper().unique()
+                fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
+                s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
+                if s3_ft_raw:
+                    if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
+                    elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+                    elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
             s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
             if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
 
@@ -583,9 +582,9 @@ with tab4:
 
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
-        if len(diag) == 2: mask &= df['Diagnosis Date'].dt.date.between(diag[0], diag[1])
-        if len(init) == 2: mask &= df['Initiation Date'].dt.date.between(init[0], init[1])
-        if len(out) == 2: mask &= df['Outcome Date'].dt.date.between(out[0], out[1])
+        if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date')).dt.date.between(diag[0], diag[1])
+        if len(init) == 2: mask &= pd.to_datetime(df.get('Initiation Date')).dt.date.between(init[0], init[1])
+        if len(out) == 2: mask &= pd.to_datetime(df.get('Outcome Date')).dt.date.between(out[0], out[1])
         return mask
 
     def generate_smart_ppt(df, report_name):
@@ -597,13 +596,13 @@ with tab4:
 
         prs = Presentation()
         m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
-        m1 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
+        m1 &= df.get('Pending Status', pd.Series(dtype=str)).astype(str).str.contains(report_name, na=False)
         df_p1 = df[m1].copy()
 
         df_p2 = pd.DataFrame()
         if compare_mode:
             m2 = apply_date_filters(df, p2_diag, p2_init, p2_out)
-            m2 &= df['Pending Status'].astype(str).str.contains(report_name, na=False)
+            m2 &= df.get('Pending Status', pd.Series(dtype=str)).astype(str).str.contains(report_name, na=False)
             df_p2 = df[m2].copy()
 
         def get_bg_color(val, max_val):
@@ -672,7 +671,7 @@ with tab4:
         def get_summary(temp_df, group_col, val_name):
             if temp_df.empty: return pd.DataFrame(columns=[group_col, val_name])
             if group_col == 'PHI':
-                pub_mask = temp_df['Facility Type'].str.upper().isin(['PUBLIC', 'PHI'])
+                pub_mask = temp_df.get('Facility Type', pd.Series(dtype=str)).str.upper().isin(['PUBLIC', 'PHI'])
                 pub_sum = temp_df[pub_mask].groupby('PHI').size().reset_index(name=val_name)
                 priv_count = len(temp_df[~pub_mask])
                 if priv_count > 0:
@@ -685,20 +684,20 @@ with tab4:
             tu_curr = get_summary(df_p1, 'TB Unit', p1_name)
             tu_prev = get_summary(df_p2, 'TB Unit', p2_name) if compare_mode else pd.DataFrame()
             add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending (TU Wise)", tu_curr, tu_prev, 'TB Unit')
-            tus = sorted(pd.concat([df_p1['TB Unit'], df_p2['TB Unit'] if compare_mode else pd.Series()]).dropna().unique())
+            tus = sorted(pd.concat([df_p1.get('TB Unit', pd.Series()), df_p2.get('TB Unit', pd.Series()) if compare_mode else pd.Series()]).dropna().unique())
             for tu in tus:
-                phi_curr = get_summary(df_p1[df_p1['TB Unit'] == tu], 'PHI', p1_name)
-                phi_prev = get_summary(df_p2[df_p2['TB Unit'] == tu], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                phi_curr = get_summary(df_p1[df_p1.get('TB Unit') == tu], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2.get('TB Unit') == tu], 'PHI', p2_name) if compare_mode else pd.DataFrame()
                 add_slide_table(f"TU: {tu} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
 
         elif st.session_state.role == "ADMIN":
             z_curr = get_summary(df_p1, 'ZONE', p1_name)
             z_prev = get_summary(df_p2, 'ZONE', p2_name) if compare_mode else pd.DataFrame()
             add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
-            zones = sorted(pd.concat([df_p1['ZONE'], df_p2['ZONE'] if compare_mode else pd.Series()]).dropna().unique())
+            zones = sorted(pd.concat([df_p1.get('ZONE', pd.Series()), df_p2.get('ZONE', pd.Series()) if compare_mode else pd.Series()]).dropna().unique())
             for z in zones:
-                phi_curr = get_summary(df_p1[df_p1['ZONE'] == z], 'PHI', p1_name)
-                phi_prev = get_summary(df_p2[df_p2['ZONE'] == z], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                phi_curr = get_summary(df_p1[df_p1.get('ZONE') == z], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2.get('ZONE') == z], 'PHI', p2_name) if compare_mode else pd.DataFrame()
                 add_slide_table(f"Zone: {z} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
         else:
             phi_curr = get_summary(df_p1, 'PHI', p1_name)
@@ -735,13 +734,14 @@ with tab5:
             s5_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_out, 'PHI', 'tab5'), key='phi5'))
             if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
             
-            regimen_opts = get_options_with_counts(df_out, 'TB_regimen', 'tab5')
-            def_regs = [r for r in regimen_opts if "2HRZE/4HRE" in r]
-            s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
-            if s5_reg:
-                sel_regs = clean_selection(s5_reg)
-                if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN"])
-                df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
+            if 'TB_regimen' in df_out.columns:
+                regimen_opts = get_options_with_counts(df_out, 'TB_regimen', 'tab5')
+                def_regs = [r for r in regimen_opts if "2HRZE/4HRE" in r]
+                s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
+                if s5_reg:
+                    sel_regs = clean_selection(s5_reg)
+                    if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN", "NONE"])
+                    df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
             
             st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
             exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True)
@@ -751,15 +751,18 @@ with tab5:
             init_dt5 = st.date_input("Initiation Date", value=[], key="d2_5")
             out_dt5 = st.date_input("Outcome Date", value=[], key="d3_5")
             
-    if len(diag_dt5) == 2: df_out = df_out[df_out['Diagnosis Date'].notna() & df_out['Diagnosis Date'].dt.date.between(diag_dt5[0], diag_dt5[1])]
-    if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
-    if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
+    if len(diag_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt5[0], diag_dt5[1])]
+    if len(init_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Initiation Date'), errors='coerce').dt.date.between(init_dt5[0], init_dt5[1])]
+    if len(out_dt5) == 2: df_out = df_out[pd.to_datetime(df_out.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_out.get('Outcome Date'), errors='coerce').dt.date.between(out_dt5[0], out_dt5[1])]
 
-    df_out['Treatment Outcome'] = df_out['Treatment Outcome'].fillna('').astype(str).str.upper()
-    if exclude_regimen: df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
-
-    df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('CURED|COMPLETE', na=False)
-    df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
+    if 'Treatment Outcome' in df_out.columns:
+        df_out['Treatment Outcome'] = df_out['Treatment Outcome'].fillna('').astype(str).str.upper()
+        if exclude_regimen: df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN', na=False)]
+        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('CURED|COMPLETE', na=False)
+        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED', na=False)
+    else:
+        df_out['Is_Success'] = False
+        df_out['Is_Dead'] = False
 
     def get_rate_table(df_group, group_col):
         if df_group.empty: return pd.DataFrame()
@@ -795,7 +798,7 @@ with tab5:
         st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE 
+# 🟢 TAB 6: DIFFERENTIATED CARE (.str.upper() BUG FIXED)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -837,12 +840,13 @@ with tab6:
                 with cd2: init_dt6 = st.date_input("Initiation Date", value=[], key="d2_6")
                 with cd3: out_dt6 = st.date_input("Outcome Date", value=[], key="d3_6")
                 
-        if len(diag_dt6) == 2: df_dc = df_dc[df_dc['Diagnosis Date'].notna() & df_dc['Diagnosis Date'].dt.date.between(diag_dt6[0], diag_dt6[1])]
-        if len(init_dt6) == 2: df_dc = df_dc[df_dc['Initiation Date'].notna() & df_dc['Initiation Date'].dt.date.between(init_dt6[0], init_dt6[1])]
-        if len(out_dt6) == 2: df_dc = df_dc[df_dc['Outcome Date'].notna() & df_dc['Outcome Date'].dt.date.between(out_dt6[0], out_dt6[1])]
+        if len(diag_dt6) == 2: df_dc = df_dc[pd.to_datetime(df_dc.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_dc.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt6[0], diag_dt6[1])]
+        if len(init_dt6) == 2: df_dc = df_dc[pd.to_datetime(df_dc.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_dc.get('Initiation Date'), errors='coerce').dt.date.between(init_dt6[0], init_dt6[1])]
+        if len(out_dt6) == 2: df_dc = df_dc[pd.to_datetime(df_dc.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_dc.get('Outcome Date'), errors='coerce').dt.date.between(out_dt6[0], out_dt6[1])]
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
+            # 🎯 THE BUG FIX: .str.upper() instead of .upper()
             due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
