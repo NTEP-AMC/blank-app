@@ -110,7 +110,6 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH (REGULAR REPORTS)
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -134,7 +133,6 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 DIFF CARE HYBRID FETCH (TAB 6 FULL DATA + TAB 2 COMPARISON)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -236,9 +234,9 @@ def get_live_dc():
         
         df_new = fetch_sheet(url_new)
         df_old = fetch_sheet(url_old)
+
         df_new_full = df_new.copy()
 
-        # Hard-coded Date Filter for Comparison (Sept 1, 2025 to April 23, 2026)
         start_dt = pd.to_datetime('2025-09-01')
         end_dt = pd.to_datetime('2026-04-23')
 
@@ -311,11 +309,9 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
-# 🎯 THE BIG MERGE: Tab 2 Master Matrix + Diff Care Comparison
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
-    
     c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
     for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
         if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
@@ -328,7 +324,6 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER (નામ, ઝોન, PHI હંમેશા આગળ)
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -439,7 +434,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON 
+# 🟢 TAB 2: DAILY COMPARISON
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -582,9 +577,9 @@ with tab4:
 
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
-        if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date')).dt.date.between(diag[0], diag[1])
-        if len(init) == 2: mask &= pd.to_datetime(df.get('Initiation Date')).dt.date.between(init[0], init[1])
-        if len(out) == 2: mask &= pd.to_datetime(df.get('Outcome Date')).dt.date.between(out[0], out[1])
+        if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date'), errors='coerce').dt.date.between(diag[0], diag[1])
+        if len(init) == 2: mask &= pd.to_datetime(df.get('Initiation Date'), errors='coerce').dt.date.between(init[0], init[1])
+        if len(out) == 2: mask &= pd.to_datetime(df.get('Outcome Date'), errors='coerce').dt.date.between(out[0], out[1])
         return mask
 
     def generate_smart_ppt(df, report_name):
@@ -671,7 +666,7 @@ with tab4:
         def get_summary(temp_df, group_col, val_name):
             if temp_df.empty: return pd.DataFrame(columns=[group_col, val_name])
             if group_col == 'PHI':
-                pub_mask = temp_df.get('Facility Type', pd.Series(dtype=str)).str.upper().isin(['PUBLIC', 'PHI'])
+                pub_mask = temp_df.get('Facility Type', pd.Series(dtype=str)).astype(str).str.upper().isin(['PUBLIC', 'PHI'])
                 pub_sum = temp_df[pub_mask].groupby('PHI').size().reset_index(name=val_name)
                 priv_count = len(temp_df[~pub_mask])
                 if priv_count > 0:
@@ -798,7 +793,7 @@ with tab5:
         st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (.str.upper() BUG FIXED)
+# 🟢 TAB 6: DIFFERENTIATED CARE (WITH 4 NEW FILTERS)
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -846,8 +841,8 @@ with tab6:
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
-            # 🎯 THE BUG FIX: .str.upper() instead of .upper()
-            due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
+            # 🎯 BUG COMPLETELY FIXED (.str.upper() on string series)
+            due = temp_df.get('Due_Status', pd.Series(dtype=str)).fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
             periods = {'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH', '3RD MONTH': '3RD MONTH|3 MONTH', '4TH MONTH': '4TH MONTH|4 MONTH', '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'}
