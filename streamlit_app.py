@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH (From your amazing Colab code)
+# 🎯 DRIVE DATA FETCH 
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 DIFF CARE HYBRID FETCH (TAB 5 FULL DATA + TAB 2 COMPARISON)
+# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (WITH EXPLICIT ELIGIBILITY TRACKING)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -147,7 +147,6 @@ def get_live_dc():
             if len(df.columns) <= max_col:
                 for i in range(len(df.columns), max_col + 1): df[i] = ""
 
-            elig_cols = [cx_col(c) for c in ['CX','CY','CZ','DA','DB','DC','DD']]
             ci_idx = cx_col('CI')  
             tu_idx = cx_col('A')   
             phi_idx = cx_col('C')  
@@ -161,12 +160,28 @@ def get_live_dc():
             case_idx = cx_col('Z') 
             site_idx = cx_col('AA')
             out_col_idx = cx_col('AD') 
+            
+            # Eligibility Specific Columns
+            cx_base = cx_col('CX')
+            cy_1m = cx_col('CY')
+            cz_2m = cx_col('CZ')
+            da_3m = cx_col('DA')
+            db_4m = cx_col('DB')
+            dc_5m = cx_col('DC')
+            dd_6m = cx_col('DD')
 
             diff_data = []
             for _, row in df.iterrows():
+                elig_base = str(row.iloc[cx_base]).strip().upper() if cx_base < len(row) else ""
+                elig_1m = str(row.iloc[cy_1m]).strip().upper() if cy_1m < len(row) else ""
+                elig_2m = str(row.iloc[cz_2m]).strip().upper() if cz_2m < len(row) else ""
+                elig_3m = str(row.iloc[da_3m]).strip().upper() if da_3m < len(row) else ""
+                elig_4m = str(row.iloc[db_4m]).strip().upper() if db_4m < len(row) else ""
+                elig_5m = str(row.iloc[dc_5m]).strip().upper() if dc_5m < len(row) else ""
+                elig_6m = str(row.iloc[dd_6m]).strip().upper() if dd_6m < len(row) else ""
+
                 is_elig = False
-                for c in elig_cols:
-                    val = str(row.iloc[c]).strip().upper() if c < len(row) else ""
+                for val in [elig_base, elig_1m, elig_2m, elig_3m, elig_4m, elig_5m, elig_6m]:
                     if "ELIG" in val and "NOT" not in val:
                         is_elig = True
                         break
@@ -218,7 +233,10 @@ def get_live_dc():
                         'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Patient Name': pname,
                         'Due_Status': due_val, 'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
                         'Facility_Type': hf_val, 'Type_of_Case': case_val, 
-                        'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val
+                        'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val,
+                        # Adding specific period eligibility
+                        'Elig_BASELINE': elig_base, 'Elig_1ST_MONTH': elig_1m, 'Elig_2ND_MONTH': elig_2m,
+                        'Elig_3RD_MONTH': elig_3m, 'Elig_4TH_MONTH': elig_4m, 'Elig_5TH_MONTH': elig_5m, 'Elig_6TH_MONTH': elig_6m
                     })
 
             df_final = pd.DataFrame(diff_data)
@@ -235,7 +253,7 @@ def get_live_dc():
 
         df_new_full = df_new.copy()
 
-        # 🎯 Hard-coded Date Filter for Comparison (Sept 1, 2025 to April 23, 2026)
+        # Hard-coded Date Filter for Tab 2 Comparison
         start_dt = pd.to_datetime('2025-09-01')
         end_dt = pd.to_datetime('2026-04-23')
 
@@ -325,7 +343,7 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER
+# 🎯 FIX COLUMN ORDER FOR COMPARISON
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -373,7 +391,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-# 🎯 Success Rate Tab Removed as requested
+# 🎯 SUCCESS RATE TAB REMOVED AS REQUESTED
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care"])
 
 # ==========================================
@@ -715,7 +733,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE
+# 🟢 TAB 5: DIFFERENTIATED CARE (NEW UI & LINE LIST)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -723,7 +741,7 @@ with tab5:
     if df_dc_main.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
-        with st.expander("🔽 Filters & Dates", expanded=True):
+        with st.expander("🔽 Filters & Dates", expanded=False):
             df_dc = df_dc_main.copy()
             c1, c2, c3 = st.columns(3)
             
@@ -761,25 +779,77 @@ with tab5:
         if len(init_dt6) == 2: df_dc = df_dc[pd.to_datetime(df_dc.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_dc.get('Initiation Date'), errors='coerce').dt.date.between(init_dt6[0], init_dt6[1])]
         if len(out_dt6) == 2: df_dc = df_dc[pd.to_datetime(df_dc.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_dc.get('Outcome Date'), errors='coerce').dt.date.between(out_dt6[0], out_dt6[1])]
 
-        def get_dc_summary(temp_df, group_col):
-            if temp_df.empty: return pd.DataFrame()
-            due = temp_df.get('Due_Status', pd.Series(dtype=str)).fillna('').astype(str).str.upper()
-            not_comp = ~due.str.contains("COMPLETED", na=False)
-            summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
-            periods = {'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH', '3RD MONTH': '3RD MONTH|3 MONTH', '4TH MONTH': '4TH MONTH|4 MONTH', '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'}
-            for p_name, p_regex in periods.items():
-                summary[p_name] = temp_df[not_comp & due.str.contains(p_regex, na=False)].groupby(group_col).size().reindex(summary[group_col], fill_value=0).values
+        st.markdown("<hr>", unsafe_allow_html=True)
+        
+        # 🎯 Dynamic Period Selection (Radio Buttons)
+        periods_map = {
+            'BASELINE': ('BASELINE', 'Elig_BASELINE'),
+            '1ST MONTH': ('1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
+            '2ND MONTH': ('2ND MONTH|2 MONTH', 'Elig_2ND_MONTH'),
+            '3RD MONTH': ('3RD MONTH|3 MONTH', 'Elig_3RD_MONTH'),
+            '4TH MONTH': ('4TH MONTH|4 MONTH', 'Elig_4TH_MONTH'),
+            '5TH MONTH': ('5TH MONTH|5 MONTH', 'Elig_5TH_MONTH'),
+            '6TH MONTH': ('6TH MONTH|6 MONTH', 'Elig_6TH_MONTH')
+        }
+        
+        sel_period = st.radio("📌 Select Follow-up Period to View:", list(periods_map.keys()), horizontal=True)
+        p_regex, elig_col = periods_map[sel_period]
+        
+        g_col = 'TB Unit' if st.session_state.role == "ZONE" or (st.session_state.role == "ADMIN" and 's6_z' in locals() and len(s6_z) > 0) else 'ZONE' if st.session_state.role == "ADMIN" else 'PHI'
+        
+        # 🎯 1. Summary Table Logic
+        def get_dynamic_summary(df, group_col):
+            if df.empty: return pd.DataFrame()
+            grp = df.groupby(group_col)
+            total_pts = grp.size()
             
-            total_row = pd.DataFrame({group_col: ['AMC TOTAL'], 'TOTAL ELIGIBLE': [summary['TOTAL ELIGIBLE'].sum()]})
-            for p in periods.keys(): total_row[p] = [summary[p].sum()]
+            is_elig = df[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+            eligible_pts = df[is_elig].groupby(group_col).size()
+            
+            due = df['Due_Status'].fillna('').astype(str).str.upper()
+            not_comp = ~due.str.contains("COMPLETED", na=False)
+            is_pending = is_elig & not_comp & due.str.contains(p_regex, na=False)
+            pending_pts = df[is_pending].groupby(group_col).size()
+            
+            summary = pd.DataFrame({'Total Patient': total_pts, 'Eligible': eligible_pts, 'Pending': pending_pts}).fillna(0).astype(int)
+            summary['Completed'] = summary['Eligible'] - summary['Pending']
+            
+            total_patient = summary['Total Patient'].sum()
+            total_eligible = summary['Eligible'].sum()
+            total_completed = summary['Completed'].sum()
+            total_pending = summary['Pending'].sum()
+            total_pct = (total_completed / total_eligible * 100) if total_eligible > 0 else 0
+            
+            summary['% Completed'] = ((summary['Completed'] / summary['Eligible']) * 100).fillna(0).round(1)
+            
+            summary = summary.reset_index()
+            total_row = pd.DataFrame({group_col: ['AMC TOTAL'], 'Total Patient': [total_patient], 'Eligible': [total_eligible], 'Completed': [total_completed], 'Pending': [total_pending], '% Completed': [round(total_pct, 1)]})
+            
             return pd.concat([summary, total_row], ignore_index=True)
 
-        st.markdown("<hr>", unsafe_allow_html=True)
-        g_col = 'TB Unit' if st.session_state.role == "ZONE" or (st.session_state.role == "ADMIN" and 's6_z' in locals() and len(s6_z) > 0) else 'ZONE' if st.session_state.role == "ADMIN" else 'PHI'
-        st.markdown(f"##### 📍 {g_col} Wise Pendency")
-        st.dataframe(get_dc_summary(df_dc, g_col), use_container_width=True, hide_index=True)
-
-        if not df_dc.empty:
-            display_cols = [c for c in df_dc.columns if c not in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']]
-            excel_data6 = convert_df_to_excel(df_dc[display_cols], "Diff_Care_Raw")
-            st.download_button("📥 Download Raw Differentiated Care Data", excel_data6, "Differentiated_Care.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl6')
+        summary_df = get_dynamic_summary(df_dc, g_col)
+        
+        st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
+        # 🟢 Conditional Formatting for % Completed
+        styled_df = summary_df.style.background_gradient(subset=['% Completed'], cmap='RdYlGn', vmin=0, vmax=100).format({'% Completed': "{:.1f}%"})
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        
+        # 🎯 2. Line List Logic (Only for the Selected Period's Pending Patients)
+        st.markdown(f"##### 📋 {sel_period} Pending Line List")
+        
+        is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+        due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
+        not_comp_ll = ~due_ll.str.contains("COMPLETED", na=False)
+        is_pending_ll = is_elig_ll & not_comp_ll & due_ll.str.contains(p_regex, na=False)
+        
+        df_ll = df_dc[is_pending_ll].copy()
+        
+        if not df_ll.empty:
+            ll_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
+            df_ll_display = df_ll[ll_cols].rename(columns={'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'})
+            st.dataframe(df_ll_display, use_container_width=True, hide_index=True)
+            
+            excel_data_ll = convert_df_to_excel(df_ll_display, f"{sel_period}_Pending")
+            st.download_button(f"📥 Download {sel_period} Pending List", excel_data_ll, f"DiffCare_{sel_period}_Pending.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f'dl_ll_{sel_period}')
+        else:
+            st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
