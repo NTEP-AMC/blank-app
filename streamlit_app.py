@@ -109,11 +109,9 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🚀 1. SUPERFAST CACHE SYSTEM: ડેટા વારંવાર નહિ વાંચે!
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
-        # Vectorized parsing (સીધી આખી કોલમ જ કન્વર્ટ થશે, 10 ગણું ઝડપી!)
         m = pd.read_csv("Master_Line_List.csv")
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce', dayfirst=True)
@@ -131,7 +129,6 @@ def load_all_data():
         st.error("⚠️ ડેટા ઉપલબ્ધ નથી...")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🚀 2. ફાસ્ટ મેમરીમાંથી ડેટા લોડ કરો 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 
 def filter_by_role(df, role, target):
@@ -484,6 +481,9 @@ with tab4:
                 st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
             else: st.error(status)
 
+# ==========================================
+# 🟢 TAB 5: SUCCESS & DEATH RATE (BUG FIXED)
+# ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
     
@@ -506,7 +506,8 @@ with tab5:
                 if s5_phi: df_out = df_out[df_out['PHI'].isin(s5_phi)]
                 
                 st.markdown("<div style='margin-top: 25px;'>", unsafe_allow_html=True)
-                exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True, help="કુલ દર્દીઓમાંથી આ આંકડો બાદ થશે")
+                # 🎯 BUG FIX: ચેકબોક્સ માટે નવું લોજીક
+                exclude_regimen = st.checkbox("✅ Exclude 'TREATMENT REGIMEN CHANGED'", value=True, help="કુલ Outcome આપેલ દર્દીઓમાંથી આ દર્દીઓ બાદ થશે")
                 st.markdown("</div>", unsafe_allow_html=True)
 
             with c3:
@@ -518,38 +519,59 @@ with tab5:
         if len(init_dt5) == 2: df_out = df_out[df_out['Initiation Date'].notna() & df_out['Initiation Date'].dt.date.between(init_dt5[0], init_dt5[1])]
         if len(out_dt5) == 2: df_out = df_out[df_out['Outcome Date'].notna() & df_out['Outcome Date'].dt.date.between(out_dt5[0], out_dt5[1])]
 
-        df_out = df_out[df_out['Treatment Outcome'].notna() & (df_out['Treatment Outcome'] != '') & (df_out['Treatment Outcome'] != 'N/A')]
+        # 🎯 1. આઉટકમ વાળા અને વગરના દર્દીઓ અલગ પાડો
+        outcomes = df_out['Treatment Outcome'].fillna('').str.upper().str.strip()
+
+        df_out['Is_On_Treatment'] = outcomes.isin(['', 'N/A', 'NAN', 'NONE', '<NA>'])
+        df_out['Is_Outcome_Given'] = ~df_out['Is_On_Treatment']
         
-        if exclude_regimen:
-            df_out = df_out[~df_out['Treatment Outcome'].str.contains('REGIMEN CHANGED', na=False)]
-
-        df_out['Is_Success'] = df_out['Treatment Outcome'].str.contains('COMPLETE|CURED', na=False)
-        df_out['Is_Dead'] = df_out['Treatment Outcome'].str.contains('DIED|DEATH', na=False)
-
-        total_patients = len(df_out)
-        total_success = df_out['Is_Success'].sum()
-        total_death = df_out['Is_Dead'].sum()
+        df_out['Is_Success'] = outcomes.str.contains('COMPLETE|CURED', na=False)
+        df_out['Is_Dead'] = outcomes.str.contains('DIED|DEATH', na=False)
         
-        overall_success_rate = round((total_success / total_patients * 100), 2) if total_patients > 0 else 0
-        overall_death_rate = round((total_death / total_patients * 100), 2) if total_patients > 0 else 0
-
-        kb1, kb2 = st.columns(2)
-        with kb1: st.markdown(draw_card("Overall Success Rate", f"{overall_success_rate}%", "#27AE60", "🌟"), unsafe_allow_html=True)
-        with kb2: st.markdown(draw_card("Overall Death Rate", f"{overall_death_rate}%", "#C0392B", "⚠️"), unsafe_allow_html=True)
+        # 🎯 BULLETPROOF REGIMEN LOGIC
+        df_out['Is_Regimen_Changed'] = outcomes.str.contains('REGIMEN', na=False)
 
         def get_rate_table(df_group, group_col):
             if df_group.empty: return pd.DataFrame()
             grp = df_group.groupby(group_col)
+
             summary = pd.DataFrame({
-                'Total Outcome Given': grp.size(),
-                'Successful Outcomes': grp['Is_Success'].sum(),
-                'Deaths': grp['Is_Dead'].sum()
+                'TOTAL PATIENTS (Outcome Given)': grp['Is_Outcome_Given'].sum(),
+                'SUCCESSFULLY TREATED': grp['Is_Success'].sum(),
+                'DIED': grp['Is_Dead'].sum(),
+                'ON TREATMENT': grp['Is_On_Treatment'].sum(),
+                'REGIMEN CHANGED': grp['Is_Regimen_Changed'].sum()
             }).reset_index()
-            
-            summary['Success Rate (%)'] = (summary['Successful Outcomes'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
-            summary['Death Rate (%)'] = (summary['Deaths'] / summary['Total Outcome Given'] * 100).round(2).astype(str) + '%'
-            
-            return summary[[group_col, 'Total Outcome Given', 'Success Rate (%)', 'Death Rate (%)']].sort_values(by='Total Outcome Given', ascending=False)
+
+            # 🎯 2. ડિનોમિનેટર (Total) નું નવું ગણિત!
+            if exclude_regimen:
+                summary['Denominator'] = summary['TOTAL PATIENTS (Outcome Given)'] - summary['REGIMEN CHANGED']
+            else:
+                summary['Denominator'] = summary['TOTAL PATIENTS (Outcome Given)']
+
+            # ઝીરો વડે ભાગાકાર ન થાય એનું ધ્યાન 
+            summary['Denominator'] = summary['Denominator'].replace(0, pd.NA)
+
+            summary['SUCCESS RATE (%)'] = ((summary['SUCCESSFULLY TREATED'] / summary['Denominator']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+            summary['DEATH RATE (%)'] = ((summary['DIED'] / summary['Denominator']) * 100).fillna(0).round(0).astype(int).astype(str) + '%'
+
+            final_cols = [group_col, 'TOTAL PATIENTS (Outcome Given)', 'SUCCESSFULLY TREATED', 'SUCCESS RATE (%)', 'DIED', 'DEATH RATE (%)', 'ON TREATMENT']
+            return summary[final_cols].sort_values(by='TOTAL PATIENTS (Outcome Given)', ascending=False)
+
+        # 🎯 Overall KPIs 
+        total_outcome_given = df_out['Is_Outcome_Given'].sum()
+        total_regimen = df_out['Is_Regimen_Changed'].sum()
+        denominator = (total_outcome_given - total_regimen) if exclude_regimen else total_outcome_given
+
+        total_success = df_out['Is_Success'].sum()
+        total_death = df_out['Is_Dead'].sum()
+
+        overall_success_rate = round((total_success / denominator * 100), 2) if denominator > 0 else 0
+        overall_death_rate = round((total_death / denominator * 100), 2) if denominator > 0 else 0
+
+        kb1, kb2 = st.columns(2)
+        with kb1: st.markdown(draw_card("Overall Success Rate", f"{overall_success_rate}%", "#27AE60", "🌟"), unsafe_allow_html=True)
+        with kb2: st.markdown(draw_card("Overall Death Rate", f"{overall_death_rate}%", "#C0392B", "⚠️"), unsafe_allow_html=True)
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
