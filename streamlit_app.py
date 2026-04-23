@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DATA LOAD
+# 🎯 DRIVE DATA FETCH (REGULAR REPORTS)
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -134,7 +134,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH (HYBRID ARCHITECTURE: OLD & NEW)
+# 🎯 DIFF CARE HYBRID FETCH (TAB 6 FULL DATA + TAB 2 COMPARISON)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -226,17 +226,33 @@ def get_live_dc():
                         'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val
                     })
 
-            df_final = pd.DataFrame(diff_data)
-            if not df_final.empty:
-                for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                    df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
-            return df_final
+            return pd.DataFrame(diff_data)
 
+        # 🎯 Old & New Data Links for Diff Care
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
         
         df_new = fetch_sheet(url_new)
+        
+        # TAB 6 માટે આખો ડેટા તૈયાર કરો (કોઈ ફિલ્ટર વિના)
+        df_new_full = df_new.copy()
+        if not df_new_full.empty:
+            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
+                df_new_full[c] = pd.to_datetime(df_new_full[c], errors='coerce')
+                
+        # TAB 2 કમ્પેરિઝન માટે જૂનો ડેટા ખેંચો
         df_old = fetch_sheet(url_old)
+
+        # 🎯 હાર્ડકોડેડ ડેટ ફિલ્ટર માત્ર કમ્પેરિઝન માટે (Sept 1, 2025 to April 23, 2026)
+        start_dt = pd.to_datetime('2025-09-01')
+        end_dt = pd.to_datetime('2026-04-23')
+
+        if not df_new.empty:
+            df_new['Diagnosis Date'] = pd.to_datetime(df_new['Diagnosis Date'], errors='coerce')
+            df_new = df_new[(df_new['Diagnosis Date'] >= start_dt) & (df_new['Diagnosis Date'] <= end_dt)]
+        if not df_old.empty:
+            df_old['Diagnosis Date'] = pd.to_datetime(df_old['Diagnosis Date'], errors='coerce')
+            df_old = df_old[(df_old['Diagnosis Date'] >= start_dt) & (df_old['Diagnosis Date'] <= end_dt)]
 
         periods_map = {
             'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH',
@@ -294,14 +310,14 @@ def get_live_dc():
                 comp_rows.append(row)
                 
         df_dc_comp = pd.DataFrame(comp_rows)
-        return df_new, df_dc_comp
+        return df_new_full, df_dc_comp
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_outcome_full_raw = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
-# 🎯 THE BIG MERGE: Drive Comparison + Google Sheet Diff Care Comparison
+# 🎯 THE BIG MERGE: Drive Comparison + Diff Care Comparison
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
@@ -319,8 +335,8 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER FOR COMPARISON MATRIX (Demographic columns always on the left!)
-front_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type']
+# 🎯 COLUMN REORDER LOGIC (દર્દીનું નામ અને ઝોન હંમેશા આગળ!)
+front_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type']
 dates_cols = ['Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_front = [c for c in front_cols if c in c_mat.columns]
 existing_dates = [c for c in dates_cols if c in c_mat.columns]
@@ -430,7 +446,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (DIFF CARE MERGED AND REORDERED!)
+# 🟢 TAB 2: DAILY COMPARISON 
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -691,7 +707,7 @@ with tab4:
         else:
             phi_curr = get_summary(df_p1, 'PHI', p1_name)
             phi_prev = get_summary(df_p2, 'PHI', p2_name) if compare_mode else pd.DataFrame()
-            add_slide_table(f"{st.session_state.target} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+            add_slide_table(f"{st.session_state.target} - {sel_report} Pending", phi_curr, prev_df, 'PHI')
 
         out_io = io.BytesIO()
         prs.save(out_io)
@@ -707,7 +723,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: SUCCESS RATE 
+# 🟢 TAB 5: SUCCESS RATE
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>📊 Success Rate & Death Rate (Epidemiological KPIs)</h3>", unsafe_allow_html=True)
@@ -728,7 +744,7 @@ with tab5:
             s5_reg = st.multiselect("TB Regimen", regimen_opts, default=def_regs, key='reg5')
             if s5_reg:
                 sel_regs = clean_selection(s5_reg)
-                if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN"])
+                if any("2HRZE/4HRE" in r for r in sel_regs): sel_regs.extend(["N/A", "", "NAN", "NONE"])
                 df_out = df_out[df_out['TB_regimen'].fillna("N/A").isin(sel_regs)]
             
             st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
@@ -783,7 +799,7 @@ with tab5:
         st.download_button("📥 Download Raw Outcome Cohort", convert_df_to_excel(df_out, "Outcome_Cohort"), "Outcome_Cohort.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl5')
 
 # ==========================================
-# 🟢 TAB 6: DIFFERENTIATED CARE (BUG FIXED: .str.upper())
+# 🟢 TAB 6: DIFFERENTIATED CARE 
 # ==========================================
 with tab6:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -831,7 +847,6 @@ with tab6:
 
         def get_dc_summary(temp_df, group_col):
             if temp_df.empty: return pd.DataFrame()
-            # 🎯 THE BUG FIX: .str.upper() instead of .upper()
             due = temp_df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             summary = temp_df.groupby(group_col).size().reset_index(name='TOTAL ELIGIBLE')
