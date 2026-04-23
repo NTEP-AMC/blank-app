@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE
+# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (TAB 5 & 2)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -161,7 +161,6 @@ def get_live_dc():
             site_idx = cx_col('AA')
             out_col_idx = cx_col('AD') 
             
-            # Eligibility Specific Columns
             cx_base = cx_col('CX')
             cy_1m = cx_col('CY')
             cz_2m = cx_col('CZ')
@@ -325,11 +324,10 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_main_raw, df_dc_comp_raw = get_live_dc()
 
-# 🎯 THE BIG MERGE: Tab 2 Master Matrix + Diff Care Comparison
+# 🎯 Tab 2 Master Matrix + Diff Care Comparison Merge
 if not df_comp_raw.empty and not df_dc_comp_raw.empty:
     df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
     df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
-    
     c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
     for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
         if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
@@ -342,7 +340,7 @@ else:
 
 c_mat.fillna('', inplace=True)
 
-# 🎯 FIX COLUMN ORDER
+# 🎯 COLUMN ORDER
 std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
 existing_std = [c for c in std_cols if c in c_mat.columns]
 existing_other = [c for c in c_mat.columns if c not in existing_std]
@@ -390,7 +388,7 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-# 🎯 SUCCESS RATE TAB REMOVED AS REQUESTED
+# 🎯 Tabs Setup
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care"])
 
 # ==========================================
@@ -661,6 +659,7 @@ with tab4:
                 cell.text = c_name
                 cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
             target_idx = col_names.index(color_target)
             max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
@@ -732,7 +731,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (NEW UI WITH NO MATPLOTLIB ERROR)
+# 🟢 TAB 5: DIFFERENTIATED CARE (NO MATPLOTLIB ERROR)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
@@ -780,7 +779,7 @@ with tab5:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # 🎯 Dynamic Period Selection (Radio Buttons)
+        # 🎯 Dynamic Period Selection
         periods_map = {
             'BASELINE': ('BASELINE', 'Elig_BASELINE'),
             '1ST MONTH': ('1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
@@ -829,11 +828,12 @@ with tab5:
         summary_df = get_dynamic_summary(df_dc, g_col)
         
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
-        # 🟢 FIX: Removed matplotlib dependency. Formatted normally with simple text.
-        summary_df['% Completed'] = summary_df['% Completed'].apply(lambda x: f"{x:.1f}%")
+        
+        # 🟢 100% MATPLOTLIB FREE: Simple String Formatting
+        summary_df['% Completed'] = summary_df['% Completed'].astype(float).round(1).astype(str) + '%'
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
         
-        # 🎯 2. Line List Logic (Only for the Selected Period's Pending Patients)
+        # 🎯 2. Line List Logic
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         
         is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
