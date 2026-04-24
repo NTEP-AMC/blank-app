@@ -739,7 +739,7 @@ with tab4:
             fac_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0"
             df_fac = pd.read_csv(fac_url, header=None)
             
-            # 🎯 DYNAMIC HEADER FINDER (Fixes the Row 2 issue)
+            # 🎯 DYNAMIC HEADER FINDER
             h_idx2 = 0
             for i in range(4):
                 if any(td in df_fac.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
@@ -850,7 +850,24 @@ with tab4:
 
         except Exception as e:
             return None, f"⚠️ Error: {str(e)}"
-                    st.error(t_status)# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
+
+    if btn_generate_target:
+        if len(target_dates) != 2:
+            st.error("⚠️ Please select both a Start Date and End Date.")
+        else:
+            with st.spinner("Fetching Live Sheet Data and generating Corporate Deck..."):
+                target_ppt_bytes, t_status = generate_corporate_target_ppt(target_dates, working_days)
+                if target_ppt_bytes:
+                    st.success("✅ Corporate Presentation Deck Ready!")
+                    st.download_button(
+                        label="📥 Download Corporate_Deck.pptx", 
+                        data=target_ppt_bytes, 
+                        file_name="Corporate_Performance_Deck.pptx", 
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key="dl_target_ppt"
+                    )
+                else:
+                    st.error(t_status)                    st.error(t_status)# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
