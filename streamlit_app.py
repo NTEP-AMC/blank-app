@@ -268,6 +268,8 @@ def filter_by_role(df, role, target):
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) 
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
+
+# 🎯 Filter Old and New Diff Care Sheets based on Role
 df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
 
@@ -640,16 +642,16 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE
+# 🟢 TAB 5: DIFFERENTIATED CARE (NAME ERROR FIXED)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
     
-    if df_dc_main.empty:
+    if df_dc_new.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
         with st.expander("🔽 Filters & Dates (Applies to Current Status)", expanded=False):
-            df_dc = df_dc_main.copy()
+            df_dc = df_dc_new.copy()
             c1, c2, c3 = st.columns(3)
             
             with c1:
@@ -755,7 +757,6 @@ with tab5:
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
         st.markdown("Select filters and a Diagnosis Date range to compare Old and New Differentiated Care records.")
         
-        # 🎯 New Filters explicitly for Comparison Engine
         cc1, cc2, cc3 = st.columns(3)
         with cc1:
             comp_zones = st.multiselect("Filter Zone (Comparison)", sorted([x for x in df_dc_new['ZONE'].unique() if pd.notna(x) and x!=""]), key='dc_comp_zone')
@@ -774,7 +775,6 @@ with tab5:
                     df_new_comp = df_dc_new.copy()
                     df_old_comp = df_dc_old.copy()
                     
-                    # 🎯 Apply Zone and Facility Filters
                     if comp_zones:
                         df_new_comp = df_new_comp[df_new_comp['ZONE'].isin(comp_zones)]
                         df_old_comp = df_old_comp[df_old_comp['ZONE'].isin(comp_zones)]
@@ -782,7 +782,6 @@ with tab5:
                         df_new_comp = df_new_comp[df_new_comp['Facility_Type'].isin(comp_facs)]
                         df_old_comp = df_old_comp[df_old_comp['Facility_Type'].isin(comp_facs)]
                     
-                    # 🎯 DATE BUG FIXED HERE: Exact Date Boundary Matching (.dt.date)
                     s_date, e_date = comp_dates[0], comp_dates[1]
                     
                     df_new_comp = df_new_comp[pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(s_date, e_date)]
