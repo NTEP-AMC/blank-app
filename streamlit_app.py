@@ -110,83 +110,69 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH 
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
         m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
-            
         c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
-
         curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
-            
         return m, c_mat, curr, t_df
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
         def fetch_sheet(url):
             df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
-            df = df.iloc[1:].reset_index(drop=True) 
-
+            header_row = 0
+            for i in range(min(5, len(df))):
+                row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
+                if "EPISODE" in row_str and "NAME" in row_str:
+                    header_row = i; break
+            header_vals = df.iloc[header_row].fillna("").astype(str).str.upper()
+            df = df.iloc[header_row+1:].reset_index(drop=True)
+            
             def cx_col(col_let):
                 num = 0
                 for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
                 return num - 1
 
-            max_col = cx_col('DD')
-            if len(df.columns) <= max_col:
-                for i in range(len(df.columns), max_col + 1): df[i] = ""
+            tu_idx, phi_idx, id_idx, name_idx, zone_idx = cx_col('A'), cx_col('C'), cx_col('G'), cx_col('H'), cx_col('AR')
+            diag_idx, init_idx, out_idx = cx_col('CJ'), cx_col('CK'), cx_col('CL')
+            hf_idx, case_idx, site_idx, out_col_idx = cx_col('B'), cx_col('Z'), cx_col('AA'), cx_col('AD')
+            ci_idx = cx_col('CI') 
+            cx_base, cy_1m, cz_2m, da_3m, db_4m, dc_5m, dd_6m = cx_col('CX'), cx_col('CY'), cx_col('CZ'), cx_col('DA'), cx_col('DB'), cx_col('DC'), cx_col('DD')
 
-            ci_idx = cx_col('CI')  
-            tu_idx = cx_col('A')   
-            phi_idx = cx_col('C')  
-            id_idx = cx_col('G')   
-            name_idx = cx_col('H') 
-            zone_idx = cx_col('AR')
-            diag_idx = cx_col('CJ')
-            init_idx = cx_col('CK')
-            out_idx = cx_col('CL') 
-            hf_idx = cx_col('B')   
-            case_idx = cx_col('Z') 
-            site_idx = cx_col('AA')
-            out_col_idx = cx_col('AD') 
-            
-            cx_base = cx_col('CX')
-            cy_1m = cx_col('CY')
-            cz_2m = cx_col('CZ')
-            da_3m = cx_col('DA')
-            db_4m = cx_col('DB')
-            dc_5m = cx_col('DC')
-            dd_6m = cx_col('DD')
+            for i, val in enumerate(header_vals):
+                val_c = val.strip()
+                if "EPISODE" in val_c and "ID" in val_c: id_idx = i
+                elif "PATIENT" in val_c and "NAME" in val_c: name_idx = i
+                elif "DUE" in val_c and "STATUS" in val_c: ci_idx = i
+                elif "DIAGNOSIS" in val_c and "DATE" in val_c: diag_idx = i
+                elif "INITIATION" in val_c and "DATE" in val_c: init_idx = i
+                elif "OUTCOME" in val_c and "DATE" in val_c: out_idx = i
+                elif val_c == "ZONE": zone_idx = i
+                elif "ELIGIBILITY" in val_c and "BASE" in val_c: cx_base = i
+                elif "ELIGIBILITY" in val_c and "1" in val_c: cy_1m = i
+                elif "ELIGIBILITY" in val_c and "2" in val_c: cz_2m = i
+                elif "ELIGIBILITY" in val_c and "3" in val_c: da_3m = i
+                elif "ELIGIBILITY" in val_c and "4" in val_c: db_4m = i
+                elif "ELIGIBILITY" in val_c and "5" in val_c: dc_5m = i
+                elif "ELIGIBILITY" in val_c and "6" in val_c: dd_6m = i
 
             diff_data = []
             for _, row in df.iterrows():
-                elig_base = str(row.iloc[cx_base]).strip().upper() if cx_base < len(row) else ""
-                elig_1m = str(row.iloc[cy_1m]).strip().upper() if cy_1m < len(row) else ""
-                elig_2m = str(row.iloc[cz_2m]).strip().upper() if cz_2m < len(row) else ""
-                elig_3m = str(row.iloc[da_3m]).strip().upper() if da_3m < len(row) else ""
-                elig_4m = str(row.iloc[db_4m]).strip().upper() if db_4m < len(row) else ""
-                elig_5m = str(row.iloc[dc_5m]).strip().upper() if dc_5m < len(row) else ""
-                elig_6m = str(row.iloc[dd_6m]).strip().upper() if dd_6m < len(row) else ""
-
-                is_elig = False
-                for val in [elig_base, elig_1m, elig_2m, elig_3m, elig_4m, elig_5m, elig_6m]:
-                    if "ELIG" in val and "NOT" not in val:
-                        is_elig = True
-                        break
-                        
+                def get_v(idx): return str(row.iloc[idx]).strip().upper() if idx < len(row) else ""
+                elig_base, elig_1m, elig_2m, elig_3m, elig_4m, elig_5m, elig_6m = get_v(cx_base), get_v(cy_1m), get_v(cz_2m), get_v(da_3m), get_v(db_4m), get_v(dc_5m), get_v(dd_6m)
+                is_elig = any("ELIG" in v and "NOT" not in v for v in [elig_base, elig_1m, elig_2m, elig_3m, elig_4m, elig_5m, elig_6m])
                 if is_elig:
-                    tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip() if tu_idx < len(row) else ""
+                    tu = get_v(tu_idx).replace("-", "")
                     if "INDIA" in tu: tu = "INDIA COLONY"
                     elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
                     elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
@@ -210,48 +196,22 @@ def get_live_dc():
                     elif "JODH" in tu: tu = "JODHPUR"
                     elif "SHAH" in tu: tu = "SHAHPUR"
                     elif "RANIP" in tu: tu = "RANIP"
-
-                    phi = str(row.iloc[phi_idx]).strip().upper() if phi_idx < len(row) else ""
-                    zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else "N/A"
+                    zone = get_v(zone_idx)
                     if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'MAPPING NOT DONE'
-                    
-                    due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
-                    eid = str(row.iloc[id_idx]).strip().upper() if id_idx < len(row) else ""
-                    pname = str(row.iloc[name_idx]).strip().upper() if name_idx < len(row) else ""
-                    
-                    d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
-                    i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
-                    o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
-                    
-                    hf_val = str(row.iloc[hf_idx]).strip().upper() if hf_idx < len(row) else ""
-                    case_val = str(row.iloc[case_idx]).strip().upper() if case_idx < len(row) else ""
-                    site_val = str(row.iloc[site_idx]).strip().upper() if site_idx < len(row) else ""
-                    out_col_val = str(row.iloc[out_col_idx]).strip().upper() if out_col_idx < len(row) else ""
-
                     diff_data.append({
-                        'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Patient Name': pname,
-                        'Due_Status': due_val, 'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
-                        'Facility_Type': hf_val, 'Type_of_Case': case_val, 
-                        'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val,
+                        'ZONE': zone, 'TB Unit': tu, 'PHI': get_v(phi_idx), 'Episode ID': get_v(id_idx), 'Patient Name': get_v(name_idx),
+                        'Due_Status': get_v(ci_idx), 'Diagnosis Date': get_v(diag_idx), 'Initiation Date': get_v(init_idx), 'Outcome Date': get_v(out_idx),
+                        'Facility_Type': get_v(hf_idx), 'Type_of_Case': get_v(case_idx), 
+                        'Site_of_TBDisease': get_v(site_idx), 'Treatment_Outcome': get_v(out_col_idx),
                         'Elig_BASELINE': elig_base, 'Elig_1ST_MONTH': elig_1m, 'Elig_2ND_MONTH': elig_2m,
                         'Elig_3RD_MONTH': elig_3m, 'Elig_4TH_MONTH': elig_4m, 'Elig_5TH_MONTH': elig_5m, 'Elig_6TH_MONTH': elig_6m
                     })
-
-            df_final = pd.DataFrame(diff_data)
-            if not df_final.empty:
-                for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                    df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
-            return df_final
+            return pd.DataFrame(diff_data)
 
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
-        
-        df_new = fetch_sheet(url_new)
-        df_old = fetch_sheet(url_old)
-
-        return df_new, df_old
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame()
+        return fetch_sheet(url_new), fetch_sheet(url_old)
+    except: return pd.DataFrame(), pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
@@ -308,15 +268,13 @@ with tab1:
     with st.expander("🔽 Filters & Sorting"):
         c1, c2, c3 = st.columns(3)
         df_disp = df_master.copy()
-        
         with c1:
             if st.session_state.role == "ADMIN":
                 s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_disp, 'ZONE', 'tab1'), key='z1'))
                 if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
-            # 🎯 DEPENDENT FILTER: TB Unit updates based on Zone
+            # 🎯 DEPENDENT FILTER: TB Unit based on Zone
             s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit', 'tab1'), key='tu1'))
             if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
-            
         with c2:
             if 'Facility Type' in df_disp.columns:
                 available_facs = df_disp['Facility Type'].astype(str).str.upper().unique()
@@ -326,21 +284,20 @@ with tab1:
                     if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                     elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 DEPENDENT FILTER: PHI updates based on TB Unit
+            # 🎯 DEPENDENT FILTER: PHI based on TB Unit
             s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
             f_rep = st.multiselect("Report Type", inds, key='rep1')
-            
         with c3:
             diag_dt = st.date_input("Diagnosis Date Range", value=[], key="d1")
             init_dt = st.date_input("Initiation Date Range", value=[], key="d2")
             out_dt = st.date_input("Outcome Date Range", value=[], key="d3")
             
-        if len(diag_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt[0], diag_dt[1])]
-        if len(init_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Initiation Date'), errors='coerce').dt.date.between(init_dt[0], init_dt[1])]
-        if len(out_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_disp.get('Outcome Date'), errors='coerce').dt.date.between(out_dt[0], out_dt[1])]
+        if len(diag_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt[0], diag_dt[1])]
+        if len(init_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Initiation Date'), errors='coerce').dt.date.between(init_dt[0], init_dt[1])]
+        if len(out_dt) == 2: df_disp = df_disp[pd.to_datetime(df_disp.get('Outcome Date'), errors='coerce').dt.date.between(out_dt[0], out_dt[1])]
         if f_rep and 'Pending Status' in df_disp.columns: df_disp = df_disp[df_disp['Pending Status'].str.contains("|".join(f_rep), na=False)]
 
     if 'Pending Status' in df_disp.columns:
@@ -348,33 +305,28 @@ with tab1:
         sorted_counts = sorted(f_counts.items(), key=lambda x: x[1], reverse=True)
         top_3, others = sorted_counts[:3], sorted_counts[3:]
         colors = {"Outcome": "#F39C12", "UDST": "#C0392B", "Not Put On": "#27AE60", "SLPA": "#8E44AD", "Consent": "#D35400", "HIV": "#C0392B", "ART": "#2980B9", "CPT": "#2980B9", "RBS": "#16A085", "ADT": "#E67E22"}
-        
         st.markdown("##### 📈 Top 3 Highest Pending Actions")
         cc1, cc2, cc3, cc4 = st.columns(4)
         with cc1: st.markdown(draw_card("Total Pendency", sum(f_counts.values()), "#1f618d", "📄"), unsafe_allow_html=True)
         with cc2: st.markdown(draw_card(top_3[0][0], top_3[0][1], colors.get(top_3[0][0], "#34495E"), "📌"), unsafe_allow_html=True)
         with cc3: st.markdown(draw_card(top_3[1][0], top_3[1][1], colors.get(top_3[1][0], "#34495E"), "📌"), unsafe_allow_html=True)
         with cc4: st.markdown(draw_card(top_3[2][0], top_3[2][1], colors.get(top_3[2][0], "#34495E"), "📌"), unsafe_allow_html=True)
-
         with st.expander("🔽 Tap to show other reports"):
             oc_cols = st.columns(4)
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
-    
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     if not df_disp.empty:
-        excel_data1 = convert_df_to_excel(df_disp, "Master_Report")
-        st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
+        st.download_button("📥 Download Master Excel", convert_df_to_excel(df_disp, "Master_Report"), "Master_Report.xlsx", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (NO DATES IN DISPLAY)
+# 🟢 TAB 2: DAILY COMPARISON (NO DATES DISPLAYED)
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters & Dates", expanded=True):
         c1, c2, c3 = st.columns(3)
         df_c = df_comp.copy()
-        
         with c1: 
             if st.session_state.role == "ADMIN":
                 s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
@@ -382,7 +334,6 @@ with tab2:
             # 🎯 DEPENDENT FILTER
             s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
             if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
-            
         with c2: 
             if 'Facility Type' in df_c.columns:
                 available_facs2 = df_c['Facility Type'].astype(str).str.upper().unique()
@@ -395,7 +346,6 @@ with tab2:
             # 🎯 DEPENDENT FILTER
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
-            
         with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
@@ -406,23 +356,20 @@ with tab2:
         with cd2: init_dt2 = st.date_input("Initiation Date Range", value=[], key="d2_2")
         with cd3: out_dt2 = st.date_input("Outcome Date Range", value=[], key="d3_2")
 
-        if len(diag_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt2[0], diag_dt2[1])]
-        if len(init_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').dt.date.between(init_dt2[0], init_dt2[1])]
-        if len(out_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').dt.date.between(out_dt2[0], out_dt2[1])]
+        if len(diag_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt2[0], diag_dt2[1])]
+        if len(init_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').dt.date.between(init_dt2[0], init_dt2[1])]
+        if len(out_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').dt.date.between(out_dt2[0], out_dt2[1])]
 
     if s2_ind or s2_stat:
         mask = pd.Series(False, index=df_c.index)
         for ind in (s2_ind if s2_ind else [c for c in df_c.columns if c not in ignore_cols]):
             if ind in df_c.columns: mask = mask | df_c[ind].isin(s2_stat if s2_stat else ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"])
         df_c = df_c[mask]
-        
+    
     ind_cols_in_df = [c for c in df_c.columns if c not in ignore_cols]
-    if ind_cols_in_df:
-        new_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum()
-        res_c = (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum()
-        per_c = (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
-    else:
-        new_c, res_c, per_c = 0, 0, 0
+    new_c = (df_c[ind_cols_in_df] == "🔴 NEW").sum().sum() if ind_cols_in_df else 0
+    res_c = (df_c[ind_cols_in_df] == "🟢 RESOLVED").sum().sum() if ind_cols_in_df else 0
+    per_c = (df_c[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum() if ind_cols_in_df else 0
     
     st.markdown("##### 📈 Daily Action Status")
     cc1, cc2, cc3, cc4 = st.columns(4)
@@ -430,16 +377,12 @@ with tab2:
     with cc2: st.markdown(draw_card("🔴 NEW", new_c, "#E74C3C", "🚨"), unsafe_allow_html=True)
     with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
-
-    # 🎯 FIX: Removing dates from Tab 2 display as requested
-    drop_cols_tab2 = ['Diagnosis Date', 'Initiation Date', 'Outcome Date']
-    display_cols_tab2 = [col for col in df_c.columns if col not in drop_cols_tab2]
     
-    st.dataframe(df_c[display_cols_tab2], use_container_width=True, hide_index=True)
-    
-    if not df_c.empty:
-        excel_data2 = convert_df_to_excel(df_c[display_cols_tab2], "Comparison_Matrix")
-        st.download_button("📥 Download Comparison Matrix", excel_data2, "Comparison_Matrix.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl2')
+    # 🎯 FIX: Removing dates from Tab 2 UI display
+    df_c_display = df_c.drop(columns=['Diagnosis Date', 'Initiation Date', 'Outcome Date'], errors='ignore')
+    st.dataframe(df_c_display, use_container_width=True, hide_index=True)
+    if not df_c_display.empty:
+        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_c_display, "Comparison_Matrix"), "Comparison.xlsx", key='dl2')
 
 # ==========================================
 # 🟢 TAB 3: CURRENT PATIENTS
@@ -449,7 +392,6 @@ with tab3:
     with st.expander("🔽 Filters"):
         c1, c2, c3 = st.columns(3)
         df_t3 = df_curr_tb.copy()
-        
         with c1:
             if st.session_state.role == "ADMIN":
                 s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
@@ -457,7 +399,6 @@ with tab3:
             # 🎯 DEPENDENT FILTER
             s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
             if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
-            
         with c2:
             if 'Facility Type' in df_t3.columns:
                 available_facs3 = df_t3['Facility Type'].astype(str).str.upper().unique()
@@ -470,16 +411,12 @@ with tab3:
             # 🎯 DEPENDENT FILTER
             s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
             if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
-
     st.markdown("##### 📈 Patient Overview")
-    c_t3, _, _, _ = st.columns(4)
-    with c_t3: st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
-
+    st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
     t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
     st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
     if not df_t3.empty:
-        excel_data3 = convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients")
-        st.download_button("📥 Download Formatted Excel", excel_data3, "Current_Patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl3')
+        st.download_button("📥 Download Excel", convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 
 # ==========================================
 # 🟢 TAB 4: PPT GENERATOR (100% RESTORED)
@@ -656,7 +593,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (FINAL UI)
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -678,15 +615,24 @@ with tab5:
                 s6_tu = st.multiselect("TB Unit", tu_opts, key='tu6')
                 if s6_tu: df_dc = df_dc[df_dc['TB Unit'].isin(s6_tu)]
                 
-            with c2:
                 # 🎯 DEPENDENT FILTER
                 phi_opts = sorted([x for x in df_dc['PHI'].unique() if pd.notna(x) and x!=""])
                 s6_phi = st.multiselect("PHI", phi_opts, key='phi6')
                 if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
                 
+            with c2:
                 s6_hf = st.multiselect("Facility Type", sorted([x for x in df_dc['Facility_Type'].unique() if pd.notna(x) and x!=""]), key='hf6')
                 if s6_hf: df_dc = df_dc[df_dc['Facility_Type'].isin(s6_hf)]
                 
+                s6_case = st.multiselect("Type of Case", sorted([x for x in df_dc['Type_of_Case'].unique() if pd.notna(x) and x!=""]), key='case6')
+                if s6_case: df_dc = df_dc[df_dc['Type_of_Case'].isin(s6_case)]
+                
+                s6_site = st.multiselect("Site of TBDisease", sorted([x for x in df_dc['Site_of_TBDisease'].unique() if pd.notna(x) and x!=""]), key='site6')
+                if s6_site: df_dc = df_dc[df_dc['Site_of_TBDisease'].isin(s6_site)]
+                
+                s6_outcol = st.multiselect("Treatment Outcome", sorted([x for x in df_dc['Treatment_Outcome'].unique() if pd.notna(x) and x!=""]), key='outcol6')
+                if s6_outcol: df_dc = df_dc[df_dc['Treatment_Outcome'].isin(s6_outcol)]
+
             with c3:
                 diag_dt6 = st.date_input("Diagnosis Date Range", value=[], key="d1_6")
                 init_dt6 = st.date_input("Initiation Date Range", value=[], key="d2_6")
@@ -747,7 +693,7 @@ with tab5:
         
         main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
         
-        # 🎯 7 MINI BOXES (With Dynamic Colors: >=75 Green, 50-74 Yellow, <50 Red)
+        # 🎯 7 MINI BOXES (With Dynamic Colors: >=75 Green, 50-74.9 Yellow, <50 Red)
         if st.session_state.role == "ADMIN" and ('s6_z' not in locals() or len(s6_z) == 0):
             st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
             cols7 = st.columns(7)
@@ -765,27 +711,28 @@ with tab5:
 
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        # 🎯 TARGETED COLORING ON TABLE (Only % Completed column for 7 zones)
-        def apply_row_style(row):
-            styles = [''] * len(row)
-            if row[g_col] in main_zones:
-                try:
-                    val = float(str(row['% Completed']).replace('%', ''))
-                    idx = list(row.index).index('% Completed')
-                    if val >= 75: styles[idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
-                    elif val >= 50: styles[idx] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
-                    else: styles[idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-                except: pass
-            return styles
+        # 🎯 ERROR-FREE TARGETED TABLE COLORING
+        def color_table(df):
+            style_df = pd.DataFrame('', index=df.index, columns=df.columns)
+            for i in df.index:
+                zone_val = df.at[i, g_col]
+                if zone_val in main_zones:
+                    try:
+                        val_str = str(df.at[i, '% Completed']).replace('%', '')
+                        val = float(val_str)
+                        if val >= 75:
+                            style_df.at[i, '% Completed'] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+                        elif val >= 50:
+                            style_df.at[i, '% Completed'] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
+                        else:
+                            style_df.at[i, '% Completed'] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                    except: pass
+            return style_df
 
         sum_disp = summary_df.copy()
         sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
         
-        try:
-            styled_df = sum_disp.style.map(apply_row_style, axis=1)
-        except AttributeError:
-            styled_df = sum_disp.style.apply(apply_row_style, axis=1)
-            
+        styled_df = sum_disp.style.apply(color_table, axis=None)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
