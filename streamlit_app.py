@@ -136,57 +136,65 @@ def get_live_dc():
     try:
         def fetch_sheet(url):
             df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
-            df = df.iloc[1:].reset_index(drop=True) 
+            
+            header_row = 0
+            for i in range(min(5, len(df))):
+                row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
+                if "EPISODE" in row_str and "NAME" in row_str:
+                    header_row = i
+                    break
+                    
+            header_vals = df.iloc[header_row].fillna("").astype(str).str.upper()
+            df = df.iloc[header_row+1:].reset_index(drop=True)
 
             def cx_col(col_let):
                 num = 0
                 for c in col_let.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
                 return num - 1
 
-            max_col = cx_col('DD')
-            if len(df.columns) <= max_col:
-                for i in range(len(df.columns), max_col + 1): df[i] = ""
-
-            ci_idx = cx_col('CI')  
-            tu_idx = cx_col('A')   
-            phi_idx = cx_col('C')  
-            id_idx = cx_col('G')   
-            name_idx = cx_col('H') 
-            zone_idx = cx_col('AR')
-            diag_idx = cx_col('CJ')
-            init_idx = cx_col('CK')
-            out_idx = cx_col('CL') 
-            hf_idx = cx_col('B')   
-            case_idx = cx_col('Z') 
-            site_idx = cx_col('AA')
-            out_col_idx = cx_col('AD') 
+            tu_idx, phi_idx, id_idx, name_idx, zone_idx = cx_col('A'), cx_col('C'), cx_col('G'), cx_col('H'), cx_col('AR')
+            diag_idx, init_idx, out_idx = cx_col('CJ'), cx_col('CK'), cx_col('CL')
+            hf_idx, case_idx, site_idx, out_col_idx = cx_col('B'), cx_col('Z'), cx_col('AA'), cx_col('AD')
+            ci_idx = cx_col('CI') 
             
-            cx_base = cx_col('CX')
-            cy_1m = cx_col('CY')
-            cz_2m = cx_col('CZ')
-            da_3m = cx_col('DA')
-            db_4m = cx_col('DB')
-            dc_5m = cx_col('DC')
-            dd_6m = cx_col('DD')
+            cx_base, cy_1m, cz_2m, da_3m, db_4m, dc_5m, dd_6m = cx_col('CX'), cx_col('CY'), cx_col('CZ'), cx_col('DA'), cx_col('DB'), cx_col('DC'), cx_col('DD')
+
+            for i, val in enumerate(header_vals):
+                val_c = val.strip()
+                if "EPISODE" in val_c and "ID" in val_c: id_idx = i
+                elif "PATIENT" in val_c and "NAME" in val_c: name_idx = i
+                elif "DUE" in val_c and "STATUS" in val_c: ci_idx = i
+                elif "DIAGNOSIS" in val_c and "DATE" in val_c: diag_idx = i
+                elif "INITIATION" in val_c and "DATE" in val_c: init_idx = i
+                elif "OUTCOME" in val_c and "DATE" in val_c: out_idx = i
+                elif val_c == "ZONE": zone_idx = i
+                elif "ELIGIBILITY" in val_c and "BASE" in val_c: cx_base = i
+                elif "ELIGIBILITY" in val_c and "1" in val_c: cy_1m = i
+                elif "ELIGIBILITY" in val_c and "2" in val_c: cz_2m = i
+                elif "ELIGIBILITY" in val_c and "3" in val_c: da_3m = i
+                elif "ELIGIBILITY" in val_c and "4" in val_c: db_4m = i
+                elif "ELIGIBILITY" in val_c and "5" in val_c: dc_5m = i
+                elif "ELIGIBILITY" in val_c and "6" in val_c: dd_6m = i
 
             diff_data = []
             for _, row in df.iterrows():
-                elig_base = str(row.iloc[cx_base]).strip().upper() if cx_base < len(row) else ""
-                elig_1m = str(row.iloc[cy_1m]).strip().upper() if cy_1m < len(row) else ""
-                elig_2m = str(row.iloc[cz_2m]).strip().upper() if cz_2m < len(row) else ""
-                elig_3m = str(row.iloc[da_3m]).strip().upper() if da_3m < len(row) else ""
-                elig_4m = str(row.iloc[db_4m]).strip().upper() if db_4m < len(row) else ""
-                elig_5m = str(row.iloc[dc_5m]).strip().upper() if dc_5m < len(row) else ""
-                elig_6m = str(row.iloc[dd_6m]).strip().upper() if dd_6m < len(row) else ""
+                def get_v(idx): return str(row.iloc[idx]).strip().upper() if idx < len(row) else ""
+                
+                elig_base = get_v(cx_base)
+                elig_1m = get_v(cy_1m)
+                elig_2m = get_v(cz_2m)
+                elig_3m = get_v(da_3m)
+                elig_4m = get_v(db_4m)
+                elig_5m = get_v(dc_5m)
+                elig_6m = get_v(dd_6m)
 
                 is_elig = False
                 for val in [elig_base, elig_1m, elig_2m, elig_3m, elig_4m, elig_5m, elig_6m]:
                     if "ELIG" in val and "NOT" not in val:
-                        is_elig = True
-                        break
+                        is_elig = True; break
                         
                 if is_elig:
-                    tu = str(row.iloc[tu_idx]).upper().replace("-", "").strip() if tu_idx < len(row) else ""
+                    tu = get_v(tu_idx).replace("-", "")
                     if "INDIA" in tu: tu = "INDIA COLONY"
                     elif "NAVA" in tu and "VADAJ" in tu: tu = "NAVA VADAJ"
                     elif "JUNA" in tu and "VADAJ" in tu: tu = "JUNA VADAJ"
@@ -211,40 +219,23 @@ def get_live_dc():
                     elif "SHAH" in tu: tu = "SHAHPUR"
                     elif "RANIP" in tu: tu = "RANIP"
 
-                    phi = str(row.iloc[phi_idx]).strip().upper() if phi_idx < len(row) else ""
-                    zone = str(row.iloc[zone_idx]).strip().upper() if zone_idx < len(row) else "N/A"
+                    zone = get_v(zone_idx)
                     if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'N/A'
-                    
-                    due_val = str(row.iloc[ci_idx]).strip().upper() if ci_idx < len(row) else ""
-                    eid = str(row.iloc[id_idx]).strip().upper() if id_idx < len(row) else ""
-                    pname = str(row.iloc[name_idx]).strip().upper() if name_idx < len(row) else ""
-                    
-                    d_val = str(row.iloc[diag_idx]).strip() if diag_idx < len(row) else ""
-                    i_val = str(row.iloc[init_idx]).strip() if init_idx < len(row) else ""
-                    o_val = str(row.iloc[out_idx]).strip() if out_idx < len(row) else ""
-                    
-                    hf_val = str(row.iloc[hf_idx]).strip().upper() if hf_idx < len(row) else ""
-                    case_val = str(row.iloc[case_idx]).strip().upper() if case_idx < len(row) else ""
-                    site_val = str(row.iloc[site_idx]).strip().upper() if site_idx < len(row) else ""
-                    out_col_val = str(row.iloc[out_col_idx]).strip().upper() if out_col_idx < len(row) else ""
 
                     diff_data.append({
-                        'ZONE': zone, 'TB Unit': tu, 'PHI': phi, 'Episode ID': eid, 'Patient Name': pname,
-                        'Due_Status': due_val, 'Diagnosis Date': d_val, 'Initiation Date': i_val, 'Outcome Date': o_val,
-                        'Facility_Type': hf_val, 'Type_of_Case': case_val, 
-                        'Site_of_TBDisease': site_val, 'Treatment_Outcome': out_col_val,
+                        'ZONE': zone, 'TB Unit': tu, 'PHI': get_v(phi_idx), 'Episode ID': get_v(id_idx), 'Patient Name': get_v(name_idx),
+                        'Due_Status': get_v(ci_idx), 'Diagnosis Date': get_v(diag_idx), 'Initiation Date': get_v(init_idx), 'Outcome Date': get_v(out_idx),
+                        'Facility_Type': get_v(hf_idx), 'Type_of_Case': get_v(case_idx), 
+                        'Site_of_TBDisease': get_v(site_idx), 'Treatment_Outcome': get_v(out_col_idx),
                         'Elig_BASELINE': elig_base, 'Elig_1ST_MONTH': elig_1m, 'Elig_2ND_MONTH': elig_2m,
                         'Elig_3RD_MONTH': elig_3m, 'Elig_4TH_MONTH': elig_4m, 'Elig_5TH_MONTH': elig_5m, 'Elig_6TH_MONTH': elig_6m
                     })
 
             df_final = pd.DataFrame(diff_data)
-            if not df_final.empty:
-                for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
-                    df_final[c] = pd.to_datetime(df_final[c], errors='coerce')
             return df_final
 
-        url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
-        url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
+        url_new = "[https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583](https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583)"
+        url_old = "[https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583](https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583)"
         
         df_new = fetch_sheet(url_new)
         df_old = fetch_sheet(url_old)
@@ -268,8 +259,6 @@ def filter_by_role(df, role, target):
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
 df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) 
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
-
-# 🎯 Filter Old and New Diff Care Sheets based on Role
 df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
 
@@ -363,7 +352,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (PURE ORIGINAL)
+# 🟢 TAB 2: DAILY COMPARISON
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -642,7 +631,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (NAME ERROR FIXED)
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH COLOR CODING & COMPARISON FIX)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -732,9 +721,16 @@ with tab5:
         summary_df = get_dynamic_summary(df_dc, g_col)
         
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
-        summary_df['% Completed'] = summary_df['% Completed'].astype(float).round(1).astype(str) + '%'
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
         
+        # 🎯 COLOR FORMATTING ENABLED HERE
+        try:
+            styled_df = summary_df.style.background_gradient(subset=['% Completed'], cmap='RdYlGn', vmin=0, vmax=100).format({'% Completed': "{:.1f}%"})
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        except Exception:
+            # Fallback જો કદાચ matplotlib કામ ના કરે તો
+            summary_df['% Completed'] = summary_df['% Completed'].astype(float).round(1).astype(str) + '%'
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
         due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
@@ -751,7 +747,7 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (OLD VS NEW)
+        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (OLD VS NEW) - TYPE ERROR FIXED!
         # -------------------------------------------------------------
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
@@ -766,6 +762,9 @@ with tab5:
             comp_dates = st.date_input("Select Diagnosis Date Range", value=[], key="dc_comp_dates")
             
         run_comp = st.button("🚀 Generate Comparison Matrix", use_container_width=True)
+
+        def parse_comp_date(dt_series):
+            return pd.to_datetime(dt_series, format='%d-%m-%Y', errors='coerce').combine_first(pd.to_datetime(dt_series, errors='coerce'))
 
         if run_comp:
             if len(comp_dates) != 2:
@@ -782,10 +781,15 @@ with tab5:
                         df_new_comp = df_new_comp[df_new_comp['Facility_Type'].isin(comp_facs)]
                         df_old_comp = df_old_comp[df_old_comp['Facility_Type'].isin(comp_facs)]
                     
-                    s_date, e_date = comp_dates[0], comp_dates[1]
+                    # 🎯 ERROR FIXED HERE: Convert Python dates to Pandas Timestamps for comparison
+                    s_ts = pd.Timestamp(comp_dates[0])
+                    e_ts = pd.Timestamp(comp_dates[1])
                     
-                    df_new_comp = df_new_comp[pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(s_date, e_date)]
-                    df_old_comp = df_old_comp[pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(s_date, e_date)]
+                    new_dates = parse_comp_date(df_new_comp.get('Diagnosis Date'))
+                    old_dates = parse_comp_date(df_old_comp.get('Diagnosis Date'))
+                    
+                    df_new_comp = df_new_comp[new_dates.notna() & new_dates.between(s_ts, e_ts)]
+                    df_old_comp = df_old_comp[old_dates.notna() & old_dates.between(s_ts, e_ts)]
 
                     def get_dc_pend_dict(df):
                         pend = {}
@@ -819,6 +823,7 @@ with tab5:
                         for p_name in list(periods_map.keys()):
                             in_old = p_name in po
                             in_new = p_name in pn
+                            
                             if in_old and in_new: row[p_name] = "🟡 PERSISTENT"; has_act = True
                             elif not in_old and in_new: row[p_name] = "🔴 NEW"; has_act = True
                             elif in_old and not in_new: row[p_name] = "🟢 RESOLVED"; has_act = True
@@ -843,8 +848,8 @@ with tab5:
                         other = [c for c in df_final_comp.columns if c not in front]
                         df_final_comp = df_final_comp[front + other]
                         
-                        st.success(f"✅ Comparison Generated Successfully for {s_date.strftime('%d-%b-%Y')} to {e_date.strftime('%d-%b-%Y')}!")
+                        st.success(f"✅ Comparison Generated Successfully for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}!")
                         st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
-                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{s_date}_to_{e_date}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
+                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
-                        st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {s_date.strftime('%d-%b-%Y')} to {e_date.strftime('%d-%b-%Y')}.")
+                        st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
