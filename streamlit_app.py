@@ -239,7 +239,12 @@ def clean_selection(selected_list): return [item.rsplit(" (", 1)[0] for item in 
 def get_options_with_counts(df, column_name, tab_name="tab1"):
     if df.empty or column_name not in df.columns: return []
     try:
-        counts = df[column_name].value_counts()
+        if tab_name == "tab1" and 'Pending Status' in df.columns:
+            df_temp = df.copy()
+            df_temp['act_cnt'] = df_temp['Pending Status'].astype(str).apply(lambda x: len([s for s in x.split('+') if s.strip()]))
+            counts = df_temp.groupby(column_name)['act_cnt'].sum()
+        else:
+            counts = df[column_name].value_counts()
         counts = counts[counts > 0].sort_values(ascending=False)
         return [f"{val} ({int(count)})" for val, count in counts.items() if str(val) not in ["nan", "", "None", "N/A"]]
     except: return []
@@ -403,7 +408,7 @@ with tab3:
         st.download_button("📥 Download Excel", convert_df_to_excel(df_t3, "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 
 # ==========================================
-# 🟢 TAB 4: PPT GENERATOR (100% RESTORED)
+# 🟢 TAB 4: PPT GENERATOR
 # ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
@@ -573,7 +578,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES & TARGETED COLUMN COLORING)
+# 🟢 TAB 5: DIFFERENTIATED CARE
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -635,7 +640,7 @@ with tab5:
 
         sum_df = get_dynamic_summary(df_dc, g_col)
         
-        # 🎯 7 MINI BOXES FOR ZONES
+        # 🎯 7 MINI BOXES FOR ZONES (Color Scaled: >=75 Green, 50-74 Yellow, <50 Red)
         st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
         cols7 = st.columns(7)
         main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
@@ -645,32 +650,32 @@ with tab5:
             pct_val = 0
             if not z_row.empty: pct_val = z_row['% Completed'].values[0]
             
-            if pct_val >= 80: bg_c, t_c = "#d4edda", "#155724" # Green
-            elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" # Yellow
-            else: bg_c, t_c = "#f8d7da", "#721c24" # Red
+            if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" 
+            elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" 
+            else: bg_c, t_c = "#f8d7da", "#721c24" 
             
-            card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 8px 2px; margin-bottom: 15px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 11px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 18px; font-weight: 900; margin-top: 3px;">{pct_val}%</div></div>"""
+            card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 6px 1px; margin-bottom: 10px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 16px; font-weight: 900; margin-top: 2px;">{pct_val}%</div></div>"""
             with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
 
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        # 🎯 TARGETED COLOR FORMATTING: Only on % Completed column
-        def color_pct(val):
-            try:
-                v = float(str(val).replace('%',''))
-                if v >= 80: return 'background-color: #d4edda; color: #155724; font-weight: bold;'
-                elif v >= 50: return 'background-color: #fff3cd; color: #856404; font-weight: bold;'
-                else: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-            except: return ''
+        # 🎯 TARGETED COLUMN COLORING (Only % Completed column & only 7 zones)
+        def apply_row_style(row):
+            styles = [''] * len(row)
+            if row[g_col] in main_zones:
+                try:
+                    val = float(str(row['% Completed']).replace('%', ''))
+                    idx = list(row.index).index('% Completed')
+                    if val >= 75: styles[idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+                    elif val >= 50: styles[idx] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
+                    else: styles[idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                except: pass
+            return styles
 
         sum_disp = sum_df.copy()
         sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
         
-        try:
-            styled_df = sum_disp.style.map(color_pct, subset=['% Completed'])
-        except AttributeError:
-            styled_df = sum_disp.style.applymap(color_pct, subset=['% Completed'])
-            
+        styled_df = sum_disp.style.apply(apply_row_style, axis=1)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
@@ -681,11 +686,12 @@ with tab5:
         if not df_ll.empty:
             ll_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
             st.dataframe(df_ll[ll_cols].rename(columns={'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'}), use_container_width=True, hide_index=True)
+            st.download_button(f"📥 Download {sel_period} Pending List", convert_df_to_excel(df_ll[ll_cols], f"{sel_period}_Pending"), f"DiffCare_{sel_period}_Pending.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f'dl_ll_{sel_period}')
         else:
             st.success(f"🎉 No pending patients for {sel_period}!")
 
         # -------------------------------------------------------------
-        # 🎯 🔄 DIFF CARE COMPARISON ENGINE 
+        # 🎯 🔄 DIFF CARE COMPARISON ENGINE
         # -------------------------------------------------------------
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine</h4>", unsafe_allow_html=True)
