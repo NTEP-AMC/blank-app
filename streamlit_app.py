@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH (Master, Outcome, Regular Comparison)
+# 🎯 DRIVE DATA FETCH 
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 FETCH BOTH OLD AND NEW DIFF CARE SHEETS (No Pre-filtering)
+# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (TAB 5 & 2)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -266,9 +266,8 @@ def filter_by_role(df, role, target):
     return df
 
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
-df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) # 🎯 Tab 2 is back to pure original logic!
+df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) 
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
-
 df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
 
@@ -641,7 +640,7 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (WITH COMPARISON ENGINE)
+# 🟢 TAB 5: DIFFERENTIATED CARE
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -769,14 +768,18 @@ with tab5:
                 st.error("⚠️ Please select a valid Start and End Date for comparison.")
             else:
                 with st.spinner("Analyzing Old and New Diff Care Sheets..."):
-                    start_dt, end_dt = pd.to_datetime(comp_dates[0]), pd.to_datetime(comp_dates[1])
+                    # 🎯 ERROR FIXED HERE: Convert to Pandas Native Datetime for comparison
+                    start_dt = pd.to_datetime(comp_dates[0])
+                    end_dt = pd.to_datetime(comp_dates[1])
                     
                     df_new_comp = df_dc_new.copy()
                     df_old_comp = df_dc_old.copy()
                     
-                    # Apply date filters
-                    df_new_comp = df_new_comp[pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(start_dt.date(), end_dt.date())]
-                    df_old_comp = df_old_comp[pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(start_dt.date(), end_dt.date())]
+                    new_dates = pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce')
+                    old_dates = pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce')
+                    
+                    df_new_comp = df_new_comp[new_dates.notna() & new_dates.between(start_dt, end_dt)]
+                    df_old_comp = df_old_comp[old_dates.notna() & old_dates.between(start_dt, end_dt)]
 
                     def get_dc_pend_dict(df):
                         pend = {}
@@ -789,7 +792,7 @@ with tab5:
                                 continue
                             cur_p = []
                             for p_name, p_reg in periods_map.items():
-                                p_rx = p_reg[0] # Get regex part
+                                p_rx = p_reg[0] 
                                 if re.search(p_rx, due): cur_p.append(p_name)
                             pend[eid] = cur_p
                         return pend
@@ -830,7 +833,6 @@ with tab5:
                     df_final_comp = pd.DataFrame(dc_comp_rows)
                     
                     if not df_final_comp.empty:
-                        # Fix column order
                         front = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date']
                         other = [c for c in df_final_comp.columns if c not in front]
                         df_final_comp = df_final_comp[front + other]
