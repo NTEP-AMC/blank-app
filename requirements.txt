@@ -2,3 +2,4 @@ pandas
 pytz
 xlsxwriter
 python-pptx
+matplotlib
