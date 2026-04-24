@@ -419,7 +419,7 @@ with tab3:
         st.download_button("📥 Download Excel", convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 
 # ==========================================
-# 🟢 TAB 4: PPT GENERATOR (100% RESTORED + NEW TARGET MODULE)
+# 🟢 TAB 4: PPT GENERATOR (100% RESTORED + CORPORATE TARGET MODULE)
 # ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
@@ -490,12 +490,18 @@ with tab4:
 
         def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
             slide = prs.slides.add_slide(prs.slide_layouts[5])
-            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
-            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
+            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.7))
+            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.1), Inches(0.15), width=Inches(0.7))
+            
             title = slide.shapes.title
             title.text = title_text
-            title.text_frame.paragraphs[0].font.size = Pt(28)
+            title.top = Inches(0.25)
+            title.left = Inches(1.2)
+            title.width = Inches(7.6)
+            title.text_frame.paragraphs[0].font.size = Pt(26)
             title.text_frame.paragraphs[0].font.bold = True
+            title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
+            
             if curr_df.empty and prev_df.empty:
                 tx = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
                 tx.text_frame.text = "આ તારીખો માટે કોઈ દર્દી પેન્ડિંગ નથી."
@@ -511,7 +517,7 @@ with tab4:
 
             rows = len(final_df) + 1
             cols = len(col_names)
-            table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.5), Inches(8.4), Inches(0.4))
+            table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.3), Inches(8.4), Inches(0.4))
             table = table_shape.table
             if cols == 2:
                 table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
@@ -520,7 +526,7 @@ with tab4:
             for i, c_name in enumerate(col_names):
                 cell = table.cell(0, i)
                 cell.text = c_name
-                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
+                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
             target_idx = col_names.index(color_target)
@@ -558,7 +564,7 @@ with tab4:
         if st.session_state.role == "ZONE":
             tu_curr = get_summary(df_p1, 'TB Unit', p1_name)
             tu_prev = get_summary(df_p2, 'TB Unit', p2_name) if compare_mode else pd.DataFrame()
-            add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending (TU Wise)", tu_curr, tu_prev, 'TB Unit')
+            add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending", tu_curr, tu_prev, 'TB Unit')
             tus = sorted(pd.concat([df_p1.get('TB Unit', pd.Series()), df_p2.get('TB Unit', pd.Series()) if compare_mode else pd.Series()]).dropna().unique())
             for tu in tus:
                 phi_curr = get_summary(df_p1[df_p1.get('TB Unit') == tu], 'PHI', p1_name)
@@ -594,10 +600,10 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 NEW ADDITION: SEPARATE TARGET ACHIEVEMENT PPT GENERATOR
+    # 🎯 NEW ADDITION: MNC CORPORATE TARGET ACHIEVEMENT DECK (MULTIPLE SLIDES)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #8E44AD;'>📈 Google Sheet Cumulative Target PPT</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC)</h3>", unsafe_allow_html=True)
 
     with st.container():
         tc1, tc2, tc3 = st.columns(3)
@@ -610,116 +616,167 @@ with tab4:
         with tc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            btn_generate_target = st.button("✨ Generate Target PPT ✨", use_container_width=True)
+            btn_generate_target = st.button("✨ Generate Full Deck ✨", use_container_width=True)
 
-    def generate_target_ppt(selected_dates, w_days):
+    def generate_corporate_target_ppt(selected_dates, w_days):
         try:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             import re
             
-            # 1. Fixed Daily Targets
-            fixed_targets = {
-                "Central": 59, "North": 122, "East": 117, "South": 159, 
-                "West": 121, "North West": 77, "South West": 55, "AMC": 710
-            }
-            
-            # 2. Fetch Live Sheet Data
-            target_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835"
-            df_sheet = pd.read_csv(target_url, header=None)
-            
-            # 3. Create mapping of Dates to Columns
-            header_row = df_sheet.iloc[0].fillna("").astype(str)
-            
-            if len(selected_dates) == 2:
-                start_dt, end_dt = selected_dates[0], selected_dates[1]
-                date_list = pd.date_range(start=start_dt, end=end_dt).tolist()
-                # Ensure date format matches 'Apr 1, 2026' (no leading zero on days)
-                target_date_strings = [f"{d.strftime('%b')} {d.day}, {d.year}" for d in date_list]
-            else:
-                return None, "⚠️ Please select a start and end date."
+            # --- SETUP CORPORATE SLIDE HELPER ---
+            def add_corporate_slide(prs_obj, title_text):
+                slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
+                # Logos safely in the extreme corners
+                if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.6))
+                if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.2), Inches(0.15), width=Inches(0.6))
+                
+                title = slide.shapes.title
+                title.text = title_text
+                title.top = Inches(0.25)
+                title.left = Inches(1.0)
+                title.width = Inches(8.0)
+                title.height = Inches(0.8)
+                title.text_frame.paragraphs[0].font.size = Pt(24)
+                title.text_frame.paragraphs[0].font.bold = True
+                title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80) # Dark Navy Corporate
+                return slide
 
-            col_indices_to_sum = []
-            for idx, col_val in enumerate(header_row):
-                clean_col_val = col_val.replace("  ", " ").strip()
-                if clean_col_val in target_date_strings:
-                    col_indices_to_sum.append(idx)
-
-            if not col_indices_to_sum:
-                return None, "⚠️ Could not find the selected dates in the Google Sheet headers."
+            def format_corporate_table(table_obj, df_data, col_widths):
+                rows, cols = len(df_data) + 1, len(df_data.columns)
+                for i, width in enumerate(col_widths):
+                    table_obj.columns[i].width = width
+                
+                # Header Styling
+                for i, col_name in enumerate(df_data.columns):
+                    cell = table_obj.cell(0, i)
+                    cell.text = col_name
+                    cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80) # Dark Navy
+                    cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    cell.text_frame.paragraphs[0].font.bold = True
 
             def extract_num(val):
                 nums = re.findall(r'^(\d+)', str(val).strip())
                 return int(nums[0]) if nums else 0
 
-            # 4. Build Final Dataframe
-            results = []
-            for row_idx in range(1, len(df_sheet)):
-                zone_name = str(df_sheet.iloc[row_idx, 0]).strip().title()
-                if zone_name.upper() == "AMC": zone_name = "AMC" 
-                
-                if zone_name in fixed_targets:
-                    achieved_total = sum([extract_num(df_sheet.iloc[row_idx, c]) for c in col_indices_to_sum])
-                    target_day = fixed_targets[zone_name]
-                    month_target = target_day * w_days
-                    ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
-                    
-                    results.append({
-                        "ZONE": zone_name,
-                        "TARGET PER DAY": target_day,
-                        "APRIL MONTH TARGET": month_target,
-                        "APRIL TOTAL": achieved_total,
-                        "TOTAL ACHIEVEMENT % WISE": f"{ach_pct}%"
-                    })
-            
-            df_final = pd.DataFrame(results)
+            # DATE PARSING
+            if len(selected_dates) == 2:
+                start_dt, end_dt = selected_dates[0], selected_dates[1]
+                date_list = pd.date_range(start=start_dt, end=end_dt).tolist()
+                target_date_strings = [f"{d.strftime('%b')} {d.day}, {d.year}" for d in date_list]
+            else:
+                return None, "⚠️ Please select a start and end date."
 
-            # 5. Build Presentation Slide
             prs = Presentation()
-            slide = prs.slides.add_slide(prs.slide_layouts[5])
-            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
-            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
-            
-            title = slide.shapes.title
-            title.text = f"Cumulative Target Achievement (Working Days: {w_days})"
-            title.text_frame.paragraphs[0].font.size = Pt(28)
-            title.text_frame.paragraphs[0].font.bold = True
-            
-            rows = len(df_final) + 1
-            cols = len(df_final.columns)
-            table_shape = slide.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9.0), Inches(0.4))
-            table = table_shape.table
-            
-            table.columns[0].width = Inches(2.0)
-            table.columns[1].width = Inches(1.5)
-            table.columns[2].width = Inches(2.0)
-            table.columns[3].width = Inches(1.5)
-            table.columns[4].width = Inches(2.0)
 
-            for i, col_name in enumerate(df_final.columns):
-                cell = table.cell(0, i)
-                cell.text = col_name
-                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
-                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                cell.text_frame.paragraphs[0].font.bold = True
+            # ==========================================
+            # SLIDE 1: ZONE CUMULATIVE TARGETS (gid=972568835)
+            # ==========================================
+            fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
+            target_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835"
+            df_sheet1 = pd.read_csv(target_url, header=None)
+            header_row1 = df_sheet1.iloc[0].fillna("").astype(str)
             
-            for i, row in df_final.iterrows():
-                for j in range(cols):
-                    cell = table.cell(i+1, j)
+            col_indices1 = [idx for idx, val in enumerate(header_row1) if val.replace("  ", " ").strip() in target_date_strings]
+            
+            if not col_indices1: return None, "⚠️ Dates not found in Sheet headers."
+
+            res1 = []
+            for row_idx in range(1, len(df_sheet1)):
+                z_name = str(df_sheet1.iloc[row_idx, 0]).strip().title()
+                if z_name.upper() == "AMC": z_name = "AMC" 
+                if z_name in fixed_targets:
+                    ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
+                    t_day = fixed_targets[z_name]
+                    m_target = t_day * w_days
+                    pct = round((ach_total / m_target) * 100, 1) if m_target > 0 else 0
+                    res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": f"{pct}%"})
+            
+            df_final1 = pd.DataFrame(res1)
+            
+            s1 = add_corporate_slide(prs, f"Cumulative Target Achievement (Days: {w_days})")
+            t1_shape = s1.shapes.add_table(len(df_final1) + 1, len(df_final1.columns), Inches(0.5), Inches(1.3), Inches(9.0), Inches(0.4))
+            format_corporate_table(t1_shape.table, df_final1, [Inches(2.0), Inches(1.5), Inches(1.8), Inches(1.7), Inches(2.0)])
+            
+            for i, row in df_final1.iterrows():
+                for j in range(len(df_final1.columns)):
+                    cell = t1_shape.table.cell(i+1, j)
                     cell.text = str(row.iloc[j])
-                    
                     if row['ZONE'] == "AMC":
-                        cell.fill.solid()
-                        cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                        cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
                         cell.text_frame.paragraphs[0].font.bold = True
-                    
                     if j == 4:
                         pct_val = float(str(row.iloc[j]).replace('%', ''))
                         cell.fill.solid()
                         if pct_val >= 80: cell.fill.fore_color.rgb = RGBColor(171, 235, 198) 
                         elif pct_val >= 60: cell.fill.fore_color.rgb = RGBColor(249, 231, 159) 
                         else: cell.fill.fore_color.rgb = RGBColor(241, 148, 138) 
+
+            # ==========================================
+            # FETCH SLIDE 2 & 3 DATA: UHC / CHC ANALYSIS (gid=0)
+            # ==========================================
+            fac_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0"
+            df_fac = pd.read_csv(fac_url, header=None)
+            header_fac = df_fac.iloc[0].fillna("").astype(str)
+            col_indices_fac = [idx for idx, val in enumerate(header_fac) if val.replace("  ", " ").strip() in target_date_strings]
+
+            fac_data = []
+            for row_idx in range(1, len(df_fac)):
+                zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
+                fac_name = str(df_fac.iloc[row_idx, 1]).strip()
+                
+                # Filter out Totals and Empty rows
+                if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
+                    
+                achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
+                
+                # Classify UHC vs CHC based on Gujarati keywords
+                fac_type = "UHC"
+                if any(x in fac_name for x in ["સામુહિક", "હોસ્પિટલ", "સી.એચ.સી"]): fac_type = "CHC"
+                    
+                fac_data.append({"Zone": zone_guj, "Facility": fac_name, "Type": fac_type, "Total Achieved": achieved_total})
+                
+            df_fac_processed = pd.DataFrame(fac_data)
+
+            # ==========================================
+            # SLIDE 2: TOP 10 WORST PERFORMING UHCs
+            # ==========================================
+            if not df_fac_processed.empty:
+                df_worst_uhc = df_fac_processed[df_fac_processed["Type"] == "UHC"].sort_values("Total Achieved", ascending=True).head(10)
+                df_worst_uhc = df_worst_uhc.drop(columns=["Type"]).reset_index(drop=True)
+                
+                s2 = add_corporate_slide(prs, "📉 Bottom 10 Worst Performing UHCs")
+                t2_shape = s2.shapes.add_table(len(df_worst_uhc) + 1, len(df_worst_uhc.columns), Inches(1.0), Inches(1.3), Inches(8.0), Inches(0.4))
+                format_corporate_table(t2_shape.table, df_worst_uhc, [Inches(2.0), Inches(4.5), Inches(1.5)])
+                
+                for i, row in df_worst_uhc.iterrows():
+                    for j in range(len(df_worst_uhc.columns)):
+                        cell = t2_shape.table.cell(i+1, j)
+                        cell.text = str(row.iloc[j])
+                        # Highlight deeply poor performance (e.g., 0) in Red
+                        if j == 2 and row.iloc[j] == 0:
+                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(241, 148, 138)
+
+            # ==========================================
+            # SLIDE 3: CHC / HOSPITAL OVERALL PERFORMANCE
+            # ==========================================
+            if not df_fac_processed.empty:
+                df_chc = df_fac_processed[df_fac_processed["Type"] == "CHC"].sort_values("Total Achieved", ascending=False)
+                df_chc = df_chc.drop(columns=["Type"]).reset_index(drop=True)
+                
+                s3 = add_corporate_slide(prs, "🏥 Overall CHC & Hospital Performance")
+                # Adjust height/top if there are many CHCs
+                t3_shape = s3.shapes.add_table(len(df_chc) + 1, len(df_chc.columns), Inches(1.0), Inches(1.3), Inches(8.0), Inches(0.35))
+                format_corporate_table(t3_shape.table, df_chc, [Inches(2.0), Inches(4.5), Inches(1.5)])
+                
+                for i, row in df_chc.iterrows():
+                    for j in range(len(df_chc.columns)):
+                        cell = t3_shape.table.cell(i+1, j)
+                        cell.text = str(row.iloc[j])
+                        # Add a slight alternating row color for corporate feel
+                        if i % 2 == 0:
+                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244) # Light Grey
             
             out_io = io.BytesIO()
             prs.save(out_io)
@@ -732,20 +789,19 @@ with tab4:
         if len(target_dates) != 2:
             st.error("⚠️ Please select both a Start Date and End Date.")
         else:
-            with st.spinner("Fetching Live Google Sheet Data and generating Target PPT..."):
-                target_ppt_bytes, t_status = generate_target_ppt(target_dates, working_days)
+            with st.spinner("Fetching Live Sheet Data and generating Corporate Deck..."):
+                target_ppt_bytes, t_status = generate_corporate_target_ppt(target_dates, working_days)
                 if target_ppt_bytes:
-                    st.success("✅ Target PPT Ready!")
+                    st.success("✅ Corporate Presentation Deck Ready!")
                     st.download_button(
-                        label="📥 Download Cumulative_Target.pptx", 
+                        label="📥 Download Corporate_Deck.pptx", 
                         data=target_ppt_bytes, 
-                        file_name="Cumulative_Target.pptx", 
+                        file_name="Corporate_Performance_Deck.pptx", 
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         key="dl_target_ppt"
                     )
                 else:
-                    st.error(t_status)
-# ==========================================
+                    st.error(t_status)# ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
