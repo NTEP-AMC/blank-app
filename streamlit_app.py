@@ -628,7 +628,6 @@ with tab4:
             # --- SETUP CORPORATE SLIDE HELPER ---
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
-                # Logos safely in the extreme corners
                 if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.6))
                 if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.2), Inches(0.15), width=Inches(0.6))
                 
@@ -643,7 +642,7 @@ with tab4:
                 title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80) # Dark Navy Corporate
                 return slide
 
-            def format_corporate_table(table_obj, df_data, col_widths):
+            def format_corporate_table(table_obj, df_data, col_widths, font_size=12):
                 rows, cols = len(df_data) + 1, len(df_data.columns)
                 for i, width in enumerate(col_widths):
                     table_obj.columns[i].width = width
@@ -652,13 +651,29 @@ with tab4:
                 for i, col_name in enumerate(df_data.columns):
                     cell = table_obj.cell(0, i)
                     cell.text = col_name
-                    cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80) # Dark Navy
+                    cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                     cell.text_frame.paragraphs[0].font.bold = True
+                    cell.text_frame.paragraphs[0].font.size = Pt(12)
+                
+                # Data rows base font sizing
+                for i in range(1, rows):
+                    for j in range(cols):
+                        cell = table_obj.cell(i, j)
+                        for paragraph in cell.text_frame.paragraphs:
+                            paragraph.font.size = Pt(font_size)
 
             def extract_num(val):
                 nums = re.findall(r'^(\d+)', str(val).strip())
                 return int(nums[0]) if nums else 0
+
+            # --- MULTI-COLOR SCALE LOGIC ---
+            def get_multi_color(pct):
+                if pct >= 100: return RGBColor(46, 204, 113)    # Dark/Vibrant Green
+                elif pct >= 75: return RGBColor(171, 235, 198)  # Light Green
+                elif pct >= 50: return RGBColor(249, 231, 159)  # Yellow
+                elif pct >= 25: return RGBColor(245, 176, 65)   # Orange
+                else: return RGBColor(231, 76, 60)              # Red
 
             # DATE PARSING
             if len(selected_dates) == 2:
@@ -691,27 +706,27 @@ with tab4:
                     t_day = fixed_targets[z_name]
                     m_target = t_day * w_days
                     pct = round((ach_total / m_target) * 100, 1) if m_target > 0 else 0
-                    res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": f"{pct}%"})
+                    res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": pct})
             
             df_final1 = pd.DataFrame(res1)
+            df_display1 = df_final1.copy()
+            df_display1["ACHIEVEMENT %"] = df_display1["ACHIEVEMENT %"].astype(str) + "%"
             
             s1 = add_corporate_slide(prs, f"Cumulative Target Achievement (Days: {w_days})")
-            t1_shape = s1.shapes.add_table(len(df_final1) + 1, len(df_final1.columns), Inches(0.5), Inches(1.3), Inches(9.0), Inches(0.4))
-            format_corporate_table(t1_shape.table, df_final1, [Inches(2.0), Inches(1.5), Inches(1.8), Inches(1.7), Inches(2.0)])
+            t1_shape = s1.shapes.add_table(len(df_display1) + 1, len(df_display1.columns), Inches(0.5), Inches(1.3), Inches(9.0), Inches(0.4))
+            format_corporate_table(t1_shape.table, df_display1, [Inches(2.0), Inches(1.5), Inches(1.8), Inches(1.7), Inches(2.0)])
             
-            for i, row in df_final1.iterrows():
-                for j in range(len(df_final1.columns)):
+            for i, row in df_display1.iterrows():
+                for j in range(len(df_display1.columns)):
                     cell = t1_shape.table.cell(i+1, j)
                     cell.text = str(row.iloc[j])
                     if row['ZONE'] == "AMC":
                         cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
                         cell.text_frame.paragraphs[0].font.bold = True
                     if j == 4:
-                        pct_val = float(str(row.iloc[j]).replace('%', ''))
+                        pct_val = df_final1.iloc[i]["ACHIEVEMENT %"]
                         cell.fill.solid()
-                        if pct_val >= 80: cell.fill.fore_color.rgb = RGBColor(171, 235, 198) 
-                        elif pct_val >= 60: cell.fill.fore_color.rgb = RGBColor(249, 231, 159) 
-                        else: cell.fill.fore_color.rgb = RGBColor(241, 148, 138) 
+                        cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ==========================================
             # FETCH SLIDE 2 & 3 DATA: UHC / CHC ANALYSIS (gid=0)
@@ -726,56 +741,94 @@ with tab4:
                 zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                 fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                 
-                # Filter out Totals and Empty rows
+                # Skip Total rows and empty rows
                 if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
                     
                 achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                 
-                # Classify UHC vs CHC based on Gujarati keywords
-                fac_type = "UHC"
-                if any(x in fac_name for x in ["સામુહિક", "હોસ્પિટલ", "સી.એચ.સી"]): fac_type = "CHC"
-                    
-                fac_data.append({"Zone": zone_guj, "Facility": fac_name, "Type": fac_type, "Total Achieved": achieved_total})
+                fac_type = "OTHER"
+                target_daily = 0
+                
+                # Classify strictly based on exact names
+                if "અર્બન હેલ્થ સેન્ટર" in fac_name:
+                    fac_type = "UHC"
+                    target_daily = 4
+                elif "સામુહીક" in fac_name or "સામુહિક" in fac_name:
+                    fac_type = "CHC"
+                    target_daily = 16
+                
+                if fac_type in ["UHC", "CHC"]:
+                    month_target = target_daily * w_days
+                    ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
+                    fac_data.append({
+                        "Zone": zone_guj, 
+                        "Facility Name": fac_name, 
+                        "Type": fac_type, 
+                        "Target": month_target,
+                        "Achieved": achieved_total,
+                        "Achievement %": ach_pct
+                    })
                 
             df_fac_processed = pd.DataFrame(fac_data)
 
             # ==========================================
-            # SLIDE 2: TOP 10 WORST PERFORMING UHCs
+            # SLIDE 2: UHCs WITH < 75% ACHIEVEMENT
             # ==========================================
             if not df_fac_processed.empty:
-                df_worst_uhc = df_fac_processed[df_fac_processed["Type"] == "UHC"].sort_values("Total Achieved", ascending=True).head(10)
-                df_worst_uhc = df_worst_uhc.drop(columns=["Type"]).reset_index(drop=True)
+                df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)]
+                df_uhc = df_uhc.sort_values("Achievement %", ascending=True).drop(columns=["Type"]).reset_index(drop=True)
                 
-                s2 = add_corporate_slide(prs, "📉 Bottom 10 Worst Performing UHCs")
-                t2_shape = s2.shapes.add_table(len(df_worst_uhc) + 1, len(df_worst_uhc.columns), Inches(1.0), Inches(1.3), Inches(8.0), Inches(0.4))
-                format_corporate_table(t2_shape.table, df_worst_uhc, [Inches(2.0), Inches(4.5), Inches(1.5)])
+                df_uhc_display = df_uhc.copy()
+                df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
                 
-                for i, row in df_worst_uhc.iterrows():
-                    for j in range(len(df_worst_uhc.columns)):
+                s2 = add_corporate_slide(prs, "📉 UHCs Requiring Attention (< 75% Achievement)")
+                
+                # If there are many rows, we make the font smaller so they fit
+                font_sz = 10 if len(df_uhc) > 15 else 12
+                
+                t2_shape = s2.shapes.add_table(len(df_uhc_display) + 1, len(df_uhc_display.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.3))
+                format_corporate_table(t2_shape.table, df_uhc_display, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)], font_size=font_sz)
+                
+                for i, row in df_uhc_display.iterrows():
+                    for j in range(len(df_uhc_display.columns)):
                         cell = t2_shape.table.cell(i+1, j)
                         cell.text = str(row.iloc[j])
-                        # Highlight deeply poor performance (e.g., 0) in Red
-                        if j == 2 and row.iloc[j] == 0:
-                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(241, 148, 138)
+                        for paragraph in cell.text_frame.paragraphs:
+                            paragraph.font.size = Pt(font_sz)
+                            
+                        # Apply Multi-Color Scale to % Column
+                        if j == 4:
+                            pct_val = df_uhc.iloc[i]["Achievement %"]
+                            cell.fill.solid()
+                            cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ==========================================
-            # SLIDE 3: CHC / HOSPITAL OVERALL PERFORMANCE
+            # SLIDE 3: ALL CHCs PERFORMANCE
             # ==========================================
             if not df_fac_processed.empty:
-                df_chc = df_fac_processed[df_fac_processed["Type"] == "CHC"].sort_values("Total Achieved", ascending=False)
-                df_chc = df_chc.drop(columns=["Type"]).reset_index(drop=True)
+                df_chc = df_fac_processed[df_fac_processed["Type"] == "CHC"]
+                df_chc = df_chc.sort_values("Achievement %", ascending=False).drop(columns=["Type"]).reset_index(drop=True)
                 
-                s3 = add_corporate_slide(prs, "🏥 Overall CHC & Hospital Performance")
-                # Adjust height/top if there are many CHCs
-                t3_shape = s3.shapes.add_table(len(df_chc) + 1, len(df_chc.columns), Inches(1.0), Inches(1.3), Inches(8.0), Inches(0.35))
-                format_corporate_table(t3_shape.table, df_chc, [Inches(2.0), Inches(4.5), Inches(1.5)])
+                df_chc_display = df_chc.copy()
+                df_chc_display["Achievement %"] = df_chc_display["Achievement %"].astype(str) + "%"
                 
-                for i, row in df_chc.iterrows():
-                    for j in range(len(df_chc.columns)):
+                s3 = add_corporate_slide(prs, "🏥 All CHCs Performance Overview")
+                
+                t3_shape = s3.shapes.add_table(len(df_chc_display) + 1, len(df_chc_display.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.35))
+                format_corporate_table(t3_shape.table, df_chc_display, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)])
+                
+                for i, row in df_chc_display.iterrows():
+                    for j in range(len(df_chc_display.columns)):
                         cell = t3_shape.table.cell(i+1, j)
                         cell.text = str(row.iloc[j])
-                        # Add a slight alternating row color for corporate feel
-                        if i % 2 == 0:
+                        
+                        # Apply Multi-Color Scale to % Column
+                        if j == 4:
+                            pct_val = df_chc.iloc[i]["Achievement %"]
+                            cell.fill.solid()
+                            cell.fill.fore_color.rgb = get_multi_color(pct_val)
+                        # Alternate row coloring for standard data cells
+                        elif i % 2 == 0 and j != 4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244) # Light Grey
             
             out_io = io.BytesIO()
@@ -801,8 +854,7 @@ with tab4:
                         key="dl_target_ppt"
                     )
                 else:
-                    st.error(t_status)# ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
+                    st.error(t_status)# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
