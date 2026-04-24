@@ -357,14 +357,7 @@ with tab2:
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
             s2_stat = st.multiselect("Filter by Status", ["🔴 NEW", "🟢 RESOLVED", "🟡 PERSISTENT"], key='stat2')
         
-        cd1, cd2, cd3 = st.columns(3)
-        with cd1: diag_dt2 = st.date_input("Diagnosis Date Range", value=[], key="d1_2")
-        with cd2: init_dt2 = st.date_input("Initiation Date Range", value=[], key="d2_2")
-        with cd3: out_dt2 = st.date_input("Outcome Date Range", value=[], key="d3_2")
-
-        if len(diag_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Diagnosis Date'), errors='coerce').dt.date.between(diag_dt2[0], diag_dt2[1])]
-        if len(init_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Initiation Date'), errors='coerce').dt.date.between(init_dt2[0], init_dt2[1])]
-        if len(out_dt2) == 2: df_c = df_c[pd.to_datetime(df_c.get('Outcome Date'), errors='coerce').dt.date.between(out_dt2[0], out_dt2[1])]
+        
 
     if s2_ind or s2_stat:
         mask = pd.Series(False, index=df_c.index)
