@@ -867,7 +867,10 @@ with tab4:
                         key="dl_target_ppt"
                     )
                 else:
-                    st.error(t_status)                    st.error(t_status)# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
+                    st.error(t_status)
+
+# ==========================================
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -1064,11 +1067,11 @@ with tab5:
                     s_ts = pd.Timestamp(comp_dates[0])
                     e_ts = pd.Timestamp(comp_dates[1])
                     
-                    new_dates = parse_comp_date(df_new_comp.get('Diagnosis Date'))
-                    old_dates = parse_comp_date(df_old_comp.get('Diagnosis Date'))
+                    new_dates = parse_comp_date(df_dc_comp_new.get('Diagnosis Date'))
+                    old_dates = parse_comp_date(df_dc_comp_old.get('Diagnosis Date'))
                     
-                    df_new_comp = df_new_comp[new_dates.notna() & new_dates.dt.date.between(s_ts.date(), e_ts.date())]
-                    df_old_comp = df_old_comp[old_dates.notna() & old_dates.dt.date.between(s_ts.date(), e_ts.date())]
+                    df_dc_comp_new = df_dc_comp_new[new_dates.notna() & new_dates.dt.date.between(s_ts.date(), e_ts.date())]
+                    df_dc_comp_old = df_dc_comp_old[old_dates.notna() & old_dates.dt.date.between(s_ts.date(), e_ts.date())]
 
                     def get_dc_pend_dict(df):
                         pend = {}
@@ -1086,8 +1089,8 @@ with tab5:
                             pend[eid] = cur_p
                         return pend
 
-                    old_dict = get_dc_pend_dict(df_old_comp)
-                    new_dict = get_dc_pend_dict(df_new_comp)
+                    old_dict = get_dc_pend_dict(df_dc_comp_old)
+                    new_dict = get_dc_pend_dict(df_dc_comp_new)
                     
                     all_comp_ids = set(list(old_dict.keys()) + list(new_dict.keys()))
                     dc_comp_rows = []
@@ -1109,8 +1112,8 @@ with tab5:
                             else: row[p_name] = ""
                             
                         if has_act:
-                            r_new = df_new_comp[df_new_comp['Episode ID'] == eid]
-                            r_old = df_old_comp[df_old_comp['Episode ID'] == eid]
+                            r_new = df_dc_comp_new[df_dc_comp_new['Episode ID'] == eid]
+                            r_old = df_dc_comp_old[df_dc_comp_old['Episode ID'] == eid]
                             base = r_new.iloc[0] if not r_new.empty else r_old.iloc[0]
                             row['ZONE'] = base.get('ZONE', '')
                             row['TB Unit'] = base.get('TB Unit', '')
