@@ -639,7 +639,7 @@ with tab4:
                 title.height = Inches(0.8)
                 title.text_frame.paragraphs[0].font.size = Pt(24)
                 title.text_frame.paragraphs[0].font.bold = True
-                title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80) # Dark Navy Corporate
+                title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
                 return slide
 
             def format_corporate_table(table_obj, df_data, col_widths, font_size=12):
@@ -647,7 +647,6 @@ with tab4:
                 for i, width in enumerate(col_widths):
                     table_obj.columns[i].width = width
                 
-                # Header Styling
                 for i, col_name in enumerate(df_data.columns):
                     cell = table_obj.cell(0, i)
                     cell.text = col_name
@@ -656,7 +655,6 @@ with tab4:
                     cell.text_frame.paragraphs[0].font.bold = True
                     cell.text_frame.paragraphs[0].font.size = Pt(12)
                 
-                # Data rows base font sizing
                 for i in range(1, rows):
                     for j in range(cols):
                         cell = table_obj.cell(i, j)
@@ -669,11 +667,11 @@ with tab4:
 
             # --- MULTI-COLOR SCALE LOGIC ---
             def get_multi_color(pct):
-                if pct >= 100: return RGBColor(46, 204, 113)    # Dark/Vibrant Green
-                elif pct >= 75: return RGBColor(171, 235, 198)  # Light Green
-                elif pct >= 50: return RGBColor(249, 231, 159)  # Yellow
-                elif pct >= 25: return RGBColor(245, 176, 65)   # Orange
-                else: return RGBColor(231, 76, 60)              # Red
+                if pct >= 100: return RGBColor(46, 204, 113)
+                elif pct >= 75: return RGBColor(171, 235, 198)
+                elif pct >= 50: return RGBColor(249, 231, 159)
+                elif pct >= 25: return RGBColor(245, 176, 65)
+                else: return RGBColor(231, 76, 60)
 
             # DATE PARSING
             if len(selected_dates) == 2:
@@ -691,14 +689,21 @@ with tab4:
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             target_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835"
             df_sheet1 = pd.read_csv(target_url, header=None)
-            header_row1 = df_sheet1.iloc[0].fillna("").astype(str)
             
+            # 🎯 DYNAMIC HEADER FINDER
+            h_idx1 = 0
+            for i in range(3):
+                if any(td in df_sheet1.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
+                    h_idx1 = i
+                    break
+            
+            header_row1 = df_sheet1.iloc[h_idx1].fillna("").astype(str)
             col_indices1 = [idx for idx, val in enumerate(header_row1) if val.replace("  ", " ").strip() in target_date_strings]
             
-            if not col_indices1: return None, "⚠️ Dates not found in Sheet headers."
+            if not col_indices1: return None, "⚠️ Dates not found in Sheet 1 headers."
 
             res1 = []
-            for row_idx in range(1, len(df_sheet1)):
+            for row_idx in range(h_idx1 + 1, len(df_sheet1)):
                 z_name = str(df_sheet1.iloc[row_idx, 0]).strip().title()
                 if z_name.upper() == "AMC": z_name = "AMC" 
                 if z_name in fixed_targets:
@@ -733,15 +738,24 @@ with tab4:
             # ==========================================
             fac_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0"
             df_fac = pd.read_csv(fac_url, header=None)
-            header_fac = df_fac.iloc[0].fillna("").astype(str)
+            
+            # 🎯 DYNAMIC HEADER FINDER (Fixes the Row 2 issue)
+            h_idx2 = 0
+            for i in range(4):
+                if any(td in df_fac.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
+                    h_idx2 = i
+                    break
+            
+            header_fac = df_fac.iloc[h_idx2].fillna("").astype(str)
             col_indices_fac = [idx for idx, val in enumerate(header_fac) if val.replace("  ", " ").strip() in target_date_strings]
 
+            if not col_indices_fac: return None, "⚠️ Dates not found in UHC/CHC Sheet headers."
+
             fac_data = []
-            for row_idx in range(1, len(df_fac)):
+            for row_idx in range(h_idx2 + 1, len(df_fac)):
                 zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                 fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                 
-                # Skip Total rows and empty rows
                 if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
                     
                 achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
@@ -749,7 +763,6 @@ with tab4:
                 fac_type = "OTHER"
                 target_daily = 0
                 
-                # Classify strictly based on exact names
                 if "અર્બન હેલ્થ સેન્ટર" in fac_name:
                     fac_type = "UHC"
                     target_daily = 4
@@ -783,7 +796,6 @@ with tab4:
                 
                 s2 = add_corporate_slide(prs, "📉 UHCs Requiring Attention (< 75% Achievement)")
                 
-                # If there are many rows, we make the font smaller so they fit
                 font_sz = 10 if len(df_uhc) > 15 else 12
                 
                 t2_shape = s2.shapes.add_table(len(df_uhc_display) + 1, len(df_uhc_display.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.3))
@@ -796,7 +808,6 @@ with tab4:
                         for paragraph in cell.text_frame.paragraphs:
                             paragraph.font.size = Pt(font_sz)
                             
-                        # Apply Multi-Color Scale to % Column
                         if j == 4:
                             pct_val = df_uhc.iloc[i]["Achievement %"]
                             cell.fill.solid()
@@ -814,22 +825,24 @@ with tab4:
                 
                 s3 = add_corporate_slide(prs, "🏥 All CHCs Performance Overview")
                 
+                font_sz = 10 if len(df_chc) > 15 else 12
+                
                 t3_shape = s3.shapes.add_table(len(df_chc_display) + 1, len(df_chc_display.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.35))
-                format_corporate_table(t3_shape.table, df_chc_display, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)])
+                format_corporate_table(t3_shape.table, df_chc_display, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)], font_size=font_sz)
                 
                 for i, row in df_chc_display.iterrows():
                     for j in range(len(df_chc_display.columns)):
                         cell = t3_shape.table.cell(i+1, j)
                         cell.text = str(row.iloc[j])
-                        
-                        # Apply Multi-Color Scale to % Column
+                        for paragraph in cell.text_frame.paragraphs:
+                            paragraph.font.size = Pt(font_sz)
+                            
                         if j == 4:
                             pct_val = df_chc.iloc[i]["Achievement %"]
                             cell.fill.solid()
                             cell.fill.fore_color.rgb = get_multi_color(pct_val)
-                        # Alternate row coloring for standard data cells
                         elif i % 2 == 0 and j != 4:
-                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244) # Light Grey
+                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
             
             out_io = io.BytesIO()
             prs.save(out_io)
@@ -837,23 +850,6 @@ with tab4:
 
         except Exception as e:
             return None, f"⚠️ Error: {str(e)}"
-
-    if btn_generate_target:
-        if len(target_dates) != 2:
-            st.error("⚠️ Please select both a Start Date and End Date.")
-        else:
-            with st.spinner("Fetching Live Sheet Data and generating Corporate Deck..."):
-                target_ppt_bytes, t_status = generate_corporate_target_ppt(target_dates, working_days)
-                if target_ppt_bytes:
-                    st.success("✅ Corporate Presentation Deck Ready!")
-                    st.download_button(
-                        label="📥 Download Corporate_Deck.pptx", 
-                        data=target_ppt_bytes, 
-                        file_name="Corporate_Performance_Deck.pptx", 
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key="dl_target_ppt"
-                    )
-                else:
                     st.error(t_status)# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
 with tab5:
