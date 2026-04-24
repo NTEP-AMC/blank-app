@@ -110,27 +110,21 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH 
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
         m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
-            
         c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
-
         curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
-            
         return m, c_mat, curr, t_df
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -202,10 +196,8 @@ def get_live_dc():
                     elif "JODH" in tu: tu = "JODHPUR"
                     elif "SHAH" in tu: tu = "SHAHPUR"
                     elif "RANIP" in tu: tu = "RANIP"
-                    
                     zone = get_v(zone_idx)
                     if zone in ["", "NAN", "NONE", "NULL", "N/A"]: zone = 'MAPPING NOT DONE'
-                    
                     diff_data.append({
                         'ZONE': zone, 'TB Unit': tu, 'PHI': get_v(phi_idx), 'Episode ID': get_v(id_idx), 'Patient Name': get_v(name_idx),
                         'Due_Status': get_v(ci_idx), 'Diagnosis Date': get_v(diag_idx), 'Initiation Date': get_v(init_idx), 'Outcome Date': get_v(out_idx),
@@ -275,7 +267,6 @@ with tab1:
             if st.session_state.role == "ADMIN":
                 s_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_disp, 'ZONE', 'tab1'), key='z1'))
                 if s_z: df_disp = df_disp[df_disp['ZONE'].isin(s_z)]
-            # 🎯 SMART FILTER CASCADING
             s_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_disp, 'TB Unit', 'tab1'), key='tu1'))
             if s_tu: df_disp = df_disp[df_disp['TB Unit'].isin(s_tu)]
         with c2:
@@ -287,7 +278,6 @@ with tab1:
                     if "PUBLIC" in s_ft_raw and "PRIVATE" in s_ft_raw: pass
                     elif "PUBLIC" in s_ft_raw: df_disp = df_disp[df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s_ft_raw: df_disp = df_disp[~df_disp['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 SMART FILTER CASCADING
             s_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_disp, 'PHI', 'tab1'), key='phi1'))
             if s_phi: df_disp = df_disp[df_disp['PHI'].isin(s_phi)]
             inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
@@ -332,7 +322,6 @@ with tab2:
             if st.session_state.role == "ADMIN":
                 s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
                 if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
-            # 🎯 SMART FILTER CASCADING
             s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
             if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
         with c2: 
@@ -344,7 +333,6 @@ with tab2:
                     if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
                     elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 SMART FILTER CASCADING
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
         with c3: 
@@ -395,7 +383,6 @@ with tab3:
             if st.session_state.role == "ADMIN":
                 s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
                 if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
-            # 🎯 SMART FILTER CASCADING
             s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
             if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
         with c2:
@@ -407,7 +394,6 @@ with tab3:
                     if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
                     elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 SMART FILTER CASCADING
             s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
             if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
     st.markdown("##### 📈 Patient Overview")
@@ -417,13 +403,177 @@ with tab3:
         st.download_button("📥 Download Excel", convert_df_to_excel(df_t3, "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 
 # ==========================================
-# 🟢 TAB 4: PPT GENERATOR
+# 🟢 TAB 4: PPT GENERATOR (100% RESTORED)
 # ==========================================
 with tab4:
-    st.info("Smart PPT functionality is available. Configure parameters to generate.")
+    st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
+    with st.container():
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            all_inds = ["Outcome", "UDST", "Not Put On", "SLPA", "Consent", "ADT", "RBS", "ART", "CPT", "HIV"]
+            sel_report = st.selectbox("📌 1. Select Report Type", all_inds)
+            st.markdown("<div style='background-color:#e8f4f8; padding:10px; border-radius:5px;'><b>📅 Period 1 (Current)</b></div>", unsafe_allow_html=True)
+            p1_name = st.text_input("Name for Period 1", "Q1 - 2025")
+            p1_diag = st.date_input("Diagnosis Date (P1)", value=[])
+            p1_init = st.date_input("Treatment Start Date (P1)", value=[])
+            p1_out = st.date_input("Outcome Date (P1)", value=[])
+        with c2:
+            st.write(""); st.write("")
+            compare_mode = st.checkbox("📊 Enable Comparison (Period 2)")
+            if compare_mode:
+                st.markdown("<div style='background-color:#fef5e7; padding:10px; border-radius:5px;'><b>📅 Period 2 (Previous)</b></div>", unsafe_allow_html=True)
+                p2_name = st.text_input("Name for Period 2", "Q2 - 2025")
+                p2_diag = st.date_input("Diagnosis Date (P2)", value=[])
+                p2_init = st.date_input("Treatment Start Date (P2)", value=[])
+                p2_out = st.date_input("Outcome Date (P2)", value=[])
+            else:
+                p2_name = "None"; p2_diag, p2_init, p2_out = [], [], []
+        with c3:
+            st.markdown("<div style='background-color:#e9ecef; padding:10px; border-radius:5px;'><b>🎨 3. Presentation Rules</b></div>", unsafe_allow_html=True)
+            color_rule = st.radio("Color Scale Rules:", ["High is Bad (Red) 🔴", "High is Good (Green) 🟢"])
+            high_is_bad = True if "Bad" in color_rule else False
+            if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
+            else: color_target = p1_name
+
+    def apply_date_filters(df, diag, init, out):
+        mask = pd.Series(True, index=df.index)
+        if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date'), errors='coerce').dt.date.between(diag[0], diag[1])
+        if len(init) == 2: mask &= pd.to_datetime(df.get('Initiation Date'), errors='coerce').dt.date.between(init[0], init[1])
+        if len(out) == 2: mask &= pd.to_datetime(df.get('Outcome Date'), errors='coerce').dt.date.between(out[0], out[1])
+        return mask
+
+    def generate_smart_ppt(df, report_name):
+        try:
+            from pptx import Presentation
+            from pptx.util import Inches, Pt
+            from pptx.dml.color import RGBColor
+        except ImportError: return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
+
+        prs = Presentation()
+        m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
+        m1 &= df.get('Pending Status', pd.Series(dtype=str)).astype(str).str.contains(report_name, na=False)
+        df_p1 = df[m1].copy()
+
+        df_p2 = pd.DataFrame()
+        if compare_mode:
+            m2 = apply_date_filters(df, p2_diag, p2_init, p2_out)
+            m2 &= df.get('Pending Status', pd.Series(dtype=str)).astype(str).str.contains(report_name, na=False)
+            df_p2 = df[m2].copy()
+
+        def get_bg_color(val, max_val):
+            if max_val == 0 or pd.isna(val) or val == 0: return RGBColor(255, 255, 255)
+            ratio = val / max_val
+            if not high_is_bad: ratio = 1 - ratio 
+            if ratio > 0.66: return RGBColor(241, 148, 138)
+            elif ratio > 0.33: return RGBColor(249, 231, 159)
+            else: return RGBColor(171, 235, 198)
+
+        def add_slide_table(title_text, curr_df, prev_df, entity_col_name):
+            slide = prs.slides.add_slide(prs.slide_layouts[5])
+            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.3), Inches(0.2), width=Inches(0.8))
+            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(8.9), Inches(0.2), width=Inches(0.8))
+            title = slide.shapes.title
+            title.text = title_text
+            title.text_frame.paragraphs[0].font.size = Pt(28)
+            title.text_frame.paragraphs[0].font.bold = True
+            if curr_df.empty and prev_df.empty:
+                tx = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
+                tx.text_frame.text = "આ તારીખો માટે કોઈ દર્દી પેન્ડિંગ નથી."
+                return
+            if compare_mode:
+                final_df = pd.merge(curr_df, prev_df, on=entity_col_name, how='outer').fillna(0)
+                final_df['Grand Total'] = final_df[p1_name] + final_df[p2_name]
+                final_df = final_df.sort_values(by='Grand Total', ascending=False)
+                col_names = [entity_col_name, p1_name, p2_name, 'Grand Total']
+            else:
+                final_df = curr_df.sort_values(by=p1_name, ascending=False)
+                col_names = [entity_col_name, p1_name]
+
+            rows = len(final_df) + 1
+            cols = len(col_names)
+            table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.5), Inches(8.4), Inches(0.4))
+            table = table_shape.table
+            if cols == 2:
+                table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
+            elif cols == 4:
+                table.columns[0].width = Inches(4.0); table.columns[1].width = Inches(1.5); table.columns[2].width = Inches(1.5); table.columns[3].width = Inches(1.4)
+            for i, c_name in enumerate(col_names):
+                cell = table.cell(0, i)
+                cell.text = c_name
+                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
+                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.text_frame.paragraphs[0].font.bold = True
+            target_idx = col_names.index(color_target)
+            max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
+            for i, (_, row) in enumerate(final_df.iterrows()):
+                name_val = str(row[entity_col_name])
+                table.cell(i+1, 0).text = name_val
+                table.cell(i+1, 1).text = str(int(row[p1_name]))
+                if cols == 4:
+                    table.cell(i+1, 2).text = str(int(row[p2_name]))
+                    table.cell(i+1, 3).text = str(int(row['Grand Total']))
+                if "PRIVATE FACILITIES" in name_val:
+                    for j in range(cols):
+                        c = table.cell(i+1, j)
+                        c.fill.solid(); c.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                        c.text_frame.paragraphs[0].font.bold = True
+                else:
+                    c_target = table.cell(i+1, target_idx)
+                    val_target = row.iloc[target_idx]
+                    c_target.fill.solid()
+                    c_target.fill.fore_color.rgb = get_bg_color(val_target, max_value)
+
+        def get_summary(temp_df, group_col, val_name):
+            if temp_df.empty: return pd.DataFrame(columns=[group_col, val_name])
+            if group_col == 'PHI':
+                pub_mask = temp_df.get('Facility Type', pd.Series(dtype=str)).astype(str).str.upper().isin(['PUBLIC', 'PHI'])
+                pub_sum = temp_df[pub_mask].groupby('PHI').size().reset_index(name=val_name)
+                priv_count = len(temp_df[~pub_mask])
+                if priv_count > 0:
+                    priv_row = pd.DataFrame({'PHI': ['PRIVATE FACILITIES (TOTAL)'], val_name: [priv_count]})
+                    return pd.concat([pub_sum, priv_row], ignore_index=True)
+                return pub_sum
+            else: return temp_df.groupby(group_col).size().reset_index(name=val_name)
+
+        if st.session_state.role == "ZONE":
+            tu_curr = get_summary(df_p1, 'TB Unit', p1_name)
+            tu_prev = get_summary(df_p2, 'TB Unit', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"{st.session_state.target} Zone - {sel_report} Pending (TU Wise)", tu_curr, tu_prev, 'TB Unit')
+            tus = sorted(pd.concat([df_p1.get('TB Unit', pd.Series()), df_p2.get('TB Unit', pd.Series()) if compare_mode else pd.Series()]).dropna().unique())
+            for tu in tus:
+                phi_curr = get_summary(df_p1[df_p1.get('TB Unit') == tu], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2.get('TB Unit') == tu], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                add_slide_table(f"TU: {tu} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+
+        elif st.session_state.role == "ADMIN":
+            z_curr = get_summary(df_p1, 'ZONE', p1_name)
+            z_prev = get_summary(df_p2, 'ZONE', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"All Zones - {sel_report} Pending", z_curr, z_prev, 'ZONE')
+            zones = sorted(pd.concat([df_p1.get('ZONE', pd.Series()), df_p2.get('ZONE', pd.Series()) if compare_mode else pd.Series()]).dropna().unique())
+            for z in zones:
+                phi_curr = get_summary(df_p1[df_p1.get('ZONE') == z], 'PHI', p1_name)
+                phi_prev = get_summary(df_p2[df_p2.get('ZONE') == z], 'PHI', p2_name) if compare_mode else pd.DataFrame()
+                add_slide_table(f"Zone: {z} - {sel_report} Pending", phi_curr, phi_prev, 'PHI')
+        else:
+            phi_curr = get_summary(df_p1, 'PHI', p1_name)
+            phi_prev = get_summary(df_p2, 'PHI', p2_name) if compare_mode else pd.DataFrame()
+            add_slide_table(f"{st.session_state.target} - {sel_report} Pending", phi_curr, prev_df, 'PHI')
+
+        out_io = io.BytesIO()
+        prs.save(out_io)
+        return out_io.getvalue(), "Success"
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("✨ Generate Custom PPT ✨", use_container_width=True):
+        with st.spinner("Generating beautiful Enterprise PPT slides... Please wait..."):
+            ppt_bytes, status = generate_smart_ppt(df_master, sel_report)
+            if ppt_bytes:
+                st.success("✅ PPT 100% તૈયાર છે! નીચેના બટન પર ક્લિક કરીને ડાઉનલોડ કરો.")
+                st.download_button(label=f"📥 Download {sel_report}_Analysis.pptx", data=ppt_bytes, file_name=f"{sel_report}_Analysis.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+            else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (THE BIG UPDATE)
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES & TARGETED COLUMN COLORING)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -437,17 +587,13 @@ with tab5:
                 if st.session_state.role == "ADMIN":
                     s6_z = st.multiselect("Zone", sorted([x for x in df_dc['ZONE'].unique() if pd.notna(x) and x!=""]), key='z6')
                     if s6_z: df_dc = df_dc[df_dc['ZONE'].isin(s6_z)]
-                
-                # 🎯 SMART FILTER CASCADING
                 tu_opts = sorted([x for x in df_dc['TB Unit'].unique() if pd.notna(x) and x!=""])
                 s6_tu = st.multiselect("TB Unit", tu_opts, key='tu6')
                 if s6_tu: df_dc = df_dc[df_dc['TB Unit'].isin(s6_tu)]
             with c2:
-                # 🎯 SMART FILTER CASCADING
                 phi_opts = sorted([x for x in df_dc['PHI'].unique() if pd.notna(x) and x!=""])
                 s6_phi = st.multiselect("PHI", phi_opts, key='phi6')
                 if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
-                
                 s6_hf = st.multiselect("Facility Type", sorted([x for x in df_dc['Facility_Type'].unique() if pd.notna(x) and x!=""]), key='hf6')
                 if s6_hf: df_dc = df_dc[df_dc['Facility_Type'].isin(s6_hf)]
             with c3:
@@ -479,7 +625,6 @@ with tab5:
             
             summary = summary.reset_index()
             
-            # 🎯 SORTING LOGIC: 7 Zones first, then MAPPING NOT DONE
             main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
             summary['sort_key'] = summary[group_col].apply(lambda x: main_zones.index(x) if x in main_zones else 998 if x == 'MAPPING NOT DONE' else 999)
             summary = summary.sort_values('sort_key').drop(columns=['sort_key'])
@@ -489,24 +634,44 @@ with tab5:
             return pd.concat([summary, total_row], ignore_index=True)
 
         sum_df = get_dynamic_summary(df_dc, g_col)
+        
+        # 🎯 7 MINI BOXES FOR ZONES
+        st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
+        cols7 = st.columns(7)
+        main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
+        
+        for i, z in enumerate(main_zones):
+            z_row = sum_df[sum_df[g_col] == z]
+            pct_val = 0
+            if not z_row.empty: pct_val = z_row['% Completed'].values[0]
+            
+            if pct_val >= 80: bg_c, t_c = "#d4edda", "#155724" # Green
+            elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" # Yellow
+            else: bg_c, t_c = "#f8d7da", "#721c24" # Red
+            
+            card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 8px 2px; margin-bottom: 15px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 11px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 18px; font-weight: 900; margin-top: 3px;">{pct_val}%</div></div>"""
+            with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
+
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        # 🎯 TARGETED COLOR FORMATTING: Only on 7 main zones
-        def apply_color(row):
-            main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
-            if row[g_col] in main_zones:
-                try:
-                    val = float(str(row['% Completed']).replace('%',''))
-                    if val >= 80: return ['background-color: #d4edda'] * len(row) # લીલો 
-                    elif val >= 50: return ['background-color: #fff3cd'] * len(row) # પીળો
-                    else: return ['background-color: #f8d7da'] * len(row) # લાલ
-                except:
-                    return [''] * len(row)
-            return [''] * len(row)
+        # 🎯 TARGETED COLOR FORMATTING: Only on % Completed column
+        def color_pct(val):
+            try:
+                v = float(str(val).replace('%',''))
+                if v >= 80: return 'background-color: #d4edda; color: #155724; font-weight: bold;'
+                elif v >= 50: return 'background-color: #fff3cd; color: #856404; font-weight: bold;'
+                else: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+            except: return ''
 
         sum_disp = sum_df.copy()
         sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
-        st.dataframe(sum_disp.style.apply(apply_color, axis=1), use_container_width=True, hide_index=True)
+        
+        try:
+            styled_df = sum_disp.style.map(color_pct, subset=['% Completed'])
+        except AttributeError:
+            styled_df = sum_disp.style.applymap(color_pct, subset=['% Completed'])
+            
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
@@ -520,32 +685,11 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period}!")
 
         # -------------------------------------------------------------
-        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (OLD VS NEW)
+        # 🎯 🔄 DIFF CARE COMPARISON ENGINE 
         # -------------------------------------------------------------
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine</h4>", unsafe_allow_html=True)
-        
-        # 🎯 Comparison engine filters (Smart Filter Cascading)
-        cc1, cc2, cc3 = st.columns(3)
-        df_dc_comp_new = df_dc_new.copy()
-        df_dc_comp_old = df_dc_old.copy()
-        
-        with cc1:
-            comp_zones = st.multiselect("Filter Zone (Comparison)", sorted([x for x in df_dc_comp_new['ZONE'].unique() if pd.notna(x) and x!=""]), key='dc_comp_zone')
-            if comp_zones:
-                df_dc_comp_new = df_dc_comp_new[df_dc_comp_new['ZONE'].isin(comp_zones)]
-                df_dc_comp_old = df_dc_comp_old[df_dc_comp_old['ZONE'].isin(comp_zones)]
-                
-        with cc2:
-            tu_opts_comp = sorted([x for x in df_dc_comp_new['TB Unit'].unique() if pd.notna(x) and x!=""])
-            comp_tus = st.multiselect("Filter TB Unit (Comparison)", tu_opts_comp, key='dc_comp_tu')
-            if comp_tus:
-                df_dc_comp_new = df_dc_comp_new[df_dc_comp_new['TB Unit'].isin(comp_tus)]
-                df_dc_comp_old = df_dc_comp_old[df_dc_comp_old['TB Unit'].isin(comp_tus)]
-                
-        with cc3:
-            comp_d = st.date_input("Select Diagnosis Date Range for Comparison", value=[], key="dc_comp_dates")
-            
+        comp_d = st.date_input("Select Diagnosis Date Range for Comparison", value=[], key="dc_comp_dates")
         if st.button("🚀 Generate Comparison Matrix", use_container_width=True) and len(comp_d)==2:
             s_ts, e_ts = pd.Timestamp(comp_d[0]), pd.Timestamp(comp_d[1])
             def get_p_dict(df, sd, ed):
@@ -557,9 +701,8 @@ with tab5:
                     if "COMPLETED" in due: p_dict[eid] = []
                     else: p_dict[eid] = [pn for pn, (pr, ec) in periods_map.items() if re.search(pr, due)]
                 return p_dict, df_f
-                
-            old_p, df_o = get_p_dict(df_dc_comp_old, s_ts, e_ts)
-            new_p, df_n = get_p_dict(df_dc_comp_new, s_ts, e_ts)
+            old_p, df_o = get_p_dict(df_dc_old, s_ts, e_ts)
+            new_p, df_n = get_p_dict(df_dc_new, s_ts, e_ts)
             all_ids = set(list(old_p.keys()) + list(new_p.keys()))
             res = []
             for eid in all_ids:
