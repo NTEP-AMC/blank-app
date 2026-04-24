@@ -110,7 +110,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 DRIVE DATA FETCH 
+# 🎯 DRIVE DATA FETCH (Master, Outcome, Regular Comparison)
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (TAB 5 & 2)
+# 🎯 FETCH BOTH OLD AND NEW DIFF CARE SHEETS (No Pre-filtering)
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -249,102 +249,12 @@ def get_live_dc():
         df_new = fetch_sheet(url_new)
         df_old = fetch_sheet(url_old)
 
-        df_new_full = df_new.copy()
-
-        # Hard-coded Date Filter for Tab 2 Comparison
-        start_dt = pd.to_datetime('2025-09-01')
-        end_dt = pd.to_datetime('2026-04-23')
-
-        if not df_new.empty:
-            df_new['Diagnosis Date'] = pd.to_datetime(df_new['Diagnosis Date'], errors='coerce')
-            df_new = df_new[(df_new['Diagnosis Date'] >= start_dt) & (df_new['Diagnosis Date'] <= end_dt)]
-        if not df_old.empty:
-            df_old['Diagnosis Date'] = pd.to_datetime(df_old['Diagnosis Date'], errors='coerce')
-            df_old = df_old[(df_old['Diagnosis Date'] >= start_dt) & (df_old['Diagnosis Date'] <= end_dt)]
-
-        periods_map = {
-            'BASELINE': 'BASELINE', '1ST MONTH': '1ST MONTH|1 MONTH', '2ND MONTH': '2ND MONTH|2 MONTH',
-            '3RD MONTH': '3RD MONTH|3 MONTH', '4TH MONTH': '4TH MONTH|4 MONTH', 
-            '5TH MONTH': '5TH MONTH|5 MONTH', '6TH MONTH': '6TH MONTH|6 MONTH'
-        }
-        
-        def get_pend_dict(df):
-            pend = {}
-            if df.empty: return pend
-            for _, row in df.iterrows():
-                eid = str(row['Episode ID']).strip().upper()
-                due = str(row['Due_Status']).upper()
-                if "COMPLETED" in due:
-                    pend[eid] = []
-                    continue
-                cur_p = []
-                for p_name, p_regex in periods_map.items():
-                    if re.search(p_regex, due): cur_p.append(p_name)
-                pend[eid] = cur_p
-            return pend
-
-        old_pend = get_pend_dict(df_old)
-        new_pend = get_pend_dict(df_new)
-        
-        all_eids = set(list(old_pend.keys()) + list(new_pend.keys()))
-        comp_rows = []
-        for eid in all_eids:
-            if eid in ["", "NAN"]: continue
-            po = old_pend.get(eid, [])
-            pn = new_pend.get(eid, [])
-            row = {'Episode ID': eid}
-            has_act = False
-            for p_name in periods_map.keys():
-                in_old = p_name in po
-                in_new = p_name in pn
-                if in_old and in_new: row[p_name] = "🟡 PERSISTENT"; has_act = True
-                elif not in_old and in_new: row[p_name] = "🔴 NEW"; has_act = True
-                elif in_old and not in_new: row[p_name] = "🟢 RESOLVED"; has_act = True
-                else: row[p_name] = ""
-                
-            if has_act:
-                r_new = df_new[df_new['Episode ID'] == eid]
-                r_old = df_old[df_old['Episode ID'] == eid]
-                base = r_new.iloc[0] if not r_new.empty else r_old.iloc[0]
-                row['ZONE'] = base.get('ZONE', '')
-                row['TB Unit'] = base.get('TB Unit', '')
-                row['PHI'] = base.get('PHI', '')
-                row['Patient Name'] = base.get('Patient Name', '')
-                row['Facility Type'] = base.get('Facility_Type', '')
-                row['Diagnosis Date'] = base.get('Diagnosis Date', pd.NaT)
-                row['Initiation Date'] = base.get('Initiation Date', pd.NaT)
-                row['Outcome Date'] = base.get('Outcome Date', pd.NaT)
-                comp_rows.append(row)
-                
-        df_dc_comp = pd.DataFrame(comp_rows)
-        return df_new_full, df_dc_comp
+        return df_new, df_old
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
-df_dc_main_raw, df_dc_comp_raw = get_live_dc()
-
-# 🎯 Tab 2 Master Matrix + Diff Care Comparison Merge
-if not df_comp_raw.empty and not df_dc_comp_raw.empty:
-    df_comp_raw['Episode ID'] = df_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
-    df_dc_comp_raw['Episode ID'] = df_dc_comp_raw['Episode ID'].astype(str).str.strip().str.upper()
-    c_mat = pd.merge(df_comp_raw, df_dc_comp_raw, on='Episode ID', how='outer')
-    for col in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Patient Name']:
-        if col + '_x' in c_mat.columns and col + '_y' in c_mat.columns:
-            c_mat[col] = c_mat[col + '_x'].combine_first(c_mat[col + '_y'])
-            c_mat.drop(columns=[col + '_x', col + '_y'], inplace=True)
-elif not df_dc_comp_raw.empty:
-    c_mat = df_dc_comp_raw.copy()
-else:
-    c_mat = df_comp_raw.copy()
-
-c_mat.fillna('', inplace=True)
-
-# 🎯 COLUMN ORDER
-std_cols = ['Episode ID', 'Patient Name', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
-existing_std = [c for c in std_cols if c in c_mat.columns]
-existing_other = [c for c in c_mat.columns if c not in existing_std]
-df_comp_final = c_mat[existing_std + existing_other]
+df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -356,9 +266,11 @@ def filter_by_role(df, role, target):
     return df
 
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
-df_comp = filter_by_role(df_comp_final.copy(), st.session_state.role, st.session_state.target)
+df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) # 🎯 Tab 2 is back to pure original logic!
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
-df_dc_main = filter_by_role(df_dc_main_raw.copy(), st.session_state.role, st.session_state.target)
+
+df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
+df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -388,7 +300,6 @@ if not df_time.empty:
         for i, row in df_time.iterrows():
             with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-# 🎯 Tabs Setup
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care"])
 
 # ==========================================
@@ -451,7 +362,7 @@ with tab1:
         st.download_button("📥 Download Formatted Excel", excel_data1, "Master_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl1')
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON
+# 🟢 TAB 2: DAILY COMPARISON (PURE ORIGINAL)
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
@@ -659,7 +570,6 @@ with tab4:
                 cell.text = c_name
                 cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(31, 97, 141)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
             target_idx = col_names.index(color_target)
             max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
@@ -731,16 +641,16 @@ with tab4:
             else: st.error(status)
 
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (NO MATPLOTLIB ERROR)
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH COMPARISON ENGINE)
 # ==========================================
 with tab5:
-    st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Pendency Report</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
     
-    if df_dc_main.empty:
+    if df_dc_new.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
-        with st.expander("🔽 Filters & Dates", expanded=False):
-            df_dc = df_dc_main.copy()
+        with st.expander("🔽 Filters & Dates (Applies to Current Status)", expanded=False):
+            df_dc = df_dc_new.copy()
             c1, c2, c3 = st.columns(3)
             
             with c1:
@@ -779,7 +689,6 @@ with tab5:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # 🎯 Dynamic Period Selection
         periods_map = {
             'BASELINE': ('BASELINE', 'Elig_BASELINE'),
             '1ST MONTH': ('1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
@@ -792,18 +701,14 @@ with tab5:
         
         sel_period = st.radio("📌 Select Follow-up Period to View:", list(periods_map.keys()), horizontal=True)
         p_regex, elig_col = periods_map[sel_period]
-        
         g_col = 'TB Unit' if st.session_state.role == "ZONE" or (st.session_state.role == "ADMIN" and 's6_z' in locals() and len(s6_z) > 0) else 'ZONE' if st.session_state.role == "ADMIN" else 'PHI'
         
-        # 🎯 1. Summary Table Logic
         def get_dynamic_summary(df, group_col):
             if df.empty: return pd.DataFrame()
             grp = df.groupby(group_col)
             total_pts = grp.size()
-            
             is_elig = df[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
             eligible_pts = df[is_elig].groupby(group_col).size()
-            
             due = df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             is_pending = is_elig & not_comp & due.str.contains(p_regex, na=False)
@@ -819,36 +724,119 @@ with tab5:
             total_pct = (total_completed / total_eligible * 100) if total_eligible > 0 else 0
             
             summary['% Completed'] = ((summary['Completed'] / summary['Eligible']) * 100).fillna(0).round(1)
-            
             summary = summary.reset_index()
             total_row = pd.DataFrame({group_col: ['AMC TOTAL'], 'Total Patient': [total_patient], 'Eligible': [total_eligible], 'Completed': [total_completed], 'Pending': [total_pending], '% Completed': [round(total_pct, 1)]})
-            
             return pd.concat([summary, total_row], ignore_index=True)
 
         summary_df = get_dynamic_summary(df_dc, g_col)
         
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
-        
-        # 🟢 100% MATPLOTLIB FREE: Simple String Formatting
         summary_df['% Completed'] = summary_df['% Completed'].astype(float).round(1).astype(str) + '%'
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
         
-        # 🎯 2. Line List Logic
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
-        
         is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
         due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
         not_comp_ll = ~due_ll.str.contains("COMPLETED", na=False)
         is_pending_ll = is_elig_ll & not_comp_ll & due_ll.str.contains(p_regex, na=False)
         
         df_ll = df_dc[is_pending_ll].copy()
-        
         if not df_ll.empty:
             ll_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
             df_ll_display = df_ll[ll_cols].rename(columns={'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'})
             st.dataframe(df_ll_display, use_container_width=True, hide_index=True)
-            
-            excel_data_ll = convert_df_to_excel(df_ll_display, f"{sel_period}_Pending")
-            st.download_button(f"📥 Download {sel_period} Pending List", excel_data_ll, f"DiffCare_{sel_period}_Pending.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f'dl_ll_{sel_period}')
+            st.download_button(f"📥 Download {sel_period} Pending List", convert_df_to_excel(df_ll_display, f"{sel_period}_Pending"), f"DiffCare_{sel_period}_Pending.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f'dl_ll_{sel_period}')
         else:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
+
+        # -------------------------------------------------------------
+        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (OLD VS NEW)
+        # -------------------------------------------------------------
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
+        st.markdown("Select a Diagnosis Date range to compare the performance between the Old and New Differentiated Care records.")
+        
+        cc1, cc2 = st.columns([2, 1])
+        with cc1:
+            comp_dates = st.date_input("Select Diagnosis Date Range for Comparison", value=[], key="dc_comp_dates")
+        with cc2:
+            st.write("")
+            st.write("")
+            run_comp = st.button("🚀 Generate Comparison Matrix", use_container_width=True)
+
+        if run_comp:
+            if len(comp_dates) != 2:
+                st.error("⚠️ Please select a valid Start and End Date for comparison.")
+            else:
+                with st.spinner("Analyzing Old and New Diff Care Sheets..."):
+                    start_dt, end_dt = pd.to_datetime(comp_dates[0]), pd.to_datetime(comp_dates[1])
+                    
+                    df_new_comp = df_dc_new.copy()
+                    df_old_comp = df_dc_old.copy()
+                    
+                    # Apply date filters
+                    df_new_comp = df_new_comp[pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(start_dt.date(), end_dt.date())]
+                    df_old_comp = df_old_comp[pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(start_dt.date(), end_dt.date())]
+
+                    def get_dc_pend_dict(df):
+                        pend = {}
+                        if df.empty: return pend
+                        for _, r in df.iterrows():
+                            eid = str(r['Episode ID']).strip().upper()
+                            due = str(r['Due_Status']).upper()
+                            if "COMPLETED" in due:
+                                pend[eid] = []
+                                continue
+                            cur_p = []
+                            for p_name, p_reg in periods_map.items():
+                                p_rx = p_reg[0] # Get regex part
+                                if re.search(p_rx, due): cur_p.append(p_name)
+                            pend[eid] = cur_p
+                        return pend
+
+                    old_dict = get_dc_pend_dict(df_old_comp)
+                    new_dict = get_dc_pend_dict(df_new_comp)
+                    
+                    all_comp_ids = set(list(old_dict.keys()) + list(new_dict.keys()))
+                    dc_comp_rows = []
+                    
+                    for eid in all_comp_ids:
+                        if eid in ["", "NAN", "NONE"]: continue
+                        po = old_dict.get(eid, [])
+                        pn = new_dict.get(eid, [])
+                        row = {'Episode ID': eid}
+                        has_act = False
+                        
+                        for p_name in list(periods_map.keys()):
+                            in_old = p_name in po
+                            in_new = p_name in pn
+                            if in_old and in_new: row[p_name] = "🟡 PERSISTENT"; has_act = True
+                            elif not in_old and in_new: row[p_name] = "🔴 NEW"; has_act = True
+                            elif in_old and not in_new: row[p_name] = "🟢 RESOLVED"; has_act = True
+                            else: row[p_name] = ""
+                            
+                        if has_act:
+                            r_new = df_new_comp[df_new_comp['Episode ID'] == eid]
+                            r_old = df_old_comp[df_old_comp['Episode ID'] == eid]
+                            base = r_new.iloc[0] if not r_new.empty else r_old.iloc[0]
+                            row['ZONE'] = base.get('ZONE', '')
+                            row['TB Unit'] = base.get('TB Unit', '')
+                            row['PHI'] = base.get('PHI', '')
+                            row['Patient Name'] = base.get('Patient Name', '')
+                            row['Facility Type'] = base.get('Facility_Type', '')
+                            row['Diagnosis Date'] = base.get('Diagnosis Date', '')
+                            dc_comp_rows.append(row)
+                            
+                    df_final_comp = pd.DataFrame(dc_comp_rows)
+                    
+                    if not df_final_comp.empty:
+                        # Fix column order
+                        front = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date']
+                        other = [c for c in df_final_comp.columns if c not in front]
+                        df_final_comp = df_final_comp[front + other]
+                        
+                        st.success("✅ Comparison Generated Successfully!")
+                        st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
+                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
+                    else:
+                        st.info("👍 No differences found between Old and New data for the selected dates.")
