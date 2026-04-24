@@ -130,7 +130,7 @@ def load_all_data():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE (TAB 5 & 2)
+# 🎯 LIVE GOOGLE SHEET FETCH FOR DIFF CARE
 @st.cache_data(ttl=300) 
 def get_live_dc():
     try:
@@ -645,11 +645,11 @@ with tab4:
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
     
-    if df_dc_new.empty:
+    if df_dc_main.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
         with st.expander("🔽 Filters & Dates (Applies to Current Status)", expanded=False):
-            df_dc = df_dc_new.copy()
+            df_dc = df_dc_main.copy()
             c1, c2, c3 = st.columns(3)
             
             with c1:
@@ -753,40 +753,47 @@ with tab5:
         # -------------------------------------------------------------
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
-        st.markdown("Select a Diagnosis Date range to compare the performance between the Old and New Differentiated Care records.")
+        st.markdown("Select filters and a Diagnosis Date range to compare Old and New Differentiated Care records.")
         
-        cc1, cc2 = st.columns([2, 1])
+        # 🎯 New Filters explicitly for Comparison Engine
+        cc1, cc2, cc3 = st.columns(3)
         with cc1:
-            comp_dates = st.date_input("Select Diagnosis Date Range for Comparison", value=[], key="dc_comp_dates")
+            comp_zones = st.multiselect("Filter Zone (Comparison)", sorted([x for x in df_dc_new['ZONE'].unique() if pd.notna(x) and x!=""]), key='dc_comp_zone')
         with cc2:
-            st.write("")
-            st.write("")
-            run_comp = st.button("🚀 Generate Comparison Matrix", use_container_width=True)
+            comp_facs = st.multiselect("Filter Facility Type (Comparison)", sorted([x for x in df_dc_new['Facility_Type'].unique() if pd.notna(x) and x!=""]), key='dc_comp_fac')
+        with cc3:
+            comp_dates = st.date_input("Select Diagnosis Date Range", value=[], key="dc_comp_dates")
+            
+        run_comp = st.button("🚀 Generate Comparison Matrix", use_container_width=True)
 
         if run_comp:
             if len(comp_dates) != 2:
                 st.error("⚠️ Please select a valid Start and End Date for comparison.")
             else:
                 with st.spinner("Analyzing Old and New Diff Care Sheets..."):
-                    # 🎯 ERROR FIXED HERE: Convert to Pandas Native Datetime for comparison
-                    start_dt = pd.to_datetime(comp_dates[0])
-                    end_dt = pd.to_datetime(comp_dates[1])
-                    
                     df_new_comp = df_dc_new.copy()
                     df_old_comp = df_dc_old.copy()
                     
-                    new_dates = pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce')
-                    old_dates = pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce')
+                    # 🎯 Apply Zone and Facility Filters
+                    if comp_zones:
+                        df_new_comp = df_new_comp[df_new_comp['ZONE'].isin(comp_zones)]
+                        df_old_comp = df_old_comp[df_old_comp['ZONE'].isin(comp_zones)]
+                    if comp_facs:
+                        df_new_comp = df_new_comp[df_new_comp['Facility_Type'].isin(comp_facs)]
+                        df_old_comp = df_old_comp[df_old_comp['Facility_Type'].isin(comp_facs)]
                     
-                    df_new_comp = df_new_comp[new_dates.notna() & new_dates.between(start_dt, end_dt)]
-                    df_old_comp = df_old_comp[old_dates.notna() & old_dates.between(start_dt, end_dt)]
+                    # 🎯 DATE BUG FIXED HERE: Exact Date Boundary Matching (.dt.date)
+                    s_date, e_date = comp_dates[0], comp_dates[1]
+                    
+                    df_new_comp = df_new_comp[pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_new_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(s_date, e_date)]
+                    df_old_comp = df_old_comp[pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_old_comp.get('Diagnosis Date'), errors='coerce').dt.date.between(s_date, e_date)]
 
                     def get_dc_pend_dict(df):
                         pend = {}
                         if df.empty: return pend
                         for _, r in df.iterrows():
                             eid = str(r['Episode ID']).strip().upper()
-                            due = str(r['Due_Status']).upper()
+                            due = str(r.get('Due_Status', '')).upper()
                             if "COMPLETED" in due:
                                 pend[eid] = []
                                 continue
@@ -837,8 +844,8 @@ with tab5:
                         other = [c for c in df_final_comp.columns if c not in front]
                         df_final_comp = df_final_comp[front + other]
                         
-                        st.success("✅ Comparison Generated Successfully!")
+                        st.success(f"✅ Comparison Generated Successfully for {s_date.strftime('%d-%b-%Y')} to {e_date.strftime('%d-%b-%Y')}!")
                         st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
-                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
+                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{s_date}_to_{e_date}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
-                        st.info("👍 No differences found between Old and New data for the selected dates.")
+                        st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {s_date.strftime('%d-%b-%Y')} to {e_date.strftime('%d-%b-%Y')}.")
