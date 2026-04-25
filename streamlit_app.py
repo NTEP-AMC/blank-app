@@ -890,6 +890,7 @@ with tab4:
             naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=806626302"
             df_naat = pd.read_csv(naat_url, header=None)
             
+            # Forward fill merged CBNAAT site names in Column A
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
             
             date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
@@ -910,11 +911,14 @@ with tab4:
                             
             if not tested_cols: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates."
                 
-            # 🎯 STRICT FILTERING: Drop blanks & rows where Col C is "TOTAL"
+            # 🎯 STRICT FILTERING: Drop ALL rows containing "TOTAL" in Col A, B, or C to prevent Double Math
             df_valid = df_naat.iloc[2:].copy()
-            df_valid = df_valid.dropna(subset=[0])
-            df_valid = df_valid[df_valid[0].astype(str).str.strip() != ""]
-            df_valid = df_valid[~df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False)]
+            mask_tot = (
+                df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) |
+                df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) |
+                df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False)
+            )
+            df_valid = df_valid[~mask_tot]
             
             df_valid['Tested_Sum'] = 0
             for col in tested_cols:
@@ -924,16 +928,19 @@ with tab4:
             grouped = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
             grouped.columns = ['NAAT Site', 'Tested']
             
-            # 🎯 DECIMAL FORMATTER LOGIC (No .0 unless actually a decimal)
+            # 🎯 DECIMAL FORMATTER LOGIC (No .0 for wholes)
             def format_avg(val):
                 return int(val) if float(val).is_integer() else round(float(val), 1)
 
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
+            # 🎯 BLANK PURGE
             def clean_site(s):
-                return str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
+                c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
+                return c if c not in ["NAN", "NONE", ""] else ""
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
+            grouped = grouped[grouped['NAAT Site'] != ""]
             
             # 🎯 STRICT ZONE MAPPING
             zone_map_strict = {
@@ -973,7 +980,7 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
-            # 🎯 APPEND SINGLE GRAND TOTAL ROW
+            # 🎯 APPEND SINGLE GRAND TOTAL ROW AT THE END
             total_tested = int(grouped['Tested'].sum())
             total_avg = format_avg(total_tested / w_days)
             total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
