@@ -466,6 +466,7 @@ with tab4:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
+            from pptx.enum.text import PP_ALIGN
         except ImportError: return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
 
         prs = Presentation()
@@ -528,15 +529,26 @@ with tab4:
                 cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                 cell.text_frame.paragraphs[0].font.bold = True
+                if i > 0: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
             target_idx = col_names.index(color_target)
             max_value = final_df.iloc[:, target_idx].max() if not final_df.empty else 0
             for i, (_, row) in enumerate(final_df.iterrows()):
                 name_val = str(row[entity_col_name])
                 table.cell(i+1, 0).text = name_val
-                table.cell(i+1, 1).text = str(int(row[p1_name]))
+                
+                c1_p = table.cell(i+1, 1).text_frame.paragraphs[0]
+                c1_p.text = str(int(row[p1_name]))
+                c1_p.alignment = PP_ALIGN.CENTER
+                
                 if cols == 4:
-                    table.cell(i+1, 2).text = str(int(row[p2_name]))
-                    table.cell(i+1, 3).text = str(int(row['Grand Total']))
+                    c2_p = table.cell(i+1, 2).text_frame.paragraphs[0]
+                    c2_p.text = str(int(row[p2_name]))
+                    c2_p.alignment = PP_ALIGN.CENTER
+                    
+                    c3_p = table.cell(i+1, 3).text_frame.paragraphs[0]
+                    c3_p.text = str(int(row['Grand Total']))
+                    c3_p.alignment = PP_ALIGN.CENTER
+                    
                 if "PRIVATE FACILITIES" in name_val:
                     for j in range(cols):
                         c = table.cell(i+1, j)
@@ -622,6 +634,7 @@ with tab4:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
+            from pptx.enum.text import PP_ALIGN
             import re
             
             def add_corporate_slide(prs_obj, title_text):
@@ -647,10 +660,14 @@ with tab4:
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                     cell.text_frame.paragraphs[0].font.bold = True
                     cell.text_frame.paragraphs[0].font.size = Pt(12)
+                    if i > 1: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+                
                 for i in range(1, rows):
                     for j in range(cols):
                         cell = table_obj.cell(i, j)
-                        for paragraph in cell.text_frame.paragraphs: paragraph.font.size = Pt(font_size)
+                        for paragraph in cell.text_frame.paragraphs: 
+                            paragraph.font.size = Pt(font_size)
+                            if j > 1: paragraph.alignment = PP_ALIGN.CENTER
 
             def extract_num(val):
                 nums = re.findall(r'^(\d+)', str(val).strip())
@@ -763,7 +780,9 @@ with tab4:
                             for j in range(len(chunk.columns)):
                                 cell = t2.table.cell(row_idx_c+1, j)
                                 cell.text = str(row.iloc[j])
-                                for p in cell.text_frame.paragraphs: p.font.size = Pt(11)
+                                for p in cell.text_frame.paragraphs: 
+                                    p.font.size = Pt(11)
+                                    if j > 1: p.alignment = PP_ALIGN.CENTER
                                 if j == 4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_uhc.iloc[orig_idx]["Achievement %"])
 
@@ -782,7 +801,9 @@ with tab4:
                             for j in range(len(chunk.columns)):
                                 cell = t3.table.cell(row_idx_c+1, j)
                                 cell.text = str(row.iloc[j])
-                                for p in cell.text_frame.paragraphs: p.font.size = Pt(11)
+                                for p in cell.text_frame.paragraphs: 
+                                    p.font.size = Pt(11)
+                                    if j > 1: p.alignment = PP_ALIGN.CENTER
                                 if j == 4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_chc.iloc[orig_idx]["Achievement %"])
                                 elif row_idx_c % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
@@ -828,6 +849,7 @@ with tab4:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
+            from pptx.enum.text import PP_ALIGN
             import re
             
             def add_corporate_slide(prs_obj, title_text):
@@ -853,10 +875,13 @@ with tab4:
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
                     cell.text_frame.paragraphs[0].font.bold = True
                     cell.text_frame.paragraphs[0].font.size = Pt(12)
+                    if i > 1: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
                 for i in range(1, rows):
                     for j in range(cols):
                         cell = table_obj.cell(i, j)
-                        for paragraph in cell.text_frame.paragraphs: paragraph.font.size = Pt(font_size)
+                        for paragraph in cell.text_frame.paragraphs: 
+                            paragraph.font.size = Pt(font_size)
+                            if j > 1: paragraph.alignment = PP_ALIGN.CENTER
             
             if len(selected_dates) == 2:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
@@ -865,7 +890,6 @@ with tab4:
             naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=806626302"
             df_naat = pd.read_csv(naat_url, header=None)
             
-            # 🎯 Forward fill merged CBNAAT site names in Column A
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
             
             date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
@@ -886,27 +910,32 @@ with tab4:
                             
             if not tested_cols: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates."
                 
-            # 🎯 Mathematically Perfect Grouping: Drop rows where Col C is "TOTAL"
+            # 🎯 STRICT FILTERING: Drop blanks & rows where Col C is "TOTAL"
             df_valid = df_naat.iloc[2:].copy()
+            df_valid = df_valid.dropna(subset=[0])
+            df_valid = df_valid[df_valid[0].astype(str).str.strip() != ""]
             df_valid = df_valid[~df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False)]
             
             df_valid['Tested_Sum'] = 0
             for col in tested_cols:
                 df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
             
-            # Group by NAAT site (Column A)
+            # Group by NAAT site
             grouped = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
             grouped.columns = ['NAAT Site', 'Tested']
             
-            # 🎯 Formatting Tested to Strict Integer
+            # 🎯 DECIMAL FORMATTER LOGIC (No .0 unless actually a decimal)
+            def format_avg(val):
+                return int(val) if float(val).is_integer() else round(float(val), 1)
+
             grouped['Tested'] = grouped['Tested'].astype(int)
-            grouped['Average'] = (grouped['Tested'] / w_days).round(1)
+            grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
             def clean_site(s):
                 return str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
             
-            # 🎯 Strict Zone Mapping from your Images
+            # 🎯 STRICT ZONE MAPPING
             zone_map_strict = {
                 "MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North",
                 "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North",
@@ -933,7 +962,7 @@ with tab4:
                 for k, v in clean_zone_map.items():
                     if k in c_site or c_site in k: return v
                 
-                # Deep fallbacks just in case the sheet name differs slightly
+                # Deep fallbacks
                 if "SOLA" in c_site: return "North West"
                 if "NHL" in c_site or "SABARMATI" in c_site: return "West"
                 if "GCS" in c_site or "SHARDABEN" in c_site: return "East"
@@ -944,10 +973,10 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
-            # 🎯 Appending the AMC Grand Total directly to the dataframe
+            # 🎯 APPEND SINGLE GRAND TOTAL ROW
             total_tested = int(grouped['Tested'].sum())
-            total_avg = round(total_tested / w_days, 1)
-            total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "GRAND TOTAL", "Tested": total_tested, "Average": total_avg}])
+            total_avg = format_avg(total_tested / w_days)
+            total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
             grouped = pd.concat([grouped, total_row], ignore_index=True)
             
             prs = Presentation()
@@ -957,31 +986,34 @@ with tab4:
                 title_suffix = f" (Part {i//chunk_size + 1})" if len(grouped) > chunk_size else ""
                 s = add_corporate_slide(prs, f"🔬 NAAT Utilization Report{title_suffix}")
                 
-                t_shape = s.shapes.add_table(len(chunk) + 1, len(chunk.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.35))
-                format_corporate_table(t_shape.table, chunk, [Inches(1.8), Inches(4.2), Inches(1.5), Inches(1.5)], font_size=11)
+                t_shape = s.shapes.add_table(len(chunk) + 1, len(chunk.columns), Inches(0.8), Inches(1.2), Inches(8.4), Inches(0.35))
+                format_corporate_table(t_shape.table, chunk, [Inches(1.5), Inches(4.5), Inches(1.2), Inches(1.2)], font_size=11)
                 
                 for row_idx, (orig_idx, row) in enumerate(chunk.iterrows()):
+                    is_total_row = (row['Zone'] == "AMC" and row['NAAT Site'] == "TOTAL")
                     for j in range(len(chunk.columns)):
                         cell = t_shape.table.cell(row_idx+1, j)
                         cell.text = str(row.iloc[j])
                         
-                        # Corporate grey highlighting for AMC/GRAND TOTAL
-                        if row['Zone'] == "AMC":
+                        # 🎯 AMC/TOTAL ROW FORMATTING
+                        if is_total_row:
                             cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
                             for p in cell.text_frame.paragraphs:
                                 p.font.bold = True
                                 p.font.size = Pt(11)
+                                if j > 1: p.alignment = PP_ALIGN.CENTER
                         else:
-                            for p in cell.text_frame.paragraphs: p.font.size = Pt(11)
+                            for p in cell.text_frame.paragraphs: 
+                                p.font.size = Pt(11)
+                                if j > 1: p.alignment = PP_ALIGN.CENTER
                             
-                            # 🎯 Light Red highlight if Average < 16 and NOT AMC
-                            avg_val = float(row['Average'])
-                            if avg_val < 16:
+                            # 🎯 LIGHT RED ONLY ON AVERAGE COLUMN (Col Index 3)
+                            if j == 3 and float(row['Average']) < 16:
                                 cell.fill.solid()
-                                cell.fill.fore_color.rgb = RGBColor(241, 148, 138) # Light Red
+                                cell.fill.fore_color.rgb = RGBColor(241, 148, 138) 
                             elif row_idx % 2 != 0:
                                 cell.fill.solid()
-                                cell.fill.fore_color.rgb = RGBColor(242, 243, 244) # Alternate Light Grey
+                                cell.fill.fore_color.rgb = RGBColor(242, 243, 244) 
                             
             out_io = io.BytesIO()
             prs.save(out_io)
