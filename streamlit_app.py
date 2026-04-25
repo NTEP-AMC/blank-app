@@ -599,7 +599,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 NEW ADDITION: MNC CORPORATE TARGET ACHIEVEMENT DECK
+    # 🎯 NEW ADDITION: MNC CORPORATE TARGET ACHIEVEMENT DECK (MULTIPLE SLIDES)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC)</h3>", unsafe_allow_html=True)
@@ -828,6 +828,7 @@ with tab4:
             from pptx import Presentation
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
+            import re
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -867,13 +868,11 @@ with tab4:
             # 🎯 Forward fill merged CBNAAT site names in Column A
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
             
-            # Dates are in row index 0, headers in row index 1
             date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
             header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
             
             tested_cols = []
             for d in date_list:
-                # Match various Google Sheet date formats
                 fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
                 match_indices = []
                 for i, val in enumerate(date_row):
@@ -887,38 +886,69 @@ with tab4:
                             
             if not tested_cols: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates."
                 
-            # Filter out TOTALs and slice data
-            df_valid = df_naat.copy()
-            df_valid = df_valid[~df_valid[0].astype(str).str.upper().str.contains("TOTAL")]
-            # 🎯 Drop rows where Column C is TOTAL (Avoids double counting)
+            # 🎯 Mathematically Perfect Grouping: Drop rows where Col C is "TOTAL"
+            df_valid = df_naat.iloc[2:].copy()
             df_valid = df_valid[~df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False)]
-            df_valid = df_valid.iloc[2:] # Skip headers
             
             df_valid['Tested_Sum'] = 0
             for col in tested_cols:
                 df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
             
-            # Group by NAAT site
+            # Group by NAAT site (Column A)
             grouped = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
             grouped.columns = ['NAAT Site', 'Tested']
+            
+            # 🎯 Formatting Tested to Strict Integer
+            grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).round(1)
             
             def clean_site(s):
                 return str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
             
-            # Fallback map Zones
+            # 🎯 Strict Zone Mapping from your Images
+            zone_map_strict = {
+                "MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North",
+                "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North",
+                "UCHC VATVA": "South", "UCHC SABARMATI": "West",
+                "MC-NHL MEDICAL COLLEGE, AMC": "West", "UCHC THALTEJ": "North West",
+                "NARENDRA MODI MC": "South", "FAISALNAGAR CHC": "South",
+                "UCHC DANILIMDA": "South", "UCHC BEHERAMPURA": "South",
+                "CHC VASTRAL": "East", "SDH ESIC MODEL HOSP.": "North",
+                "UHC RANIP": "West", "MC-NARENDRA MODI MEDICAL COLLEGE": "South",
+                "UCHC CHANDKHEDA": "West", "UCHC RAKHIAL": "North",
+                "CHC SARKHEJ": "South West", "UCHC NARODA": "North",
+                "UHC SAIJPUR": "North", "MC-DR. M K SHAH MEDICAL COLLEGE AND RESEARCH CENTER AMC": "West",
+                "UHC SHAHPUR": "Central", "UHC STADIUM": "West",
+                "UHC JAMALPUR": "Central", "UHC GHATLODIA": "North West",
+                "UHC VIRATNAGAR": "East", "UCHC GOMTIPUR": "East",
+                "UHC ISANPUR": "South", "UHC BHAIPURA": "East",
+                "JODHPUR UHC": "South West", "UHC NAVRANGPURA": "West"
+            }
+            
+            clean_zone_map = {re.sub(r'[^A-Z0-9]', '', k.replace("CBNAAT","").replace("TRUNAAT","").upper()): v for k,v in zone_map_strict.items()}
+
             def get_zone(site):
-                s = str(site).upper()
-                if "SOLA" in s or "BHADVAT" in s: return "North West"
-                if "NHL" in s or "V S" in s or "SABARMATI" in s: return "West"
-                if "GCS" in s or "SHARDABEN" in s: return "East"
-                if "ASARWA" in s or "CIVIL" in s: return "Central"
-                if "VATVA" in s or "L G" in s or "LG" in s or "MANINAGAR" in s or "KANKARIA" in s: return "South"
+                c_site = re.sub(r'[^A-Z0-9]', '', str(site).replace("CBNAAT","").replace("TRUNAAT","").upper())
+                for k, v in clean_zone_map.items():
+                    if k in c_site or c_site in k: return v
+                
+                # Deep fallbacks just in case the sheet name differs slightly
+                if "SOLA" in c_site: return "North West"
+                if "NHL" in c_site or "SABARMATI" in c_site: return "West"
+                if "GCS" in c_site or "SHARDABEN" in c_site: return "East"
+                if "ASARWA" in c_site or "CIVIL" in c_site: return "Central"
+                if "VATVA" in c_site or "MANINAGAR" in c_site or "KANKARIA" in c_site: return "South"
                 return "AMC" 
                 
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
+            
+            # 🎯 Appending the AMC Grand Total directly to the dataframe
+            total_tested = int(grouped['Tested'].sum())
+            total_avg = round(total_tested / w_days, 1)
+            total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "GRAND TOTAL", "Tested": total_tested, "Average": total_avg}])
+            grouped = pd.concat([grouped, total_row], ignore_index=True)
             
             prs = Presentation()
             chunk_size = 13
@@ -928,29 +958,31 @@ with tab4:
                 s = add_corporate_slide(prs, f"🔬 NAAT Utilization Report{title_suffix}")
                 
                 t_shape = s.shapes.add_table(len(chunk) + 1, len(chunk.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.35))
-                format_corporate_table(t_shape.table, chunk, [Inches(2.0), Inches(4.0), Inches(1.5), Inches(1.5)], font_size=11)
+                format_corporate_table(t_shape.table, chunk, [Inches(1.8), Inches(4.2), Inches(1.5), Inches(1.5)], font_size=11)
                 
                 for row_idx, (orig_idx, row) in enumerate(chunk.iterrows()):
                     for j in range(len(chunk.columns)):
                         cell = t_shape.table.cell(row_idx+1, j)
                         cell.text = str(row.iloc[j])
-                        for p in cell.text_frame.paragraphs: p.font.size = Pt(11)
-                        if row_idx % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
-            
-            # 🎯 GRAND TOTAL SLIDE
-            s_tot = add_corporate_slide(prs, "🔬 NAAT Utilization - Grand Total")
-            t_tot = s_tot.shapes.add_table(2, 2, Inches(2.5), Inches(2.5), Inches(5.0), Inches(1.5))
-            format_corporate_table(t_tot.table, pd.DataFrame(columns=["Total NAAT Tested", "Daily Average"]), [Inches(2.5), Inches(2.5)], font_size=20)
-            
-            t_tot.table.cell(1, 0).text = str(int(grouped['Tested'].sum()))
-            t_tot.table.cell(1, 1).text = str(round(grouped['Average'].sum(), 1))
-            
-            for j in range(2):
-                cell = t_tot.table.cell(1, j)
-                for p in cell.text_frame.paragraphs:
-                    p.font.size = Pt(28)
-                    p.font.bold = True
-                
+                        
+                        # Corporate grey highlighting for AMC/GRAND TOTAL
+                        if row['Zone'] == "AMC":
+                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                            for p in cell.text_frame.paragraphs:
+                                p.font.bold = True
+                                p.font.size = Pt(11)
+                        else:
+                            for p in cell.text_frame.paragraphs: p.font.size = Pt(11)
+                            
+                            # 🎯 Light Red highlight if Average < 16 and NOT AMC
+                            avg_val = float(row['Average'])
+                            if avg_val < 16:
+                                cell.fill.solid()
+                                cell.fill.fore_color.rgb = RGBColor(241, 148, 138) # Light Red
+                            elif row_idx % 2 != 0:
+                                cell.fill.solid()
+                                cell.fill.fore_color.rgb = RGBColor(242, 243, 244) # Alternate Light Grey
+                            
             out_io = io.BytesIO()
             prs.save(out_io)
             return out_io.getvalue(), "Success"
