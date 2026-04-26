@@ -1322,7 +1322,6 @@ with tab6:
             final_df['FILTER_DESIG'] = ""
             final_df['EXTRA_CHARGE'] = ""
 
-            # Standardize Roles
             final_df.loc[final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR', 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR"
             final_df.loc[final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR', 'FILTER_DESIG'] = "MO-Supervisor"
             
@@ -1345,6 +1344,11 @@ with tab6:
             ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[ushma_mask, 'EXTRA_CHARGE'] = "(Also monitoring East & North Zone)"
             
+            # 🎯 Falguni S. Panchal Hardcode Override
+            falguni_mask = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
+            final_df.loc[falguni_mask, 'ZONE'] = "HEAD OFFICE"
+            final_df.loc[falguni_mask, 'TB_UNIT'] = "Arogya Bhavan"
+            
             # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
             zone_heads = {}
@@ -1365,7 +1369,11 @@ with tab6:
             def assign_reporting(row):
                 sheet = row['SOURCE_SHEET']
                 z = row['ZONE']
+                name = str(row['NAME']).upper()
                 z_head = zone_heads.get(z, "Zonal MO-Supervisor")
+                
+                # Falguni Panchal Override
+                if "FALGUNI" in name: return "City TB Officer & MO-DTC"
                 
                 if sheet == "MO-SUPERVISOR": return "City TB Officer (Dr. S. K. Patel)"
                 elif sheet == "MO-MEDICAL COLLEGE": return f"City TB Officer & {z_head}"
@@ -1469,7 +1477,11 @@ with tab6:
             border_color = "#e11d48" if h_level == 1 else "#f59e0b" if h_level == 2 else "#10b981" if h_level == 3 else "#0ea5e9" if h_level == 4 else "#8b5cf6"
             badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🧪 STLS" if h_level == 3 else "📋 STS" if h_level == 4 else "🩺 TBHV"
             
-            location_html = f"<b>{zone} Zone</b>"
+            if zone.upper() == "HEAD OFFICE":
+                location_html = f"<b>{zone}</b>"
+            else:
+                location_html = f"<b>{zone} Zone</b>"
+                
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
                 location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
                 
