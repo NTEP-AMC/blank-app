@@ -1220,3 +1220,120 @@ with tab5:
                         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
+
+# ==========================================
+# 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER)
+# ==========================================
+with tab6:
+    st.markdown("<h3 style='text-align: center; color: #1f618d;'>👥 AMC NTEP Staff Directory</h3>", unsafe_allow_html=True)
+    
+    @st.cache_data(ttl=600)
+    def load_staff_directory():
+        # 🎯 ALL SUB-SHEET GIDs INTEGRATED
+        sheet_gids = {
+            "MO-SUPERVISOR": "1072071070",
+            "STS": "1743236661",
+            "STLS": "450506055",
+            "TBHV": "1273132313"
+        }
+        base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
+        
+        all_staff = []
+        for sheet_name, gid in sheet_gids.items():
+            try:
+                # Skip the first 2 rows so Row 3 becomes the actual Header (based on your sheet format)
+                df_s = pd.read_csv(base_url + gid, skiprows=2)
+                df_s.columns = df_s.columns.astype(str).str.strip().str.upper()
+                
+                # Safety check to ensure core columns exist
+                for req_col in ['ZONE', 'NAME', 'DESIGNATION']:
+                    if req_col not in df_s.columns: df_s[req_col] = ""
+                
+                # Dynamically find columns even if spelling changes slightly across tabs (e.g., CONTECT vs CONTACT)
+                contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), "CONTACT NO")
+                email_col = next((c for c in df_s.columns if "EMAIL" in c), "EMAIL")
+                address_col = next((c for c in df_s.columns if "ADDRESS" in c and "EMAIL" not in c), "ADDRESS")
+                
+                df_s = df_s.rename(columns={contact_col: 'CONTACT NO', email_col: 'EMAIL', address_col: 'ADDRESS'})
+                
+                # Force Designation to the sheet name if it's blank
+                df_s['DESIGNATION'] = df_s['DESIGNATION'].replace(["", "NAN", "NONE"], sheet_name)
+                
+                all_staff.append(df_s[['ZONE', 'NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'ADDRESS']])
+            except Exception as e:
+                pass # Silently skip if a sheet fails to load so it doesn't break the whole app
+        
+        if all_staff:
+            final_df = pd.concat(all_staff, ignore_index=True)
+            final_df = final_df.dropna(subset=['NAME']) # Drop completely empty rows
+            final_df = final_df[final_df['NAME'].str.strip() != ""]
+            return final_df.fillna("N/A")
+        return pd.DataFrame()
+
+    with st.spinner("Loading Enterprise Staff Directory..."):
+        df_staff = load_staff_directory()
+    
+    if df_staff.empty:
+        st.warning("⚠️ Staff Directory data could not be loaded. Please check the Google Sheet link and GIDs.")
+    else:
+        # 🎯 ROLE BASED SECURITY FILTERING
+        if st.session_state.role == "ZONE":
+            df_staff = df_staff[df_staff['ZONE'].astype(str).str.upper().str.contains(st.session_state.target.upper(), na=False)]
+        
+        # 🔍 SMART SEARCH & CASCADING FILTERS
+        sc1, sc2, sc3 = st.columns([2, 1, 1])
+        with sc1:
+            search_q = st.text_input("🔍 Smart Search (Name, Number, Email...)", "")
+        with sc2:
+            zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/A", "NAN", ""]])
+            sel_zone = st.selectbox("🏢 Filter by Zone", zones)
+        with sc3:
+            desigs = ["All Designations"] + sorted([d for d in df_staff['DESIGNATION'].unique() if str(d).strip() not in ["N/A", "NAN", ""]])
+            sel_desig = st.selectbox("👨‍⚕️ Filter by Designation", desigs)
+        
+        # ⚙️ APPLY FILTERS LOGIC
+        df_display = df_staff.copy()
+        if search_q:
+            df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
+        if sel_zone != "All Zones":
+            df_display = df_display[df_display['ZONE'] == sel_zone]
+        if sel_desig != "All Designations":
+            df_display = df_display[df_display['DESIGNATION'] == sel_desig]
+        
+        st.markdown(f"<div style='color: #555; margin-bottom: 15px; font-weight: bold;'>👥 Found {len(df_display)} Staff Members</div>", unsafe_allow_html=True)
+        
+        # 📇 DIGITAL BUSINESS CARDS GRID (3 Columns)
+        cols = st.columns(3)
+        for idx, row in df_display.iterrows():
+            name = str(row.get('NAME', 'N/A')).title()
+            desig = str(row.get('DESIGNATION', 'N/A')).upper()
+            zone = str(row.get('ZONE', 'N/A')).title()
+            phone = str(row.get('CONTACT NO', 'N/A')).strip().replace('.0', '')
+            email = str(row.get('EMAIL', 'N/A')).strip()
+            address = str(row.get('ADDRESS', 'N/A')).strip()
+            
+            # Format WhatsApp number accurately
+            clean_phone = "".join(filter(str.isdigit, phone))
+            wa_link = f"https://wa.me/91{clean_phone}" if len(clean_phone) >= 10 else "#"
+            mail_link = f"mailto:{email}" if "@" in email else "#"
+            
+            card_html = f"""
+            <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border-left: 5px solid #27AE60;">
+                <div style="font-size: 11px; color: #8E44AD; font-weight: bold; text-transform: uppercase;">{desig}</div>
+                <div style="font-size: 18px; font-weight: bold; color: #2C3E50; margin: 3px 0;">{name}</div>
+                <div style="font-size: 13px; color: #7F8C8D; margin-bottom: 8px;">📍 {zone} Zone</div>
+                <div style="font-size: 13px; color: #34495E; margin-bottom: 3px;">📞 {phone}</div>
+                <div style="font-size: 13px; color: #34495E; margin-bottom: 12px;">📧 {email}</div>
+            """
+            
+            # 1-Click Action Buttons
+            card_html += f"""<div style="display: flex; gap: 10px;">"""
+            if len(clean_phone) >= 10:
+                card_html += f"""<a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold;">💬 WhatsApp</a>"""
+            if "@" in email:
+                card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3498DB; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold;">✉️ Email</a>"""
+            card_html += "</div></div>"
+            
+            # Display Card in alternating columns
+            with cols[idx % 3]:
+                st.markdown(card_html, unsafe_allow_html=True)
