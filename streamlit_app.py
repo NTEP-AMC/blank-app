@@ -1229,6 +1229,7 @@ with tab6:
     
     @st.cache_data(ttl=600)
     def load_staff_directory():
+        import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
         configs = [
@@ -1297,7 +1298,13 @@ with tab6:
                 
             final_df['ZONE'] = final_df.apply(assign_strict_zone, axis=1)
             
-            # 🎯 DR. CHIRAG SHAH LOGIC (Dual Charge)
+            # 🎯 CLEAN TB UNIT STRINGS (Fixes "VASNA / PALDI" into "Vasna, Paldi")
+            final_df['TB_UNIT'] = final_df['TB_UNIT'].astype(str).str.upper()
+            final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace(r'I/C\s*', '', regex=True) # Removes "I/C "
+            final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
+            final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
+            
+            # 🎯 DR. CHIRAG SHAH LOGIC
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR & MO DTC"
             
@@ -1305,7 +1312,6 @@ with tab6:
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
             zone_heads = {}
             for _, r in mo_sups.iterrows():
-                # If a zone has multiple supervisors or duplicates, we will join them or just take the first. 
                 z = r['ZONE']
                 n = str(r['NAME']).title()
                 if z not in zone_heads: zone_heads[z] = n
@@ -1335,7 +1341,6 @@ with tab6:
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             
             final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
-            final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "NAN", "NONE"], "N/A").str.title()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             return final_df.fillna("N/A")
@@ -1350,7 +1355,6 @@ with tab6:
         if st.session_state.role == "ZONE":
             df_staff = df_staff[df_staff['ZONE'].astype(str).str.upper().str.contains(st.session_state.target.upper(), na=False)]
         
-        # 🔍 MNC CORPORATE SEARCH BAR
         st.markdown("""
         <style>
         div[data-testid="stTextInput"] input { border-radius: 20px; padding: 10px 20px; border: 1px solid #cbd5e1; }
@@ -1363,9 +1367,17 @@ with tab6:
             zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/A", "NAN", ""]])
             sel_zone = st.selectbox("🏢 Filter Zone", zones)
         
-        tu_list = df_staff[df_staff['ZONE'] == sel_zone]['TB_UNIT'].unique() if sel_zone != "All Zones" else df_staff['TB_UNIT'].unique()
+        # 🎯 BUILDING THE CLEAN 23 TB UNIT LIST FOR DROPDOWN
+        raw_tus = df_staff[df_staff['ZONE'] == sel_zone]['TB_UNIT'] if sel_zone != "All Zones" else df_staff['TB_UNIT']
+        all_tu_items = set()
+        for tu_str in raw_tus.dropna():
+            for t in str(tu_str).split(','):
+                cleaned_t = t.strip()
+                if cleaned_t and cleaned_t.upper() not in ["N/A", "NAN", "NONE"]:
+                    all_tu_items.add(cleaned_t)
+                    
         with sc3:
-            tus = ["All TB Units"] + sorted([t for t in tu_list if str(t).strip() not in ["N/A", "Nan", ""]])
+            tus = ["All TB Units"] + sorted(list(all_tu_items))
             sel_tu = st.selectbox("🏥 Filter TB Unit", tus)
             
         with sc4:
@@ -1376,7 +1388,11 @@ with tab6:
         df_display = df_staff.copy()
         if search_q: df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
         if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'] == sel_zone]
-        if sel_tu != "All TB Units": df_display = df_display[df_display['TB_UNIT'] == sel_tu]
+        
+        # 🎯 SMART TB UNIT FILTERING (Checks if selected TU is inside the joined string)
+        if sel_tu != "All TB Units": 
+            df_display = df_display[df_display['TB_UNIT'].astype(str).str.contains(sel_tu, case=False, na=False)]
+            
         if sel_desig != "All Designations": df_display = df_display[df_display['DESIGNATION'] == sel_desig]
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
@@ -1401,7 +1417,6 @@ with tab6:
             call_link = f"tel:+91{clean_phone}" if len(clean_phone) >= 10 else "#"
             mail_link = f"mailto:{email}" if "@" in email else "#"
             
-            # 🎨 Enterprise Styling Map
             border_color = "#e11d48" if h_level == 1 else "#f59e0b" if h_level == 2 else "#10b981" if h_level == 3 else "#0ea5e9" if h_level == 4 else "#8b5cf6"
             badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🧪 STLS" if h_level == 3 else "📋 STS" if h_level == 4 else "🩺 TBHV"
             
@@ -1409,28 +1424,22 @@ with tab6:
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
                 location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
             
-            card_html = f"""
-            <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span>
-                </div>
-                <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig}</div>
-                
-                <div style="font-size: 12px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:18px;">{location_html}</span></div>
-                <div style="font-size: 13px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:22px;">📞</span> <span style="font-weight:600;">{phone}</span></div>
-                
-                <div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-top: 12px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
-                    <div style="font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; font-weight: 700;">Reports To</div>
-                    <div style="font-size: 12px; color: #0f172a; font-weight: 600;">{reports_to}</div>
-                </div>
-            """
-            
-            # 📱 MNC Corporate Pill Buttons
-            card_html += f"""<div style="display: flex; gap: 8px; justify-content: space-between;">"""
+            # 🎯 FIXED HTML: NO BLANK LINES ALLOWED INSIDE THE F-STRING
+            card_html = f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+<span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span>
+</div>
+<div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
+<div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig}</div>
+<div style="font-size: 12px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:18px;">{location_html}</span></div>
+<div style="font-size: 13px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:22px;">📞</span> <span style="font-weight:600;">{phone}</span></div>
+<div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-top: 12px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
+<div style="font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; font-weight: 700;">Reports To</div>
+<div style="font-size: 12px; color: #0f172a; font-weight: 600;">{reports_to}</div>
+</div>
+<div style="display: flex; gap: 8px; justify-content: space-between;">"""
             if len(clean_phone) >= 10:
-                card_html += f"""<a href="{call_link}" style="text-decoration: none; background-color: #f1f5f9; color: #334155; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; border: 1px solid #e2e8f0; transition: 0.2s;">📞 Call</a>"""
-                card_html += f"""<a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(37,211,102,0.2);">💬 WhatsApp</a>"""
+                card_html += f"""<a href="{call_link}" style="text-decoration: none; background-color: #f1f5f9; color: #334155; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; border: 1px solid #e2e8f0; transition: 0.2s;">📞 Call</a><a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(37,211,102,0.2);">💬 WhatsApp</a>"""
             if "@" in email:
                 card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3b82f6; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(59,130,246,0.2);">✉️ Email</a>"""
             card_html += "</div></div>"
