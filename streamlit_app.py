@@ -1233,19 +1233,36 @@ with tab6:
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
         configs = [
-            {"name": "MO-SUPERVISOR", "gid": "1725576011", "skip": 2, "name_col": "NAME", "zone_col": "ZONE", "tu_col": None, "desig_col": "DESIGNATION"},
-            {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "skip": 1, "name_col": "NAME", "zone_col": None, "tu_col": "TU", "desig_col": None},
-            {"name": "STS", "gid": "1743236661", "skip": 1, "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT", "desig_col": "DESIGNATION"},
-            {"name": "STLS", "gid": "450506055", "skip": 1, "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT", "desig_col": None},
-            {"name": "TBHV", "gid": "1273132313", "skip": 1, "name_col": "TBHV", "zone_col": None, "tu_col": "TU", "desig_col": None},
+            {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
+            {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
+            {"name": "STS", "gid": "1743236661", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
+            {"name": "STLS", "gid": "450506055", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
+            {"name": "TBHV", "gid": "1273132313", "name_col": "TBHV", "zone_col": None, "tu_col": "TU"},
         ]
         
         all_staff = []
         for cfg in configs:
             try:
-                df_s = pd.read_csv(base_url + cfg["gid"], skiprows=cfg["skip"])
-                df_s.columns = df_s.columns.astype(str).str.strip().str.upper()
+                # Read raw sheet without skipping rows
+                df_raw = pd.read_csv(base_url + cfg["gid"])
                 
+                # 🎯 DYNAMIC HEADER DETECTION (Bulletproof for messy Google Sheets)
+                h_idx = -1
+                if str(cfg["name_col"]).upper() in df_raw.columns.astype(str).str.strip().str.upper():
+                    df_s = df_raw.copy()
+                    df_s.columns = df_s.columns.astype(str).str.strip().str.upper()
+                else:
+                    for i in range(5):
+                        vals = [str(v).upper().strip() for v in df_raw.iloc[i].values]
+                        if str(cfg["name_col"]).upper() in vals:
+                            h_idx = i; break
+                    if h_idx != -1:
+                        df_s = df_raw.iloc[h_idx+1:].copy()
+                        df_s.columns = df_raw.iloc[h_idx].astype(str).str.strip().str.upper()
+                    else:
+                        df_s = df_raw.copy()
+                        df_s.columns = df_s.columns.astype(str).str.strip().str.upper()
+
                 df_clean = pd.DataFrame()
                 
                 name_c = str(cfg["name_col"]).upper()
@@ -1259,11 +1276,6 @@ with tab6:
                 
                 df_clean['RAW_ZONE'] = df_clean['RAW_ZONE'].replace(["", "NAN", "NONE", "NaN", pd.NA], None).ffill()
                 df_clean['TB_UNIT'] = df_clean['TB_UNIT'].replace(["", "NAN", "NONE", "NaN", pd.NA], None).ffill()
-                
-                if cfg["desig_col"] and str(cfg["desig_col"]).upper() in df_s.columns:
-                    df_clean['DESIGNATION'] = df_s[str(cfg["desig_col"]).upper()]
-                else:
-                    df_clean['DESIGNATION'] = cfg["name"]
                 
                 contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
                 df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
@@ -1299,27 +1311,40 @@ with tab6:
                 
             final_df['ZONE'] = final_df.apply(assign_strict_zone, axis=1)
             
-            # CLEAN TB UNIT STRINGS
             final_df['TB_UNIT'] = final_df['TB_UNIT'].astype(str).str.upper()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace(r'I/C\s*', '', regex=True)
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
             
             # ==========================================
-            # 🎯 CUSTOM STAFF OVERRIDES & STANDARDIZATION
+            # 🎯 CLEAN DESIGNATIONS & FILTERS
             # ==========================================
-            # 1. Force exact titles for lower staff to ignore sheet typos
-            final_df.loc[final_df['SOURCE_SHEET'] == 'STS', 'DESIGNATION'] = "Senior Treatment Supervisor (STS)"
-            final_df.loc[final_df['SOURCE_SHEET'] == 'STLS', 'DESIGNATION'] = "Senior TB Laboratory Supervisor (STLS)"
-            final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB Health Visitor (TBHV)"
+            final_df['DESIGNATION'] = ""
+            final_df['FILTER_DESIG'] = ""
+            final_df['EXTRA_CHARGE'] = ""
 
-            # 2. Dr. Chirag Shah Logic
-            chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
-            final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Medical Officer DTC)"
+            # Standardize Roles
+            final_df.loc[final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR', 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR', 'FILTER_DESIG'] = "MO-Supervisor"
             
-            # 3. Dr. Ushma Gandhi Logic
+            final_df.loc[final_df['SOURCE_SHEET'] == 'MO-MEDICAL COLLEGE', 'DESIGNATION'] = "MEDICAL OFFICER"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'MO-MEDICAL COLLEGE', 'FILTER_DESIG'] = "Medical Officer"
+            
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STLS', 'DESIGNATION'] = "SENIOR TB LABORATORY SUPERVISOR (STLS)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STLS', 'FILTER_DESIG'] = "STLS"
+            
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STS', 'DESIGNATION'] = "SENIOR TREATMENT SUPERVISOR (STS)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STS', 'FILTER_DESIG'] = "STS"
+            
+            final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB HEALTH VISITOR (TBHV)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'FILTER_DESIG'] = "TBHV"
+
+            # Custom Overrides for Zonal Heads
+            chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
+            final_df.loc[chirag_mask, 'EXTRA_CHARGE'] = "(Medical Officer DTC)"
+            
             ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
-            final_df.loc[ushma_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (also monitoring of EAST and North zone of Ahmedabad)"
+            final_df.loc[ushma_mask, 'EXTRA_CHARGE'] = "(Also monitoring East & North Zone)"
             
             # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
@@ -1349,7 +1374,6 @@ with tab6:
 
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
-            final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
             
             # 🎯 IDENTITY MERGER
             def merge_tus(tu_series):
@@ -1360,7 +1384,7 @@ with tab6:
                             if item.strip(): tus.add(item.strip().title())
                 return ", ".join(sorted(tus)) if tus else "N/A"
             
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'HIERARCHY', 'REPORTS_TO']).agg({
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'EXTRA_CHARGE', 'CONTACT NO', 'EMAIL', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
                 'SOURCE_SHEET': 'first'
@@ -1388,14 +1412,12 @@ with tab6:
         sc1, sc2, sc3, sc4 = st.columns([2, 1, 1, 1])
         with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
         
-        # Build Zone Filter
         all_zones_raw = []
         for z_str in df_staff['ZONE']:
             for z in str(z_str).split(' & '): all_zones_raw.append(z.strip())
         zones = ["All Zones"] + sorted(list(set([z for z in all_zones_raw if z not in ["N/A", "NAN", ""]])))
         with sc2: sel_zone = st.selectbox("🏢 Filter Zone", zones)
         
-        # Build TU Filter
         raw_tus = df_staff[df_staff['ZONE'].str.contains(sel_zone, case=False, na=False)]['TB_UNIT'] if sel_zone != "All Zones" else df_staff['TB_UNIT']
         all_tu_items = set()
         for tu_str in raw_tus.dropna():
@@ -1408,7 +1430,8 @@ with tab6:
             sel_tu = st.selectbox("🏥 Filter TB Unit", tus)
             
         with sc4:
-            desigs = ["All Designations"] + sorted([d for d in df_staff['DESIGNATION'].unique() if str(d).strip() not in ["N/A", "NAN", ""]])
+            # Dropdown explicitly mapped to the clean categories
+            desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV"]
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
         # APPLY FILTERS
@@ -1416,7 +1439,7 @@ with tab6:
         if search_q: df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
         if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'].str.contains(sel_zone, case=False, na=False)]
         if sel_tu != "All TB Units": df_display = df_display[df_display['TB_UNIT'].astype(str).str.contains(sel_tu, case=False, na=False)]
-        if sel_desig != "All Designations": df_display = df_display[df_display['DESIGNATION'] == sel_desig]
+        if sel_desig != "All Designations": df_display = df_display[df_display['FILTER_DESIG'] == sel_desig]
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
@@ -1425,6 +1448,7 @@ with tab6:
         for idx, row in df_display.iterrows():
             name = str(row.get('NAME', 'N/A')).title()
             desig = str(row.get('DESIGNATION', 'N/A')).upper()
+            extra = str(row.get('EXTRA_CHARGE', ''))
             zone = str(row.get('ZONE', 'N/A'))
             tu = str(row.get('TB_UNIT', 'N/A'))
             phone = str(row.get('CONTACT NO', 'N/A')).strip().replace('.0', '')
@@ -1446,11 +1470,13 @@ with tab6:
             location_html = f"<b>{zone} Zone</b>"
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
                 location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
+                
+            extra_html = f"<span style='color:#e11d48; display:block; margin-top:2px;'>{extra}</span>" if extra else ""
             
             card_html = f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
 <div style="margin-bottom: 12px;"><span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span></div>
 <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
-<div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig}</div>
+<div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig} {extra_html}</div>
 <div style="font-size: 13px; color: #334155; margin-bottom: 6px; line-height: 1.4;">📍 {location_html}</div>
 <div style="font-size: 13px; color: #334155; margin-bottom: 12px;">📞 <b>{phone}</b></div>
 <div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
