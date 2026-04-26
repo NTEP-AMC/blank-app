@@ -1282,7 +1282,7 @@ with tab6:
             final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
-            # 🎯 STRICT ZONE MAPPING 
+            # 🎯 STRICT ZONE MAPPING
             def assign_strict_zone(row):
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
@@ -1305,14 +1305,16 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
             
-            # 🎯 CUSTOM OVERRIDES FOR SPECIFIC LEADERSHIP ROLES
-            # Dr. Chirag Shah
+            # ==========================================
+            # 🎯 CUSTOM STAFF OVERRIDES
+            # ==========================================
+            # Dr. Chirag Shah Logic
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Medical Officer DTC)"
             
-            # Dr. Ushma Gandhi
+            # Dr. Ushma Gandhi Logic
             ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
-            final_df.loc[ushma_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Monitoring of EAST part of Ahmedabad)"
+            final_df.loc[ushma_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (also monitoring of EAST and North zone of Ahmedabad)"
             
             # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
@@ -1344,7 +1346,7 @@ with tab6:
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
             
-            # 🎯 IDENTITY MERGER: Group by Name to combine multi-zone staff
+            # 🎯 IDENTITY MERGER
             def merge_tus(tu_series):
                 tus = set()
                 for tu_val in tu_series:
