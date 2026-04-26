@@ -1222,16 +1222,15 @@ with tab5:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
 
 # ==========================================
-# 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER - ENTERPRISE EDITION)
+# 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER - MNC ENTERPRISE EDITION)
 # ==========================================
 with tab6:
-    st.markdown("<h3 style='text-align: center; color: #1f618d;'>👥 AMC NTEP Staff Directory</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1e293b; font-weight: 800; font-family: system-ui;'>👥 AMC NTEP Staff Directory</h3>", unsafe_allow_html=True)
     
     @st.cache_data(ttl=600)
     def load_staff_directory():
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
-        # 🎯 ADVANCED PARSER CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "skip": 2, "name_col": "NAME", "zone_col": "ZONE", "tu_col": None, "desig_col": "DESIGNATION"},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "skip": 1, "name_col": "NAME", "zone_col": None, "tu_col": "TU", "desig_col": None},
@@ -1248,7 +1247,6 @@ with tab6:
                 
                 df_clean = pd.DataFrame()
                 
-                # Extract Core Attributes
                 name_c = str(cfg["name_col"]).upper()
                 df_clean['NAME'] = df_s[name_c] if name_c in df_s.columns else ""
                 
@@ -1258,7 +1256,6 @@ with tab6:
                 tu_c = str(cfg["tu_col"]).upper()
                 df_clean['TB_UNIT'] = df_s[tu_c] if tu_c in df_s.columns else "N/A"
                 
-                # Forward fill merged cells (Crucial for TBHV format)
                 df_clean['RAW_ZONE'] = df_clean['RAW_ZONE'].replace(["", "NAN", "NONE", "NaN", pd.NA], None).ffill()
                 df_clean['TB_UNIT'] = df_clean['TB_UNIT'].replace(["", "NAN", "NONE", "NaN", pd.NA], None).ffill()
                 
@@ -1273,9 +1270,6 @@ with tab6:
                 email_col = next((c for c in df_s.columns if "EMAIL" in c), None)
                 df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
                 
-                address_col = next((c for c in df_s.columns if "ADDRESS" in c and "EMAIL" not in c), None)
-                df_clean['ADDRESS'] = df_s[address_col] if address_col else "N/A"
-                
                 df_clean['SOURCE_SHEET'] = cfg["name"]
                 all_staff.append(df_clean)
             except Exception as e:
@@ -1287,7 +1281,6 @@ with tab6:
             final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
-            # 🎯 STRICT ZONE MAPPING (Fixes the filter showing TB Units)
             def assign_strict_zone(row):
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
@@ -1304,34 +1297,51 @@ with tab6:
                 
             final_df['ZONE'] = final_df.apply(assign_strict_zone, axis=1)
             
-            # 🎯 STRICT NTEP HIERARCHY LOGIC
+            # 🎯 DR. CHIRAG SHAH LOGIC (Dual Charge)
+            chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
+            final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR & MO DTC"
+            
+            # 🎯 DYNAMIC REPORTING MAPPING
+            mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
+            zone_heads = {}
+            for _, r in mo_sups.iterrows():
+                # If a zone has multiple supervisors or duplicates, we will join them or just take the first. 
+                z = r['ZONE']
+                n = str(r['NAME']).title()
+                if z not in zone_heads: zone_heads[z] = n
+                elif n not in zone_heads[z]: zone_heads[z] += f" & {n}"
+
             def assign_hierarchy(sheet_name):
                 if sheet_name == "MO-SUPERVISOR": return 1
                 if sheet_name == "MO-MEDICAL COLLEGE": return 2
-                if sheet_name == "STLS": return 3  # Promoted STLS to Rank 3
-                if sheet_name == "STS": return 4   # Moved STS to Rank 4
+                if sheet_name == "STLS": return 3 
+                if sheet_name == "STS": return 4
                 if sheet_name == "TBHV": return 5
                 return 99
 
-            def assign_reporting(sheet_name):
-                if sheet_name in ["MO-SUPERVISOR", "MO-MEDICAL COLLEGE"]: 
+            def assign_reporting(row):
+                sheet = row['SOURCE_SHEET']
+                z = row['ZONE']
+                z_head = zone_heads.get(z, "Zonal MO-Supervisor")
+                
+                if sheet == "MO-SUPERVISOR": 
                     return "City TB Officer (Dr. S. K. Patel)"
+                elif sheet == "MO-MEDICAL COLLEGE":
+                    return f"City TB Officer & {z_head}"
                 else: 
-                    return "Zonal MO-Supervisor"
+                    return z_head
 
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
-            final_df['REPORTS_TO'] = final_df['SOURCE_SHEET'].apply(assign_reporting)
+            final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             
             final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "NAN", "NONE"], "N/A").str.title()
             
-            # Sort strictly by Hierarchy, then Zone, then Name
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
-            
             return final_df.fillna("N/A")
         return pd.DataFrame()
 
-    with st.spinner("Loading Enterprise Staff Directory..."):
+    with st.spinner("Loading Enterprise HR Data..."):
         df_staff = load_staff_directory()
     
     if df_staff.empty:
@@ -1340,15 +1350,19 @@ with tab6:
         if st.session_state.role == "ZONE":
             df_staff = df_staff[df_staff['ZONE'].astype(str).str.upper().str.contains(st.session_state.target.upper(), na=False)]
         
-        # 🔍 SMART SEARCH & CASCADING FILTERS
+        # 🔍 MNC CORPORATE SEARCH BAR
+        st.markdown("""
+        <style>
+        div[data-testid="stTextInput"] input { border-radius: 20px; padding: 10px 20px; border: 1px solid #cbd5e1; }
+        </style>
+        """, unsafe_allow_html=True)
+        
         sc1, sc2, sc3, sc4 = st.columns([2, 1, 1, 1])
-        with sc1:
-            search_q = st.text_input("🔍 Smart Search (Name, Number...)", "")
+        with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
         with sc2:
             zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/A", "NAN", ""]])
             sel_zone = st.selectbox("🏢 Filter Zone", zones)
         
-        # 🎯 Cascading TU Filter
         tu_list = df_staff[df_staff['ZONE'] == sel_zone]['TB_UNIT'].unique() if sel_zone != "All Zones" else df_staff['TB_UNIT'].unique()
         with sc3:
             tus = ["All TB Units"] + sorted([t for t in tu_list if str(t).strip() not in ["N/A", "Nan", ""]])
@@ -1356,19 +1370,18 @@ with tab6:
             
         with sc4:
             desigs = ["All Designations"] + sorted([d for d in df_staff['DESIGNATION'].unique() if str(d).strip() not in ["N/A", "NAN", ""]])
-            sel_desig = st.selectbox("👨‍⚕️ Filter Designation", desigs)
+            sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
         # ⚙️ APPLY FILTERS
         df_display = df_staff.copy()
-        if search_q:
-            df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
+        if search_q: df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
         if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'] == sel_zone]
         if sel_tu != "All TB Units": df_display = df_display[df_display['TB_UNIT'] == sel_tu]
         if sel_desig != "All Designations": df_display = df_display[df_display['DESIGNATION'] == sel_desig]
         
-        st.markdown(f"<div style='color: #555; margin-bottom: 15px; font-weight: bold;'>👥 Found {len(df_display)} Staff Members</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 📇 DIGITAL BUSINESS CARDS GRID
+        # 📇 MNC CORPORATE DIGITAL BUSINESS CARDS
         cols = st.columns(3)
         for idx, row in df_display.iterrows():
             name = str(row.get('NAME', 'N/A')).title()
@@ -1388,34 +1401,38 @@ with tab6:
             call_link = f"tel:+91{clean_phone}" if len(clean_phone) >= 10 else "#"
             mail_link = f"mailto:{email}" if "@" in email else "#"
             
-            # Styling tweaks based on Hierarchy
-            border_color = "#E74C3C" if h_level == 1 else "#F39C12" if h_level == 2 else "#27AE60" if h_level in [3, 4] else "#3498DB"
-            badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🔬 SUPERVISOR" if h_level in [3,4] else "🩺 HEALTH VISITOR"
+            # 🎨 Enterprise Styling Map
+            border_color = "#e11d48" if h_level == 1 else "#f59e0b" if h_level == 2 else "#10b981" if h_level == 3 else "#0ea5e9" if h_level == 4 else "#8b5cf6"
+            badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🧪 STLS" if h_level == 3 else "📋 STS" if h_level == 4 else "🩺 TBHV"
             
-            # Show TB Unit only if they aren't a Zonal Head
             location_html = f"📍 <b>{zone} Zone</b>"
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
-                location_html += f" &nbsp;|&nbsp; 🏥 {tu}"
+                location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
             
             card_html = f"""
-            <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 15px; border-top: 4px solid {border_color};">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                    <div style="font-size: 10px; color: {border_color}; font-weight: 900; text-transform: uppercase;">{badge}</div>
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span>
                 </div>
-                <div style="font-size: 18px; font-weight: 900; color: #2C3E50; margin-bottom: 2px;">{name}</div>
-                <div style="font-size: 12px; color: #7F8C8D; font-weight: bold; margin-bottom: 10px;">{desig}</div>
-                <div style="font-size: 12px; color: #34495E; margin-bottom: 4px; background-color: #F8F9F9; padding: 4px; border-radius: 4px;">{location_html}</div>
-                <div style="font-size: 12px; color: #34495E; margin-bottom: 4px;"><b>📞</b> {phone}</div>
-                <div style="font-size: 12px; color: #34495E; margin-bottom: 10px;"><b>👤 Reports to:</b> <span style="color:#C0392B; font-weight:bold;">{reports_to}</span></div>
+                <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig}</div>
+                
+                <div style="font-size: 12px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:18px;">{location_html}</span></div>
+                <div style="font-size: 13px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:22px;">📞</span> <span style="font-weight:600;">{phone}</span></div>
+                
+                <div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-top: 12px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; font-weight: 700;">Reports To</div>
+                    <div style="font-size: 12px; color: #0f172a; font-weight: 600;">{reports_to}</div>
+                </div>
             """
             
-            # 1-Click Action Buttons (WhatsApp, Call, Email)
-            card_html += f"""<div style="display: flex; gap: 8px; margin-top: 12px;">"""
+            # 📱 MNC Corporate Pill Buttons
+            card_html += f"""<div style="display: flex; gap: 8px; justify-content: space-between;">"""
             if len(clean_phone) >= 10:
-                card_html += f"""<a href="{call_link}" style="text-decoration: none; background-color: #34495E; color: white; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; width: 33%; text-align: center;">📞 Call</a>"""
-                card_html += f"""<a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; width: 33%; text-align: center;">💬 Chat</a>"""
+                card_html += f"""<a href="{call_link}" style="text-decoration: none; background-color: #f1f5f9; color: #334155; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; border: 1px solid #e2e8f0; transition: 0.2s;">📞 Call</a>"""
+                card_html += f"""<a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(37,211,102,0.2);">💬 WhatsApp</a>"""
             if "@" in email:
-                card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3498DB; color: white; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; width: 33%; text-align: center;">✉️ Email</a>"""
+                card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3b82f6; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(59,130,246,0.2);">✉️ Email</a>"""
             card_html += "</div></div>"
             
             with cols[idx % 3]:
