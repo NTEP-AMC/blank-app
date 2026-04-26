@@ -1229,44 +1229,84 @@ with tab6:
     
     @st.cache_data(ttl=600)
     def load_staff_directory():
-        # 🎯 ALL SUB-SHEET GIDs INTEGRATED
-        sheet_gids = {
-            "MO-SUPERVISOR": "1072071070",
-            "STS": "1743236661",
-            "STLS": "450506055",
-            "TBHV": "1273132313"
-        }
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
+        # 🎯 CUSTOM PARSER CONFIGURATION FOR EACH UNIQUE SHEET
+        configs = [
+            {"name": "MO-SUPERVISOR", "gid": "1725576011", "skip": 2, "name_col": "NAME", "zone_col": "ZONE", "desig_col": "DESIGNATION"},
+            {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "skip": 1, "name_col": "NAME", "zone_col": "TU", "desig_col": None},
+            {"name": "STS", "gid": "1743236661", "skip": 1, "name_col": "NAME", "zone_col": "ZONE", "desig_col": "DESIGNATION"},
+            {"name": "STLS", "gid": "450506055", "skip": 1, "name_col": "NAME", "zone_col": "ZONE", "desig_col": None},
+            {"name": "TBHV", "gid": "1273132313", "skip": 1, "name_col": "TBHV", "zone_col": "TU", "desig_col": None},
+        ]
+        
         all_staff = []
-        for sheet_name, gid in sheet_gids.items():
+        for cfg in configs:
             try:
-                # Skip the first 2 rows so Row 3 becomes the actual Header (based on your sheet format)
-                df_s = pd.read_csv(base_url + gid, skiprows=2)
+                df_s = pd.read_csv(base_url + cfg["gid"], skiprows=cfg["skip"])
                 df_s.columns = df_s.columns.astype(str).str.strip().str.upper()
                 
-                # Safety check to ensure core columns exist
-                for req_col in ['ZONE', 'NAME', 'DESIGNATION']:
-                    if req_col not in df_s.columns: df_s[req_col] = ""
+                df_clean = pd.DataFrame()
                 
-                # Dynamically find columns even if spelling changes slightly across tabs (e.g., CONTECT vs CONTACT)
-                contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), "CONTACT NO")
-                email_col = next((c for c in df_s.columns if "EMAIL" in c), "EMAIL")
-                address_col = next((c for c in df_s.columns if "ADDRESS" in c and "EMAIL" not in c), "ADDRESS")
+                # Extract Name
+                name_c = str(cfg["name_col"]).upper()
+                df_clean['NAME'] = df_s[name_c] if name_c in df_s.columns else ""
                 
-                df_s = df_s.rename(columns={contact_col: 'CONTACT NO', email_col: 'EMAIL', address_col: 'ADDRESS'})
+                # Extract Zone / TU
+                zone_c = str(cfg["zone_col"]).upper()
+                df_clean['ZONE'] = df_s[zone_c] if zone_c in df_s.columns else "AMC"
                 
-                # Force Designation to the sheet name if it's blank
-                df_s['DESIGNATION'] = df_s['DESIGNATION'].replace(["", "NAN", "NONE"], sheet_name)
+                # If merged cells exist (like in TBHV), forward fill the Zone/TU
+                df_clean['ZONE'] = df_clean['ZONE'].replace(["", "NAN", "NONE", "NaN", pd.NA], None).ffill()
                 
-                all_staff.append(df_s[['ZONE', 'NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'ADDRESS']])
+                # Extract Designation
+                if cfg["desig_col"] and str(cfg["desig_col"]).upper() in df_s.columns:
+                    df_clean['DESIGNATION'] = df_s[str(cfg["desig_col"]).upper()]
+                else:
+                    df_clean['DESIGNATION'] = cfg["name"]
+                
+                # Extract Contact (Handling spelling errors like CONTECT)
+                contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
+                df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
+                
+                # Extract Email
+                email_col = next((c for c in df_s.columns if "EMAIL" in c), None)
+                df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
+                
+                # Extract Address
+                address_col = next((c for c in df_s.columns if "ADDRESS" in c and "EMAIL" not in c), None)
+                df_clean['ADDRESS'] = df_s[address_col] if address_col else "N/A"
+                
+                all_staff.append(df_clean)
             except Exception as e:
-                pass # Silently skip if a sheet fails to load so it doesn't break the whole app
-        
+                pass # Silently skip broken sheets
+                
         if all_staff:
             final_df = pd.concat(all_staff, ignore_index=True)
-            final_df = final_df.dropna(subset=['NAME']) # Drop completely empty rows
-            final_df = final_df[final_df['NAME'].str.strip() != ""]
+            
+            # Clean up empty rows
+            final_df = final_df.dropna(subset=['NAME'])
+            final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
+            final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
+            
+            # Clean up Zone names (Maps TUs to Zones if actual Zone was missing)
+            def fix_zone(z):
+                z_str = str(z).upper().replace("ZONE", "").strip()
+                if any(x in z_str for x in ["SOLA", "GHATLODIA", "CHANDLODIYA"]): return "North West"
+                if any(x in z_str for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA"]): return "West"
+                if any(x in z_str for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR"]): return "South"
+                if any(x in z_str for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR"]): return "Central"
+                if any(x in z_str for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR"]): return "East"
+                if any(x in z_str for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL"]): return "North"
+                if any(x in z_str for x in ["JODHPUR", "SARKHEJ", "VEJALPUR"]): return "South West"
+                if z_str in ["CENTRAL", "EAST", "WEST", "NORTH", "SOUTH", "NORTH WEST", "SOUTH WEST", "AMC"]: return z_str.title()
+                return str(z).title()
+                
+            final_df['ZONE'] = final_df['ZONE'].apply(fix_zone)
+            
+            # Force empty designations to the Title Case format
+            final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
+            
             return final_df.fillna("N/A")
         return pd.DataFrame()
 
@@ -1285,7 +1325,7 @@ with tab6:
         with sc1:
             search_q = st.text_input("🔍 Smart Search (Name, Number, Email...)", "")
         with sc2:
-            zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/A", "NAN", ""]])
+            zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/a", "Nan", ""]])
             sel_zone = st.selectbox("🏢 Filter by Zone", zones)
         with sc3:
             desigs = ["All Designations"] + sorted([d for d in df_staff['DESIGNATION'].unique() if str(d).strip() not in ["N/A", "NAN", ""]])
@@ -1312,6 +1352,9 @@ with tab6:
             email = str(row.get('EMAIL', 'N/A')).strip()
             address = str(row.get('ADDRESS', 'N/A')).strip()
             
+            if phone in ["N/A", "NAN"]: phone = "Not Provided"
+            if email in ["N/A", "NAN"]: email = "Not Provided"
+            
             # Format WhatsApp number accurately
             clean_phone = "".join(filter(str.isdigit, phone))
             wa_link = f"https://wa.me/91{clean_phone}" if len(clean_phone) >= 10 else "#"
@@ -1334,6 +1377,5 @@ with tab6:
                 card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3498DB; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold;">✉️ Email</a>"""
             card_html += "</div></div>"
             
-            # Display Card in alternating columns
             with cols[idx % 3]:
                 st.markdown(card_html, unsafe_allow_html=True)
