@@ -418,7 +418,7 @@ with tab3:
     if not df_t3.empty:
         st.download_button("📥 Download Excel", convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 # ==========================================
-# 🟢 TAB 4: PPT GENERATOR (100% RESTORED + CORPORATE DECK + NAAT MODULE)
+# 🟢 TAB 4: PPT GENERATOR (SMART + CORPORATE + NAAT + SUCCESS/DEATH RATE)
 # ==========================================
 with tab4:
     st.markdown("<h3 style='text-align: center; color: #27AE60;'>🚀 Enterprise PPT Report Generator</h3>", unsafe_allow_html=True)
@@ -492,20 +492,14 @@ with tab4:
             slide = prs.slides.add_slide(prs.slide_layouts[5])
             if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.7))
             if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.1), Inches(0.15), width=Inches(0.7))
-            
             title = slide.shapes.title
             title.text = title_text
-            title.top = Inches(0.25)
-            title.left = Inches(1.2)
-            title.width = Inches(7.6)
+            title.top = Inches(0.25); title.left = Inches(1.2); title.width = Inches(7.6)
             title.text_frame.paragraphs[0].font.size = Pt(26)
             title.text_frame.paragraphs[0].font.bold = True
             title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
             
-            if curr_df.empty and prev_df.empty:
-                tx = slide.shapes.add_textbox(Inches(2), Inches(3), Inches(5), Inches(1))
-                tx.text_frame.text = "આ તારીખો માટે કોઈ દર્દી પેન્ડિંગ નથી."
-                return
+            if curr_df.empty and prev_df.empty: return
             if compare_mode:
                 final_df = pd.merge(curr_df, prev_df, on=entity_col_name, how='outer').fillna(0)
                 final_df['Grand Total'] = final_df[p1_name] + final_df[p2_name]
@@ -519,10 +513,8 @@ with tab4:
             cols = len(col_names)
             table_shape = slide.shapes.add_table(rows, cols, Inches(0.8), Inches(1.3), Inches(8.4), Inches(0.4))
             table = table_shape.table
-            if cols == 2:
-                table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
-            elif cols == 4:
-                table.columns[0].width = Inches(4.0); table.columns[1].width = Inches(1.5); table.columns[2].width = Inches(1.5); table.columns[3].width = Inches(1.4)
+            if cols == 2: table.columns[0].width = Inches(5.4); table.columns[1].width = Inches(3.0)
+            elif cols == 4: table.columns[0].width = Inches(4.0); table.columns[1].width = Inches(1.5); table.columns[2].width = Inches(1.5); table.columns[3].width = Inches(1.4)
             for i, c_name in enumerate(col_names):
                 cell = table.cell(0, i)
                 cell.text = c_name
@@ -535,20 +527,16 @@ with tab4:
             for i, (_, row) in enumerate(final_df.iterrows()):
                 name_val = str(row[entity_col_name])
                 table.cell(i+1, 0).text = name_val
-                
                 c1_p = table.cell(i+1, 1).text_frame.paragraphs[0]
                 c1_p.text = str(int(row[p1_name]))
                 c1_p.alignment = PP_ALIGN.CENTER
-                
                 if cols == 4:
                     c2_p = table.cell(i+1, 2).text_frame.paragraphs[0]
                     c2_p.text = str(int(row[p2_name]))
                     c2_p.alignment = PP_ALIGN.CENTER
-                    
                     c3_p = table.cell(i+1, 3).text_frame.paragraphs[0]
                     c3_p.text = str(int(row['Grand Total']))
                     c3_p.alignment = PP_ALIGN.CENTER
-                    
                 if "PRIVATE FACILITIES" in name_val:
                     for j in range(cols):
                         c = table.cell(i+1, j)
@@ -611,7 +599,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 NEW ADDITION: MNC CORPORATE TARGET ACHIEVEMENT DECK (MULTIPLE SLIDES)
+    # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC)</h3>", unsafe_allow_html=True)
@@ -641,12 +629,10 @@ with tab4:
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
                 if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.6))
                 if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.2), Inches(0.15), width=Inches(0.6))
-                title = slide.shapes.title
-                title.text = title_text
+                title = slide.shapes.title; title.text = title_text
                 title.top = Inches(0.25); title.left = Inches(1.0)
                 title.width = Inches(8.0); title.height = Inches(0.8)
-                title.text_frame.paragraphs[0].font.size = Pt(24)
-                title.text_frame.paragraphs[0].font.bold = True
+                title.text_frame.paragraphs[0].font.size = Pt(24); title.text_frame.paragraphs[0].font.bold = True
                 title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
                 return slide
 
@@ -654,20 +640,17 @@ with tab4:
                 rows, cols = len(df_data) + 1, len(df_data.columns)
                 for i, width in enumerate(col_widths): table_obj.columns[i].width = width
                 for i, col_name in enumerate(df_data.columns):
-                    cell = table_obj.cell(0, i)
-                    cell.text = col_name
+                    cell = table_obj.cell(0, i); cell.text = col_name
                     cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                    cell.text_frame.paragraphs[0].font.bold = True
-                    cell.text_frame.paragraphs[0].font.size = Pt(12)
+                    cell.text_frame.paragraphs[0].font.bold = True; cell.text_frame.paragraphs[0].font.size = Pt(12)
                     if i > 1: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
-                
                 for i in range(1, rows):
                     for j in range(cols):
                         cell = table_obj.cell(i, j)
-                        for paragraph in cell.text_frame.paragraphs: 
-                            paragraph.font.size = Pt(font_size)
-                            if j > 1: paragraph.alignment = PP_ALIGN.CENTER
+                        for p in cell.text_frame.paragraphs: 
+                            p.font.size = Pt(font_size)
+                            if j > 1: p.alignment = PP_ALIGN.CENTER
 
             def extract_num(val):
                 nums = re.findall(r'^(\d+)', str(val).strip())
@@ -686,8 +669,6 @@ with tab4:
             else: return None, "⚠️ Please select a start and end date."
 
             prs = Presentation()
-            
-            # SLIDE 1: ZONE CUMULATIVE TARGETS
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             target_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835"
             df_sheet1 = pd.read_csv(target_url, header=None)
@@ -730,7 +711,6 @@ with tab4:
                             pct_val = float(str(row.iloc[j]).replace('%', ''))
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
-            # SLIDE 2 & 3: UHC / CHC ANALYSIS
             fac_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0"
             df_fac = pd.read_csv(fac_url, header=None)
             
@@ -752,10 +732,8 @@ with tab4:
                     achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                     fac_type, target_daily = "OTHER", 0
                     
-                    if "અર્બન હેલ્થ સેન્ટર" in fac_name:
-                        fac_type, target_daily = "UHC", 4
-                    elif "સામુહીક" in fac_name or "સામુહિક" in fac_name:
-                        fac_type, target_daily = "CHC", 16
+                    if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type, target_daily = "UHC", 4
+                    elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type, target_daily = "CHC", 16
                     
                     if fac_type in ["UHC", "CHC"]:
                         month_target = target_daily * w_days
@@ -764,7 +742,6 @@ with tab4:
                 
                 df_fac_processed = pd.DataFrame(fac_data)
 
-                # SLIDE 2: UHC < 75%
                 if not df_fac_processed.empty:
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
@@ -778,15 +755,13 @@ with tab4:
                         format_corporate_table(t2.table, chunk, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)], font_size=11)
                         for row_idx_c, (orig_idx, row) in enumerate(chunk.iterrows()):
                             for j in range(len(chunk.columns)):
-                                cell = t2.table.cell(row_idx_c+1, j)
-                                cell.text = str(row.iloc[j])
+                                cell = t2.table.cell(row_idx_c+1, j); cell.text = str(row.iloc[j])
                                 for p in cell.text_frame.paragraphs: 
                                     p.font.size = Pt(11)
                                     if j > 1: p.alignment = PP_ALIGN.CENTER
                                 if j == 4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_uhc.iloc[orig_idx]["Achievement %"])
 
-                # SLIDE 3: CHCs
                 if not df_fac_processed.empty:
                     df_chc = df_fac_processed[df_fac_processed["Type"] == "CHC"].sort_values("Achievement %", ascending=False).drop(columns=["Type"]).reset_index(drop=True)
                     df_chc_display = df_chc.copy()
@@ -799,8 +774,7 @@ with tab4:
                         format_corporate_table(t3.table, chunk, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)], font_size=11)
                         for row_idx_c, (orig_idx, row) in enumerate(chunk.iterrows()):
                             for j in range(len(chunk.columns)):
-                                cell = t3.table.cell(row_idx_c+1, j)
-                                cell.text = str(row.iloc[j])
+                                cell = t3.table.cell(row_idx_c+1, j); cell.text = str(row.iloc[j])
                                 for p in cell.text_frame.paragraphs: 
                                     p.font.size = Pt(11)
                                     if j > 1: p.alignment = PP_ALIGN.CENTER
@@ -811,7 +785,6 @@ with tab4:
             out_io = io.BytesIO()
             prs.save(out_io)
             return out_io.getvalue(), "Success"
-
         except Exception as e: return None, f"⚠️ Error: {str(e)}"
 
     if btn_generate_target:
@@ -826,7 +799,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 NEW ADDITION: NAAT UTILIZATION REPORT DECK
+    # 🎯 3. NAAT UTILIZATION REPORT DECK
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -856,12 +829,10 @@ with tab4:
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
                 if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.6))
                 if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.2), Inches(0.15), width=Inches(0.6))
-                title = slide.shapes.title
-                title.text = title_text
+                title = slide.shapes.title; title.text = title_text
                 title.top = Inches(0.25); title.left = Inches(1.0)
                 title.width = Inches(8.0); title.height = Inches(0.8)
-                title.text_frame.paragraphs[0].font.size = Pt(24)
-                title.text_frame.paragraphs[0].font.bold = True
+                title.text_frame.paragraphs[0].font.size = Pt(24); title.text_frame.paragraphs[0].font.bold = True
                 title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
                 return slide
 
@@ -869,19 +840,17 @@ with tab4:
                 rows, cols = len(df_data) + 1, len(df_data.columns)
                 for i, width in enumerate(col_widths): table_obj.columns[i].width = width
                 for i, col_name in enumerate(df_data.columns):
-                    cell = table_obj.cell(0, i)
-                    cell.text = col_name
+                    cell = table_obj.cell(0, i); cell.text = col_name
                     cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                    cell.text_frame.paragraphs[0].font.bold = True
-                    cell.text_frame.paragraphs[0].font.size = Pt(12)
+                    cell.text_frame.paragraphs[0].font.bold = True; cell.text_frame.paragraphs[0].font.size = Pt(12)
                     if i > 1: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
                 for i in range(1, rows):
                     for j in range(cols):
                         cell = table_obj.cell(i, j)
-                        for paragraph in cell.text_frame.paragraphs: 
-                            paragraph.font.size = Pt(font_size)
-                            if j > 1: paragraph.alignment = PP_ALIGN.CENTER
+                        for p in cell.text_frame.paragraphs: 
+                            p.font.size = Pt(font_size)
+                            if j > 1: p.alignment = PP_ALIGN.CENTER
             
             if len(selected_dates) == 2:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
@@ -889,8 +858,6 @@ with tab4:
 
             naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=806626302"
             df_naat = pd.read_csv(naat_url, header=None)
-            
-            # Forward fill merged CBNAAT site names in Column A
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
             
             date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
@@ -903,73 +870,39 @@ with tab4:
                 for i, val in enumerate(date_row):
                     val_clean = val.split(" ")[0].strip()
                     if val_clean in fmts: match_indices.append(i)
-                
                 for idx in match_indices:
                     if "TESTED" in header_row[idx]:
-                        tested_cols.append(idx)
-                        break
+                        tested_cols.append(idx); break
                             
             if not tested_cols: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates."
                 
-            # 🎯 STRICT FILTERING: Drop ALL rows containing "TOTAL" in Col A, B, or C to prevent Double Math
             df_valid = df_naat.iloc[2:].copy()
-            mask_tot = (
-                df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) |
-                df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) |
-                df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False)
-            )
+            mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
             df_valid = df_valid[~mask_tot]
             
             df_valid['Tested_Sum'] = 0
-            for col in tested_cols:
-                df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
+            for col in tested_cols: df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
             
-            # Group by NAAT site
             grouped = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
             grouped.columns = ['NAAT Site', 'Tested']
             
-            # 🎯 DECIMAL FORMATTER LOGIC (No .0 for wholes)
-            def format_avg(val):
-                return int(val) if float(val).is_integer() else round(float(val), 1)
-
+            def format_avg(val): return int(val) if float(val).is_integer() else round(float(val), 1)
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
-            # 🎯 BLANK PURGE
             def clean_site(s):
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
             grouped = grouped[grouped['NAAT Site'] != ""]
             
-            # 🎯 STRICT ZONE MAPPING
-            zone_map_strict = {
-                "MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North",
-                "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North",
-                "UCHC VATVA": "South", "UCHC SABARMATI": "West",
-                "MC-NHL MEDICAL COLLEGE, AMC": "West", "UCHC THALTEJ": "North West",
-                "NARENDRA MODI MC": "South", "FAISALNAGAR CHC": "South",
-                "UCHC DANILIMDA": "South", "UCHC BEHERAMPURA": "South",
-                "CHC VASTRAL": "East", "SDH ESIC MODEL HOSP.": "North",
-                "UHC RANIP": "West", "MC-NARENDRA MODI MEDICAL COLLEGE": "South",
-                "UCHC CHANDKHEDA": "West", "UCHC RAKHIAL": "North",
-                "CHC SARKHEJ": "South West", "UCHC NARODA": "North",
-                "UHC SAIJPUR": "North", "MC-DR. M K SHAH MEDICAL COLLEGE AND RESEARCH CENTER AMC": "West",
-                "UHC SHAHPUR": "Central", "UHC STADIUM": "West",
-                "UHC JAMALPUR": "Central", "UHC GHATLODIA": "North West",
-                "UHC VIRATNAGAR": "East", "UCHC GOMTIPUR": "East",
-                "UHC ISANPUR": "South", "UHC BHAIPURA": "East",
-                "JODHPUR UHC": "South West", "UHC NAVRANGPURA": "West"
-            }
-            
+            zone_map_strict = {"MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North", "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North", "UCHC VATVA": "South", "UCHC SABARMATI": "West", "MC-NHL MEDICAL COLLEGE, AMC": "West", "UCHC THALTEJ": "North West", "NARENDRA MODI MC": "South", "FAISALNAGAR CHC": "South", "UCHC DANILIMDA": "South", "UCHC BEHERAMPURA": "South", "CHC VASTRAL": "East", "SDH ESIC MODEL HOSP.": "North", "UHC RANIP": "West", "MC-NARENDRA MODI MEDICAL COLLEGE": "South", "UCHC CHANDKHEDA": "West", "UCHC RAKHIAL": "North", "CHC SARKHEJ": "South West", "UCHC NARODA": "North", "UHC SAIJPUR": "North", "MC-DR. M K SHAH MEDICAL COLLEGE AND RESEARCH CENTER AMC": "West", "UHC SHAHPUR": "Central", "UHC STADIUM": "West", "UHC JAMALPUR": "Central", "UHC GHATLODIA": "North West", "UHC VIRATNAGAR": "East", "UCHC GOMTIPUR": "East", "UHC ISANPUR": "South", "UHC BHAIPURA": "East", "JODHPUR UHC": "South West", "UHC NAVRANGPURA": "West"}
             clean_zone_map = {re.sub(r'[^A-Z0-9]', '', k.replace("CBNAAT","").replace("TRUNAAT","").upper()): v for k,v in zone_map_strict.items()}
 
             def get_zone(site):
                 c_site = re.sub(r'[^A-Z0-9]', '', str(site).replace("CBNAAT","").replace("TRUNAAT","").upper())
                 for k, v in clean_zone_map.items():
                     if k in c_site or c_site in k: return v
-                
-                # Deep fallbacks
                 if "SOLA" in c_site: return "North West"
                 if "NHL" in c_site or "SABARMATI" in c_site: return "West"
                 if "GCS" in c_site or "SHARDABEN" in c_site: return "East"
@@ -980,7 +913,6 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
-            # 🎯 APPEND SINGLE GRAND TOTAL ROW AT THE END
             total_tested = int(grouped['Tested'].sum())
             total_avg = format_avg(total_tested / w_days)
             total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
@@ -992,42 +924,26 @@ with tab4:
                 chunk = grouped.iloc[i:i+chunk_size]
                 title_suffix = f" (Part {i//chunk_size + 1})" if len(grouped) > chunk_size else ""
                 s = add_corporate_slide(prs, f"🔬 NAAT Utilization Report{title_suffix}")
-                
                 t_shape = s.shapes.add_table(len(chunk) + 1, len(chunk.columns), Inches(0.8), Inches(1.2), Inches(8.4), Inches(0.35))
                 format_corporate_table(t_shape.table, chunk, [Inches(1.5), Inches(4.5), Inches(1.2), Inches(1.2)], font_size=11)
                 
                 for row_idx, (orig_idx, row) in enumerate(chunk.iterrows()):
                     is_total_row = (row['Zone'] == "AMC" and row['NAAT Site'] == "TOTAL")
                     for j in range(len(chunk.columns)):
-                        cell = t_shape.table.cell(row_idx+1, j)
-                        cell.text = str(row.iloc[j])
-                        
-                        # 🎯 AMC/TOTAL ROW FORMATTING
+                        cell = t_shape.table.cell(row_idx+1, j); cell.text = str(row.iloc[j])
                         if is_total_row:
                             cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
-                            for p in cell.text_frame.paragraphs:
-                                p.font.bold = True
-                                p.font.size = Pt(11)
-                                if j > 1: p.alignment = PP_ALIGN.CENTER
+                            for p in cell.text_frame.paragraphs: p.font.bold = True; p.font.size = Pt(11); p.alignment = PP_ALIGN.CENTER if j > 1 else None
                         else:
-                            for p in cell.text_frame.paragraphs: 
-                                p.font.size = Pt(11)
-                                if j > 1: p.alignment = PP_ALIGN.CENTER
-                            
-                            # 🎯 LIGHT RED ONLY ON AVERAGE COLUMN (Col Index 3)
-                            if j == 3 and float(row['Average']) < 16:
-                                cell.fill.solid()
-                                cell.fill.fore_color.rgb = RGBColor(241, 148, 138) 
-                            elif row_idx % 2 != 0:
-                                cell.fill.solid()
-                                cell.fill.fore_color.rgb = RGBColor(242, 243, 244) 
+                            for p in cell.text_frame.paragraphs: p.font.size = Pt(11); p.alignment = PP_ALIGN.CENTER if j > 1 else None
+                            if j == 3 and float(row['Average']) < 16: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(241, 148, 138) 
+                            elif row_idx % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244) 
                             
             out_io = io.BytesIO()
             prs.save(out_io)
             return out_io.getvalue(), "Success"
 
-        except Exception as e:
-            return None, f"⚠️ Error: {str(e)}"
+        except Exception as e: return None, f"⚠️ Error: {str(e)}"
 
     if btn_generate_naat:
         if len(naat_dates) != 2: st.error("⚠️ Please select both a Start Date and End Date.")
@@ -1038,6 +954,217 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
+
+
+    # ==========================================
+    # 🎯 4. NEW ADDITION: SUCCESS & DEATH RATE GENERATOR
+    # ==========================================
+    st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #C0392B;'>🏆 Success & Death Rate PPT Generator</h3>", unsafe_allow_html=True)
+
+    with st.container():
+        sd_c1, sd_c2, sd_c3 = st.columns(3)
+        with sd_c1:
+            st.markdown("<div style='background-color:#fef9e7; padding:10px; border-radius:5px;'><b>🗓️ 1. Diagnosis Date</b></div>", unsafe_allow_html=True)
+            sd_dates = st.date_input("Select Diagnosis Date Range", value=[], key="sd_dates")
+        with sd_c2:
+            st.markdown("<div style='background-color:#e8f8f5; padding:10px; border-radius:5px;'><b>📂 2. Data Source</b></div>", unsafe_allow_html=True)
+            notif_file = st.file_uploader("Upload Notification Register (.xlsx)", type=["xlsx"], key="sd_notif_up")
+        with sd_c3:
+            st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
+            st.write("")
+            btn_sd_ppt = st.button("✨ Generate Success & Death PPT ✨", use_container_width=True)
+
+    def generate_sd_ppt(file, dates):
+        try:
+            from pptx import Presentation
+            from pptx.util import Inches, Pt
+            from pptx.dml.color import RGBColor
+            from pptx.enum.text import PP_ALIGN
+            
+            if not file: return None, "⚠️ Please upload the Notification Register."
+            if len(dates) != 2: return None, "⚠️ Please select a Diagnosis Date range."
+
+            # Read raw Nikshay Notification Register
+            df = pd.read_excel(file, header=None)
+            
+            # Robust Header Detection
+            h_idx = 0
+            for i in range(5):
+                row_vals = df.iloc[i].astype(str).str.upper().tolist()
+                if any("DIAGNOSIS DATE" in str(v) for v in row_vals) and any("TREATMENT OUTCOME" in str(v) for v in row_vals):
+                    h_idx = i; break
+            
+            df.columns = df.iloc[h_idx].astype(str).str.strip().str.upper()
+            df = df.iloc[h_idx+1:].copy()
+
+            # Locate crucial columns
+            diag_col = next((c for c in df.columns if "DIAGNOSIS DATE" in c), None)
+            reg_col = next((c for c in df.columns if "REGIMEN" in c), None)
+            out_col = next((c for c in df.columns if "OUTCOME" in c and "TREATMENT" in c), None)
+            phi_col = next((c for c in df.columns if "PHI" in c or "HEALTH FACILITY" in c), None)
+
+            if not diag_col or not out_col: return None, "⚠️ Could not identify standard Ni-kshay columns."
+
+            # Date Filter
+            start_dt, end_dt = pd.to_datetime(dates[0]), pd.to_datetime(dates[1])
+            df['Diag_Dt'] = pd.to_datetime(df[diag_col], errors='coerce')
+            df = df[df['Diag_Dt'].notna() & df['Diag_Dt'].between(start_dt, end_dt)]
+
+            # 🎯 Total Patient Logic (Regimen is 2HRZ or Blank)
+            reg_str = df[reg_col].fillna("").astype(str).str.upper()
+            df = df[reg_str.str.contains("2HRZ") | (reg_str == "") | (reg_str == "NAN") | (reg_str == "NONE")]
+
+            # 🎯 Zone Mapping
+            phi_to_zone = {}
+            if not df_master.empty and 'PHI' in df_master.columns and 'ZONE' in df_master.columns:
+                phi_to_zone = dict(zip(df_master['PHI'].astype(str).str.upper().str.strip(), df_master['ZONE'].astype(str).str.title().str.strip()))
+            
+            def get_sd_zone(phi):
+                p = str(phi).upper().strip()
+                if p in phi_to_zone: return phi_to_zone[p]
+                if any(x in p for x in ["SOLA", "GHATLODIA", "THALTEJ", "BODAKDEV"]): return "North West"
+                if any(x in p for x in ["NHL", "SABARMATI", "PALDI", "VASNA", "NAVRANGPURA"]): return "West"
+                if any(x in p for x in ["GCS", "SHARDABEN", "VASTRAL", "GOMTIPUR"]): return "East"
+                if any(x in p for x in ["ASARWA", "CIVIL", "SHAHPUR", "JAMALPUR"]): return "Central"
+                if any(x in p for x in ["VATVA", "MANINAGAR", "KANKARIA", "ISANPUR", "DANILIMDA"]): return "South"
+                if any(x in p for x in ["SARKHEJ", "JODHPUR", "VEJALPUR"]): return "South West"
+                if any(x in p for x in ["SAIJPUR", "NARODA", "RAKHIAL"]): return "North"
+                return "AMC"
+
+            df['Mapped_Zone'] = df[phi_col].apply(get_sd_zone).str.title()
+            df['Mapped_Zone'] = df['Mapped_Zone'].replace({"Amc": "AMC"})
+
+            # 🎯 Core Medical Math
+            res = []
+            for zone, grp in df.groupby('Mapped_Zone'):
+                if zone.upper() in ["", "NAN", "NONE"]: continue
+                
+                total_patient = len(grp)
+                
+                outcomes = grp[out_col].fillna("").astype(str).str.upper()
+                
+                # 🎯 Evaluated = Total minus Treatment Regimen Changed ONLY
+                evaluated_mask = ~outcomes.str.contains("REGIMEN CHANGED")
+                total_eval = evaluated_mask.sum()
+                
+                # Treated (Success) = Cured + Treatment Completed
+                total_success = (outcomes.str.contains("CURED") | outcomes.str.contains("COMPLETED")).sum()
+                
+                # Died
+                total_died = outcomes.str.contains("DIED").sum()
+                
+                succ_rate = round((total_success / total_eval * 100), 1) if total_eval > 0 else 0
+                death_rate = round((total_died / total_eval * 100), 1) if total_eval > 0 else 0
+                
+                res.append({
+                    "Zone": zone, "Total Patient": total_patient, "Total Evaluated": total_eval,
+                    "Total Treated Patient": total_success, "Success Rate (%)": succ_rate,
+                    "Total Died": total_died, "Death Rate (%)": death_rate
+                })
+
+            df_res = pd.DataFrame(res)
+            
+            # Sort explicitly
+            zone_order = ["Central", "North", "East", "South", "West", "North West", "South West"]
+            df_res['sort'] = df_res['Zone'].apply(lambda x: zone_order.index(x) if x in zone_order else 99)
+            df_res = df_res.sort_values('sort').drop(columns=['sort']).reset_index(drop=True)
+            
+            # AMC Grand Total
+            t_pat = df_res['Total Patient'].sum()
+            t_eval = df_res['Total Evaluated'].sum()
+            t_succ = df_res['Total Treated Patient'].sum()
+            t_died = df_res['Total Died'].sum()
+            t_succ_r = round((t_succ / t_eval * 100), 1) if t_eval > 0 else 0
+            t_died_r = round((t_died / t_eval * 100), 1) if t_eval > 0 else 0
+            
+            total_row = pd.DataFrame([{
+                "Zone": "AMC", "Total Patient": t_pat, "Total Evaluated": t_eval, 
+                "Total Treated Patient": t_succ, "Success Rate (%)": t_succ_r,
+                "Total Died": t_died, "Death Rate (%)": t_died_r
+            }])
+            df_res = pd.concat([df_res, total_row], ignore_index=True)
+            
+            # String Formats for Display
+            df_display = df_res.copy()
+            df_display["Success Rate (%)"] = df_display["Success Rate (%)"].astype(str) + "%"
+            df_display["Death Rate (%)"] = df_display["Death Rate (%)"].astype(str) + "%"
+
+            # 🎯 Generate Corporate PPT Slide
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[5])
+            if os.path.exists("images/amc.png"): slide.shapes.add_picture("images/amc.png", Inches(0.2), Inches(0.15), width=Inches(0.6))
+            if os.path.exists("images/ntep.jpg"): slide.shapes.add_picture("images/ntep.jpg", Inches(9.2), Inches(0.15), width=Inches(0.6))
+            
+            title = slide.shapes.title
+            title.text = f"TB Treatment Success & Death Rate"
+            title.top = Inches(0.25); title.left = Inches(1.0)
+            title.width = Inches(8.0); title.height = Inches(0.8)
+            title.text_frame.paragraphs[0].font.size = Pt(24); title.text_frame.paragraphs[0].font.bold = True
+            title.text_frame.paragraphs[0].font.color.rgb = RGBColor(44, 62, 80)
+            
+            rows, cols = len(df_display) + 1, len(df_display.columns)
+            t_shape = slide.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9.0), Inches(0.4))
+            
+            widths = [Inches(1.4), Inches(1.1), Inches(1.2), Inches(1.6), Inches(1.4), Inches(1.0), Inches(1.3)]
+            for i, width in enumerate(widths): t_shape.table.columns[i].width = width
+            
+            for i, col_name in enumerate(df_display.columns):
+                cell = t_shape.table.cell(0, i); cell.text = col_name
+                cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(44, 62, 80)
+                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                cell.text_frame.paragraphs[0].font.bold = True; cell.text_frame.paragraphs[0].font.size = Pt(11)
+                if i > 0: cell.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+            
+            def get_success_color(pct):
+                if pct >= 85: return RGBColor(46, 204, 113)    # Green (NTEP Target usually 85%)
+                elif pct >= 75: return RGBColor(171, 235, 198) 
+                elif pct >= 50: return RGBColor(249, 231, 159) # Yellow
+                else: return RGBColor(231, 76, 60)             # Red
+
+            def get_death_color(pct):
+                if pct <= 5: return RGBColor(46, 204, 113)     # Green (Excellent)
+                elif pct <= 10: return RGBColor(249, 231, 159) # Yellow (Warning)
+                else: return RGBColor(231, 76, 60)             # Red (Critical)
+
+            for i, row in df_display.iterrows():
+                for j in range(cols):
+                    cell = t_shape.table.cell(i+1, j)
+                    cell.text = str(row.iloc[j])
+                    
+                    if row['Zone'] == "AMC":
+                        cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(235, 237, 239)
+                        for p in cell.text_frame.paragraphs:
+                            p.font.bold = True; p.font.size = Pt(11)
+                            if j > 0: p.alignment = PP_ALIGN.CENTER
+                    else:
+                        for p in cell.text_frame.paragraphs: 
+                            p.font.size = Pt(11)
+                            if j > 0: p.alignment = PP_ALIGN.CENTER
+                        
+                        # Apply specialized colors
+                        if j == 4: # Success Rate %
+                            raw_val = df_res.iloc[i]["Success Rate %"]
+                            cell.fill.solid(); cell.fill.fore_color.rgb = get_success_color(raw_val)
+                        elif j == 6: # Death Rate %
+                            raw_val = df_res.iloc[i]["Death Rate %"]
+                            cell.fill.solid(); cell.fill.fore_color.rgb = get_death_color(raw_val)
+                        elif i % 2 != 0:
+                            cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
+
+            out_io = io.BytesIO()
+            prs.save(out_io)
+            return out_io.getvalue(), "Success"
+
+        except Exception as e: return None, f"⚠️ Error processing file: {str(e)}"
+
+    if btn_sd_ppt:
+        with st.spinner("Processing Notification Register & Generating PPT..."):
+            sd_ppt_bytes, sd_status = generate_sd_ppt(notif_file, sd_dates)
+            if sd_ppt_bytes:
+                st.success("✅ Success & Death Rate PPT Ready!")
+                st.download_button(label="📥 Download Success_Death_Rate.pptx", data=sd_ppt_bytes, file_name="TB_Success_Death_Rates.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_sd_ppt")
+            else: st.error(sd_status)
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
 # ==========================================
