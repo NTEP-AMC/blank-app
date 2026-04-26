@@ -1282,7 +1282,7 @@ with tab6:
             final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
-            # 🎯 STRICT ZONE MAPPING (ORDER MATTERS: Checks NW and SW BEFORE West)
+            # 🎯 STRICT ZONE MAPPING 
             def assign_strict_zone(row):
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
@@ -1305,9 +1305,14 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
             
-            # DR. CHIRAG SHAH LOGIC
+            # 🎯 CUSTOM OVERRIDES FOR SPECIFIC LEADERSHIP ROLES
+            # Dr. Chirag Shah
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
-            final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR & MO DTC"
+            final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Medical Officer DTC)"
+            
+            # Dr. Ushma Gandhi
+            ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
+            final_df.loc[ushma_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Monitoring of EAST part of Ahmedabad)"
             
             # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
@@ -1339,7 +1344,7 @@ with tab6:
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
             
-            # 🎯 IDENTITY MERGER: Group by Name to combine multi-zone staff (like Dr. Chirag) into a single card!
+            # 🎯 IDENTITY MERGER: Group by Name to combine multi-zone staff
             def merge_tus(tu_series):
                 tus = set()
                 for tu_val in tu_series:
@@ -1435,7 +1440,6 @@ with tab6:
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
                 location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
             
-            # 🎯 FIXED VERTICAL HTML BUG (No flex-boxes constraining text)
             card_html = f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
 <div style="margin-bottom: 12px;"><span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span></div>
 <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
