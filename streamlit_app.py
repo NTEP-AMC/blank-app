@@ -1306,13 +1306,18 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
             
             # ==========================================
-            # 🎯 CUSTOM STAFF OVERRIDES
+            # 🎯 CUSTOM STAFF OVERRIDES & STANDARDIZATION
             # ==========================================
-            # Dr. Chirag Shah Logic
+            # 1. Force exact titles for lower staff to ignore sheet typos
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STS', 'DESIGNATION'] = "Senior Treatment Supervisor (STS)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'STLS', 'DESIGNATION'] = "Senior TB Laboratory Supervisor (STLS)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB Health Visitor (TBHV)"
+
+            # 2. Dr. Chirag Shah Logic
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (Medical Officer DTC)"
             
-            # Dr. Ushma Gandhi Logic
+            # 3. Dr. Ushma Gandhi Logic
             ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[ushma_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR (also monitoring of EAST and North zone of Ahmedabad)"
             
