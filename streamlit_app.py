@@ -1243,10 +1243,9 @@ with tab6:
         all_staff = []
         for cfg in configs:
             try:
-                # Read raw sheet without skipping rows
                 df_raw = pd.read_csv(base_url + cfg["gid"])
                 
-                # 🎯 DYNAMIC HEADER DETECTION (Bulletproof for messy Google Sheets)
+                # 🎯 DYNAMIC HEADER DETECTION
                 h_idx = -1
                 if str(cfg["name_col"]).upper() in df_raw.columns.astype(str).str.strip().str.upper():
                     df_s = df_raw.copy()
@@ -1375,6 +1374,9 @@ with tab6:
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             
+            # 🎯 CRITICAL BUG FIX: Force fill NaN values BEFORE grouping so STLS don't get deleted
+            final_df = final_df.fillna("N/A")
+            
             # 🎯 IDENTITY MERGER
             def merge_tus(tu_series):
                 tus = set()
@@ -1391,7 +1393,7 @@ with tab6:
             }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
-            return final_df.fillna("N/A")
+            return final_df
         return pd.DataFrame()
 
     with st.spinner("Loading Enterprise HR Data..."):
@@ -1430,7 +1432,7 @@ with tab6:
             sel_tu = st.selectbox("🏥 Filter TB Unit", tus)
             
         with sc4:
-            # Dropdown explicitly mapped to the clean categories
+            # Clean Designation Dropdown Menu
             desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV"]
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
@@ -1456,8 +1458,8 @@ with tab6:
             reports_to = str(row.get('REPORTS_TO', 'N/A'))
             h_level = row.get('HIERARCHY', 99)
             
-            if phone in ["N/A", "NAN"]: phone = "Not Provided"
-            if email in ["N/A", "NAN"]: email = "Not Provided"
+            if phone in ["N/A", "NAN", "NONE", ""]: phone = "Not Provided"
+            if email in ["N/A", "NAN", "NONE", ""]: email = "Not Provided"
             
             clean_phone = "".join(filter(str.isdigit, phone))
             wa_link = f"https://wa.me/91{clean_phone}" if len(clean_phone) >= 10 else "#"
