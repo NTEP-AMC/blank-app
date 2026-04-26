@@ -1282,33 +1282,34 @@ with tab6:
             final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
+            # 🎯 STRICT ZONE MAPPING (ORDER MATTERS: Checks NW and SW BEFORE West)
             def assign_strict_zone(row):
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
                 search_string = f"{raw_z} {tu}"
                 
-                if any(x in search_string for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "NORTH WEST"]): return "North West"
-                if any(x in search_string for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "WEST"]): return "West"
-                if any(x in search_string for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "SOUTH"]): return "South"
-                if any(x in search_string for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "CENTRAL"]): return "Central"
-                if any(x in search_string for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "EAST"]): return "East"
-                if any(x in search_string for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NORTH"]): return "North"
-                if any(x in search_string for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "SOUTH WEST"]): return "South West"
+                if any(x in search_string for x in ["SOUTH WEST", "JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL"]): return "South West"
+                if any(x in search_string for x in ["NORTH WEST", "SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA"]): return "North West"
+                if any(x in search_string for x in ["WEST", "VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ"]): return "West"
+                if any(x in search_string for x in ["SOUTH", "DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA"]): return "South"
+                if any(x in search_string for x in ["CENTRAL", "ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL"]): return "Central"
+                if any(x in search_string for x in ["EAST", "AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR"]): return "East"
+                if any(x in search_string for x in ["NORTH", "BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY"]): return "North"
                 return "AMC"
                 
             final_df['ZONE'] = final_df.apply(assign_strict_zone, axis=1)
             
-            # 🎯 CLEAN TB UNIT STRINGS (Fixes "VASNA / PALDI" into "Vasna, Paldi")
+            # CLEAN TB UNIT STRINGS
             final_df['TB_UNIT'] = final_df['TB_UNIT'].astype(str).str.upper()
-            final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace(r'I/C\s*', '', regex=True) # Removes "I/C "
+            final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace(r'I/C\s*', '', regex=True)
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
             
-            # 🎯 DR. CHIRAG SHAH LOGIC
+            # DR. CHIRAG SHAH LOGIC
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[chirag_mask, 'DESIGNATION'] = "MEDICAL OFFICER SUPERVISOR & MO DTC"
             
-            # 🎯 DYNAMIC REPORTING MAPPING
+            # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
             zone_heads = {}
             for _, r in mo_sups.iterrows():
@@ -1330,17 +1331,28 @@ with tab6:
                 z = row['ZONE']
                 z_head = zone_heads.get(z, "Zonal MO-Supervisor")
                 
-                if sheet == "MO-SUPERVISOR": 
-                    return "City TB Officer (Dr. S. K. Patel)"
-                elif sheet == "MO-MEDICAL COLLEGE":
-                    return f"City TB Officer & {z_head}"
-                else: 
-                    return z_head
+                if sheet == "MO-SUPERVISOR": return "City TB Officer (Dr. S. K. Patel)"
+                elif sheet == "MO-MEDICAL COLLEGE": return f"City TB Officer & {z_head}"
+                else: return z_head
 
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
-            
             final_df['DESIGNATION'] = final_df['DESIGNATION'].replace(["", "NAN", "NONE"], "Staff")
+            
+            # 🎯 IDENTITY MERGER: Group by Name to combine multi-zone staff (like Dr. Chirag) into a single card!
+            def merge_tus(tu_series):
+                tus = set()
+                for tu_val in tu_series:
+                    if str(tu_val).upper() not in ["N/A", "NAN", "NONE"]:
+                        for item in str(tu_val).split(','):
+                            if item.strip(): tus.add(item.strip().title())
+                return ", ".join(sorted(tus)) if tus else "N/A"
+            
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'HIERARCHY', 'REPORTS_TO']).agg({
+                'ZONE': lambda x: ' & '.join(sorted(set(x))),
+                'TB_UNIT': merge_tus,
+                'SOURCE_SHEET': 'first'
+            }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             return final_df.fillna("N/A")
@@ -1363,18 +1375,21 @@ with tab6:
         
         sc1, sc2, sc3, sc4 = st.columns([2, 1, 1, 1])
         with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
-        with sc2:
-            zones = ["All Zones"] + sorted([z for z in df_staff['ZONE'].unique() if str(z).strip() not in ["N/A", "NAN", ""]])
-            sel_zone = st.selectbox("🏢 Filter Zone", zones)
         
-        # 🎯 BUILDING THE CLEAN 23 TB UNIT LIST FOR DROPDOWN
-        raw_tus = df_staff[df_staff['ZONE'] == sel_zone]['TB_UNIT'] if sel_zone != "All Zones" else df_staff['TB_UNIT']
+        # Build Zone Filter
+        all_zones_raw = []
+        for z_str in df_staff['ZONE']:
+            for z in str(z_str).split(' & '): all_zones_raw.append(z.strip())
+        zones = ["All Zones"] + sorted(list(set([z for z in all_zones_raw if z not in ["N/A", "NAN", ""]])))
+        with sc2: sel_zone = st.selectbox("🏢 Filter Zone", zones)
+        
+        # Build TU Filter
+        raw_tus = df_staff[df_staff['ZONE'].str.contains(sel_zone, case=False, na=False)]['TB_UNIT'] if sel_zone != "All Zones" else df_staff['TB_UNIT']
         all_tu_items = set()
         for tu_str in raw_tus.dropna():
             for t in str(tu_str).split(','):
                 cleaned_t = t.strip()
-                if cleaned_t and cleaned_t.upper() not in ["N/A", "NAN", "NONE"]:
-                    all_tu_items.add(cleaned_t)
+                if cleaned_t and cleaned_t.upper() not in ["N/A", "NAN", "NONE"]: all_tu_items.add(cleaned_t)
                     
         with sc3:
             tus = ["All TB Units"] + sorted(list(all_tu_items))
@@ -1384,15 +1399,11 @@ with tab6:
             desigs = ["All Designations"] + sorted([d for d in df_staff['DESIGNATION'].unique() if str(d).strip() not in ["N/A", "NAN", ""]])
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
-        # ⚙️ APPLY FILTERS
+        # APPLY FILTERS
         df_display = df_staff.copy()
         if search_q: df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
-        if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'] == sel_zone]
-        
-        # 🎯 SMART TB UNIT FILTERING (Checks if selected TU is inside the joined string)
-        if sel_tu != "All TB Units": 
-            df_display = df_display[df_display['TB_UNIT'].astype(str).str.contains(sel_tu, case=False, na=False)]
-            
+        if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'].str.contains(sel_zone, case=False, na=False)]
+        if sel_tu != "All TB Units": df_display = df_display[df_display['TB_UNIT'].astype(str).str.contains(sel_tu, case=False, na=False)]
         if sel_desig != "All Designations": df_display = df_display[df_display['DESIGNATION'] == sel_desig]
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
@@ -1420,20 +1431,18 @@ with tab6:
             border_color = "#e11d48" if h_level == 1 else "#f59e0b" if h_level == 2 else "#10b981" if h_level == 3 else "#0ea5e9" if h_level == 4 else "#8b5cf6"
             badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🧪 STLS" if h_level == 3 else "📋 STS" if h_level == 4 else "🩺 TBHV"
             
-            location_html = f"📍 <b>{zone} Zone</b>"
+            location_html = f"<b>{zone} Zone</b>"
             if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
                 location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
             
-            # 🎯 FIXED HTML: NO BLANK LINES ALLOWED INSIDE THE F-STRING
+            # 🎯 FIXED VERTICAL HTML BUG (No flex-boxes constraining text)
             card_html = f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-<span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span>
-</div>
+<div style="margin-bottom: 12px;"><span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span></div>
 <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
 <div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig}</div>
-<div style="font-size: 12px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:18px;">{location_html}</span></div>
-<div style="font-size: 13px; color: #334155; margin-bottom: 6px; display: flex; align-items: center;"><span style="width:22px;">📞</span> <span style="font-weight:600;">{phone}</span></div>
-<div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-top: 12px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
+<div style="font-size: 13px; color: #334155; margin-bottom: 6px; line-height: 1.4;">📍 {location_html}</div>
+<div style="font-size: 13px; color: #334155; margin-bottom: 12px;">📞 <b>{phone}</b></div>
+<div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
 <div style="font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; font-weight: 700;">Reports To</div>
 <div style="font-size: 12px; color: #0f172a; font-weight: 600;">{reports_to}</div>
 </div>
