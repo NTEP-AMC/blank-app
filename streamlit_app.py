@@ -1,4 +1,90 @@
 import streamlit as st
+from streamlit_option_menu import option_menu
+
+# 1. PAGE CONFIG (Must be the very first Streamlit command)
+st.set_page_config(page_title="AMC NTEP Command Center", page_icon="🏥", layout="wide", initial_sidebar_state="collapsed")
+
+# ==========================================
+# 🎨 2. GLOBAL ENTERPRISE CSS INJECTION
+# ==========================================
+st.markdown("""
+<style>
+    /* Import Google Inter Font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+    
+    /* Apply Font Globally */
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif !important;
+    }
+    
+    /* Hide Streamlit Default Branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Polish the App Background */
+    .stApp {
+        background-color: #f8fafc;
+    }
+    
+    /* Clean up expanders to look like modern corporate cards */
+    .streamlit-expanderHeader {
+        background-color: #ffffff;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    /* Smooth out dataframe borders */
+    [data-testid="stDataFrame"] {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 🧭 3. MODERN MNC NAVIGATION BAR
+# ==========================================
+# This replaces `with tab1:`, `with tab2:`, etc.
+selected = option_menu(
+    menu_title=None,  # No title needed for top nav
+    options=["Master Dashboard", "Daily Comparison", "Smart PPT", "Diff. Care", "Staff Directory"],
+    icons=["bar-chart-fill", "calendar2-range-fill", "file-earmark-ppt-fill", "hospital-fill", "person-badge-fill"],
+    menu_icon="cast",
+    default_index=3, # Defaults to Diff. Care (Index 3) while you are testing
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "0!important", "background-color": "#ffffff", "border-radius": "10px", "box-shadow": "0 2px 10px rgba(0,0,0,0.05)", "margin-bottom": "25px"},
+        "icon": {"color": "#64748b", "font-size": "16px"}, 
+        "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#f1f5f9", "color": "#334155", "font-weight": "600", "font-family": "Inter"},
+        "nav-link-selected": {"background-color": "#1f618d", "color": "white", "font-weight": "800", "icon-color": "white"},
+    }
+)
+
+# ==========================================
+# 📊 4. YOUR EXISTING DATA LOGIC GOES HERE
+# ==========================================
+
+# Instead of using `with tab5:`, you now use standard if statements based on the menu!
+
+if selected == "Diff. Care":
+    # ⬇️ PASTE YOUR EXACT EXISTING TAB 5 CODE HERE (Remove the "with tab5:" line and fix indentation)
+    st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
+    # ... rest of your Diff Care code ...
+
+elif selected == "Staff Directory":
+    # ⬇️ PASTE YOUR EXACT EXISTING TAB 6 CODE HERE (Remove the "with tab6:" line and fix indentation)
+    st.markdown("<h3 style='text-align: center; color: #1e293b; font-weight: 800; font-family: system-ui;'>👥 AMC NTEP Staff Directory</h3>", unsafe_allow_html=True)
+    # ... rest of your Staff Directory code ...
+
+elif selected == "Master Dashboard":
+    st.info("Master Dashboard module loading...")
+
+# ... add elif for the other menu options ...
+import streamlit as st
 import pandas as pd
 import base64
 import os
