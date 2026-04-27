@@ -955,7 +955,7 @@ with tab4:
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (WITH MATRIX, MINI BOXES, COLORS & COMPARISON)
+# 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -963,7 +963,7 @@ with tab5:
     if df_dc_new.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
-        with st.expander("🔽 Filters & Dates (Applies to Current Status below Matrix)", expanded=False):
+        with st.expander("🔽 Filters & Dates (Applies to Current Status)", expanded=False):
             df_dc = df_dc_new.copy()
             c1, c2, c3 = st.columns(3)
             
@@ -1006,131 +1006,6 @@ with tab5:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        # =============================================================
-        # 🎯 NEW ADDITION: CONSOLIDATED MONTHLY PENDING MATRIX
-        # =============================================================
-        import datetime
-        from dateutil.relativedelta import relativedelta
-        
-        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix</h4>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Shows Total Eligible Patients (Episode ID), Pending Count, and Pending %</i></div>", unsafe_allow_html=True)
-        
-        # Calculate Smart Defaults (Previous month end, 6 months prior start)
-        today_date = datetime.date.today()
-        def_end = today_date.replace(day=1) - datetime.timedelta(days=1)
-        def_start = def_end.replace(day=1) - relativedelta(months=6)
-
-        c_fac, c_dt1, c_dt2 = st.columns(3)
-        with c_fac:
-            mat_fac = st.selectbox("🏥 Filter Facility Type", ["All", "Public", "Private"], key="mat_fac")
-        with c_dt1:
-            mat_start = st.date_input("Start Diagnosis Date", value=def_start, key="mat_start")
-        with c_dt2:
-            mat_end = st.date_input("End Diagnosis Date", value=def_end, key="mat_end")
-
-        # Isolated Dataframe for Matrix
-        df_mat = df_dc_new.copy()
-        
-        # Facility Filter Logic
-        if mat_fac == "Public":
-            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-        elif mat_fac == "Private":
-            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
-            
-        # Date Filter Logic
-        df_mat = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(mat_start, mat_end)]
-
-        mat_periods = [
-            ('Baseline', 'BASELINE', 'Elig_BASELINE'),
-            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
-            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH'),
-            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH'),
-            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH'),
-            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH'),
-            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH')
-        ]
-        
-        zones_list = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
-        
-        def get_zone_mat(z):
-            raw_z = str(z).upper().replace("ZONE", "").strip()
-            for valid_z in zones_list:
-                if valid_z in raw_z: return valid_z
-            return "AMC"
-        
-        df_mat['Mat_Zone'] = df_mat['ZONE'].apply(get_zone_mat)
-        
-        mat_rows = []
-        # Calculate for Zones
-        for z in zones_list:
-            z_df = df_mat[df_mat['Mat_Zone'] == z]
-            row = {'ZONE': z}
-            for label, rx, elig_col in mat_periods:
-                is_elig = z_df[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~z_df[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
-                elig_cnt = is_elig.sum()
-                
-                due = z_df['Due_Status'].fillna('').astype(str).str.upper()
-                not_comp = ~due.str.contains("COMPLETED", na=False)
-                is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
-                pend_cnt = is_pending.sum()
-                
-                pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
-                
-                row[f'Ep_{label}'] = elig_cnt
-                row[f'{label}'] = pend_cnt
-                row[f'% {label}'] = f"{pct}%"
-            mat_rows.append(row)
-            
-        # Calculate for AMC
-        amc_row = {'ZONE': 'AMC'}
-        for label, rx, elig_col in mat_periods:
-            is_elig = df_mat[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_mat[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
-            elig_cnt = is_elig.sum()
-            
-            due = df_mat['Due_Status'].fillna('').astype(str).str.upper()
-            not_comp = ~due.str.contains("COMPLETED", na=False)
-            is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
-            pend_cnt = is_pending.sum()
-            
-            pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
-            
-            amc_row[f'Ep_{label}'] = elig_cnt
-            amc_row[f'{label}'] = pend_cnt
-            amc_row[f'% {label}'] = f"{pct}%"
-        
-        mat_rows.append(amc_row)
-        
-        df_matrix_final = pd.DataFrame(mat_rows)
-        
-        # Rename Ep_ columns uniquely but display as 'Episode ID'
-        rename_dict = {}
-        for i, (label, _, _) in enumerate(mat_periods):
-            rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
-        df_matrix_final = df_matrix_final.rename(columns=rename_dict)
-        
-        # Styling Engine for Matrix
-        def style_matrix(styler):
-            styler.set_properties(**{'text-align': 'center'})
-            styler.set_properties(subset=['ZONE'], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
-            
-            # Apply color strictly to the % columns
-            for label, _, _ in mat_periods:
-                col_name = f'% {label}'
-                def color_rule(val):
-                    try:
-                        v = float(val.replace('%', '').strip())
-                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' # Red
-                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;' # Yellow
-                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;' # Green
-                    except:
-                        return ''
-                styler.map(color_rule, subset=[col_name])
-            return styler
-        
-        st.dataframe(df_matrix_final.style.pipe(style_matrix), use_container_width=True, hide_index=True)
-        st.markdown("<hr style='margin-top: 30px; margin-bottom: 30px;'>", unsafe_allow_html=True)
-        # =============================================================
-
         periods_map = {
             'BASELINE': ('BASELINE', 'Elig_BASELINE'),
             '1ST MONTH': ('1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
@@ -1168,7 +1043,6 @@ with tab5:
             summary['% Completed'] = ((summary['Completed'] / summary['Eligible']) * 100).fillna(0).round(1)
             summary = summary.reset_index()
             
-            # 🎯 Sorting Logic: 7 Zones -> MAPPING NOT DONE -> AMC TOTAL
             main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
             summary['sort_key'] = summary[group_col].apply(lambda x: main_zones.index(x) if x in main_zones else 998 if x == 'MAPPING NOT DONE' else 999)
             summary = summary.sort_values('sort_key').drop(columns=['sort_key'])
@@ -1180,7 +1054,7 @@ with tab5:
         
         main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
         
-        # 🎯 7 MINI BOXES (With Dynamic Colors: >=75 Green, 50-74.9 Yellow, <50 Red)
+        # 🎯 7 MINI BOXES
         if st.session_state.role == "ADMIN" and ('s6_z' not in locals() or len(s6_z) == 0):
             st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
             cols7 = st.columns(7)
@@ -1189,16 +1063,16 @@ with tab5:
                 pct_val = 0
                 if not z_row.empty: pct_val = z_row['% Completed'].values[0]
                 
-                if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" # લીલો
-                elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" # પીળો
-                else: bg_c, t_c = "#f8d7da", "#721c24" # લાલ
+                if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" # Green
+                elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" # Yellow
+                else: bg_c, t_c = "#f8d7da", "#721c24" # Red
                 
                 card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 6px 1px; margin-bottom: 10px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 16px; font-weight: 900; margin-top: 2px;">{pct_val}%</div></div>"""
                 with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
 
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        # 🎯 ERROR-FREE TARGETED TABLE COLORING
+        # TARGETED TABLE COLORING
         def color_table(df):
             style_df = pd.DataFrame('', index=df.index, columns=df.columns)
             for i in df.index:
@@ -1238,7 +1112,136 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (OLD VS NEW)
+        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX
+        # -------------------------------------------------------------
+        import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        st.markdown("<br><hr style='border: 1.5px solid #2C3E50;'>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients dynamically based on their specific diagnosis month relative to the review month.</i></div>", unsafe_allow_html=True)
+        
+        cm1, cm2 = st.columns([1, 2])
+        with cm1:
+            mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
+        with cm2:
+            # Default to current month
+            today_date = datetime.date.today()
+            ref_date = st.date_input("📅 Select Current Review Month (e.g., April 2026)", value=today_date, key="mat_ref_dt")
+
+        # Start isolated matrix logic
+        df_mat = df_dc_new.copy()
+        
+        # Facility Filter
+        if mat_fac == "Public":
+            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+        elif mat_fac == "Private":
+            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
+
+        # Map offset logic: Baseline looks at -1 Month, 1st Month looks at -2 Months, etc.
+        mat_periods = [
+            ('Baseline', 'BASELINE', 'Elig_BASELINE', 1),
+            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2),
+            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3),
+            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4),
+            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5),
+            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6),
+            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
+        ]
+        
+        zones_list = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
+        
+        def get_zone_mat(z):
+            raw_z = str(z).upper().replace("ZONE", "").strip()
+            for valid_z in zones_list:
+                if valid_z in raw_z: return valid_z
+            return "AMC"
+        
+        df_mat['Mat_Zone'] = df_mat['ZONE'].apply(get_zone_mat)
+        
+        mat_rows = []
+        for z in zones_list:
+            z_df = df_mat[df_mat['Mat_Zone'] == z]
+            row = {'ZONE': z}
+            
+            for label, rx, elig_col, m_offset in mat_periods:
+                # 🎯 The True Cohort Logic
+                target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
+                target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
+                
+                # Filter down to the exact diagnosis month for this specific period
+                z_cohort = z_df[pd.to_datetime(z_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
+                
+                is_elig = z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+                elig_cnt = is_elig.sum()
+                
+                due = z_cohort['Due_Status'].fillna('').astype(str).str.upper()
+                not_comp = ~due.str.contains("COMPLETED", na=False)
+                is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+                pend_cnt = is_pending.sum()
+                
+                pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
+                
+                row[f'Ep_{label}'] = elig_cnt
+                row[f'{label}'] = pend_cnt
+                row[f'% {label}'] = f"{pct}%"
+            mat_rows.append(row)
+            
+        # AMC Row
+        amc_row = {'ZONE': 'AMC'}
+        for label, rx, elig_col, m_offset in mat_periods:
+            target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
+            target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
+            
+            amc_cohort = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
+            
+            is_elig = amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+            elig_cnt = is_elig.sum()
+            
+            due = amc_cohort['Due_Status'].fillna('').astype(str).str.upper()
+            not_comp = ~due.str.contains("COMPLETED", na=False)
+            is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+            pend_cnt = is_pending.sum()
+            
+            pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
+            
+            amc_row[f'Ep_{label}'] = elig_cnt
+            amc_row[f'{label}'] = pend_cnt
+            amc_row[f'% {label}'] = f"{pct}%"
+            
+        mat_rows.append(amc_row)
+        
+        df_matrix_final = pd.DataFrame(mat_rows)
+        
+        # Rename Ep_ columns uniquely but display as 'Episode ID'
+        rename_dict = {}
+        for i, (label, _, _, _) in enumerate(mat_periods):
+            rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
+        df_matrix_final = df_matrix_final.rename(columns=rename_dict)
+        
+        # Styling Engine for Matrix
+        def style_matrix(styler):
+            styler.set_properties(**{'text-align': 'center'})
+            styler.set_properties(subset=['ZONE'], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
+            
+            # Apply color strictly to the % columns
+            for label, _, _, _ in mat_periods:
+                col_name = f'% {label}'
+                def color_rule(val):
+                    try:
+                        v = float(val.replace('%', '').strip())
+                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' # Red
+                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;' # Yellow
+                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;' # Green
+                    except:
+                        return ''
+                styler.map(color_rule, subset=[col_name])
+            return styler
+        
+        st.dataframe(df_matrix_final.style.pipe(style_matrix), use_container_width=True, hide_index=True)
+
+        # -------------------------------------------------------------
+        # 🎯 🔄 DIFF CARE COMPARISON ENGINE (BOTTOM)
         # -------------------------------------------------------------
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
