@@ -955,7 +955,7 @@ with tab4:
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
 # ==========================================
-# 🟢 TAB 5: DIFFERENTIATED CARE (WITH 7 MINI BOXES, COLORS & COMPARISON ENGINE)
+# 🟢 TAB 5: DIFFERENTIATED CARE (WITH MATRIX, MINI BOXES, COLORS & COMPARISON)
 # ==========================================
 with tab5:
     st.markdown("<h3 style='color: #1f618d;'>🏥 Differentiated Care Tracking System</h3>", unsafe_allow_html=True)
@@ -963,7 +963,7 @@ with tab5:
     if df_dc_new.empty:
         st.warning("⚠️ ડેટા મળ્યો નથી. ગુગલ શીટ અને લોગિન ઝોન ચેક કરો.")
     else:
-        with st.expander("🔽 Filters & Dates (Applies to Current Status)", expanded=False):
+        with st.expander("🔽 Filters & Dates (Applies to Current Status below Matrix)", expanded=False):
             df_dc = df_dc_new.copy()
             c1, c2, c3 = st.columns(3)
             
@@ -1006,6 +1006,131 @@ with tab5:
 
         st.markdown("<hr>", unsafe_allow_html=True)
         
+        # =============================================================
+        # 🎯 NEW ADDITION: CONSOLIDATED MONTHLY PENDING MATRIX
+        # =============================================================
+        import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix</h4>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Shows Total Eligible Patients (Episode ID), Pending Count, and Pending %</i></div>", unsafe_allow_html=True)
+        
+        # Calculate Smart Defaults (Previous month end, 6 months prior start)
+        today_date = datetime.date.today()
+        def_end = today_date.replace(day=1) - datetime.timedelta(days=1)
+        def_start = def_end.replace(day=1) - relativedelta(months=6)
+
+        c_fac, c_dt1, c_dt2 = st.columns(3)
+        with c_fac:
+            mat_fac = st.selectbox("🏥 Filter Facility Type", ["All", "Public", "Private"], key="mat_fac")
+        with c_dt1:
+            mat_start = st.date_input("Start Diagnosis Date", value=def_start, key="mat_start")
+        with c_dt2:
+            mat_end = st.date_input("End Diagnosis Date", value=def_end, key="mat_end")
+
+        # Isolated Dataframe for Matrix
+        df_mat = df_dc_new.copy()
+        
+        # Facility Filter Logic
+        if mat_fac == "Public":
+            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+        elif mat_fac == "Private":
+            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
+            
+        # Date Filter Logic
+        df_mat = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(mat_start, mat_end)]
+
+        mat_periods = [
+            ('Baseline', 'BASELINE', 'Elig_BASELINE'),
+            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
+            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH'),
+            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH'),
+            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH'),
+            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH'),
+            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH')
+        ]
+        
+        zones_list = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
+        
+        def get_zone_mat(z):
+            raw_z = str(z).upper().replace("ZONE", "").strip()
+            for valid_z in zones_list:
+                if valid_z in raw_z: return valid_z
+            return "AMC"
+        
+        df_mat['Mat_Zone'] = df_mat['ZONE'].apply(get_zone_mat)
+        
+        mat_rows = []
+        # Calculate for Zones
+        for z in zones_list:
+            z_df = df_mat[df_mat['Mat_Zone'] == z]
+            row = {'ZONE': z}
+            for label, rx, elig_col in mat_periods:
+                is_elig = z_df[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~z_df[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+                elig_cnt = is_elig.sum()
+                
+                due = z_df['Due_Status'].fillna('').astype(str).str.upper()
+                not_comp = ~due.str.contains("COMPLETED", na=False)
+                is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+                pend_cnt = is_pending.sum()
+                
+                pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
+                
+                row[f'Ep_{label}'] = elig_cnt
+                row[f'{label}'] = pend_cnt
+                row[f'% {label}'] = f"{pct}%"
+            mat_rows.append(row)
+            
+        # Calculate for AMC
+        amc_row = {'ZONE': 'AMC'}
+        for label, rx, elig_col in mat_periods:
+            is_elig = df_mat[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_mat[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+            elig_cnt = is_elig.sum()
+            
+            due = df_mat['Due_Status'].fillna('').astype(str).str.upper()
+            not_comp = ~due.str.contains("COMPLETED", na=False)
+            is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+            pend_cnt = is_pending.sum()
+            
+            pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
+            
+            amc_row[f'Ep_{label}'] = elig_cnt
+            amc_row[f'{label}'] = pend_cnt
+            amc_row[f'% {label}'] = f"{pct}%"
+        
+        mat_rows.append(amc_row)
+        
+        df_matrix_final = pd.DataFrame(mat_rows)
+        
+        # Rename Ep_ columns uniquely but display as 'Episode ID'
+        rename_dict = {}
+        for i, (label, _, _) in enumerate(mat_periods):
+            rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
+        df_matrix_final = df_matrix_final.rename(columns=rename_dict)
+        
+        # Styling Engine for Matrix
+        def style_matrix(styler):
+            styler.set_properties(**{'text-align': 'center'})
+            styler.set_properties(subset=['ZONE'], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
+            
+            # Apply color strictly to the % columns
+            for label, _, _ in mat_periods:
+                col_name = f'% {label}'
+                def color_rule(val):
+                    try:
+                        v = float(val.replace('%', '').strip())
+                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' # Red
+                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;' # Yellow
+                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;' # Green
+                    except:
+                        return ''
+                styler.map(color_rule, subset=[col_name])
+            return styler
+        
+        st.dataframe(df_matrix_final.style.pipe(style_matrix), use_container_width=True, hide_index=True)
+        st.markdown("<hr style='margin-top: 30px; margin-bottom: 30px;'>", unsafe_allow_html=True)
+        # =============================================================
+
         periods_map = {
             'BASELINE': ('BASELINE', 'Elig_BASELINE'),
             '1ST MONTH': ('1ST MONTH|1 MONTH', 'Elig_1ST_MONTH'),
@@ -1220,7 +1345,6 @@ with tab5:
                         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
-
 # ==========================================
 # 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER - MNC ENTERPRISE EDITION)
 # ==========================================
