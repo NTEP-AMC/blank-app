@@ -1125,20 +1125,16 @@ with tab5:
         with cm1:
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
-            # Default to current month
             today_date = datetime.date.today()
             ref_date = st.date_input("📅 Select Current Review Month (e.g., April 2026)", value=today_date, key="mat_ref_dt")
 
-        # Start isolated matrix logic
         df_mat = df_dc_new.copy()
         
-        # Facility Filter
         if mat_fac == "Public":
             df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
         elif mat_fac == "Private":
             df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
 
-        # Map offset logic: Baseline looks at -1 Month, 1st Month looks at -2 Months, etc.
         mat_periods = [
             ('Baseline', 'BASELINE', 'Elig_BASELINE', 1),
             ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2),
@@ -1149,27 +1145,31 @@ with tab5:
             ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
         ]
         
-        zones_list = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
+        display_zones = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
         
+        # 🎯 BUG FIX: Strict Priority Mapping so NW/SW don't get swallowed by N/S
         def get_zone_mat(z):
             raw_z = str(z).upper().replace("ZONE", "").strip()
-            for valid_z in zones_list:
-                if valid_z in raw_z: return valid_z
+            if "SOUTH WEST" in raw_z: return "SOUTH WEST"
+            if "NORTH WEST" in raw_z: return "NORTH WEST"
+            if "WEST" in raw_z: return "WEST"
+            if "SOUTH" in raw_z: return "SOUTH"
+            if "CENTRAL" in raw_z: return "CENTRAL"
+            if "EAST" in raw_z: return "EAST"
+            if "NORTH" in raw_z: return "NORTH"
             return "AMC"
         
         df_mat['Mat_Zone'] = df_mat['ZONE'].apply(get_zone_mat)
         
         mat_rows = []
-        for z in zones_list:
+        for z in display_zones:
             z_df = df_mat[df_mat['Mat_Zone'] == z]
             row = {'ZONE': z}
             
             for label, rx, elig_col, m_offset in mat_periods:
-                # 🎯 The True Cohort Logic
                 target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
                 target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
                 
-                # Filter down to the exact diagnosis month for this specific period
                 z_cohort = z_df[pd.to_datetime(z_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
                 
                 is_elig = z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
@@ -1213,18 +1213,15 @@ with tab5:
         
         df_matrix_final = pd.DataFrame(mat_rows)
         
-        # Rename Ep_ columns uniquely but display as 'Episode ID'
         rename_dict = {}
         for i, (label, _, _, _) in enumerate(mat_periods):
             rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
         df_matrix_final = df_matrix_final.rename(columns=rename_dict)
         
-        # Styling Engine for Matrix
         def style_matrix(styler):
             styler.set_properties(**{'text-align': 'center'})
             styler.set_properties(subset=['ZONE'], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
             
-            # Apply color strictly to the % columns
             for label, _, _, _ in mat_periods:
                 col_name = f'% {label}'
                 def color_rule(val):
@@ -1348,6 +1345,7 @@ with tab5:
                         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
+                
 # ==========================================
 # 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER - MNC ENTERPRISE EDITION)
 # ==========================================
