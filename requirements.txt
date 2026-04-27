@@ -3,3 +3,4 @@ pytz
 xlsxwriter
 python-pptx
 matplotlib
+streamlit-option-menu
