@@ -1434,6 +1434,13 @@ with tab6:
                 
                 email_col = next((c for c in df_s.columns if "EMAIL" in c), None)
                 df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
+
+                # 🎯 EXTRACTIONS FOR TABLE FORMAT (PHI & Address)
+                phi_col = next((c for c in df_s.columns if "PHI" in c or "UHC" in c or "CHC" in c or "FACILITY" in c or "INSTITUTE" in c), None)
+                df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
+
+                addr_col = next((c for c in df_s.columns if "ADDRESS" in c or "RESIDENCE" in c), None)
+                df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 
                 df_clean['SOURCE_SHEET'] = cfg["name"]
                 all_staff.append(df_clean)
@@ -1467,6 +1474,10 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace(r'I/C\s*', '', regex=True)
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
+
+            # Format the newly extracted columns clearly
+            final_df['PHI/UHC/CHC'] = final_df['PHI/UHC/CHC'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
+            final_df['RESIDENCE ADDRESS'] = final_df['RESIDENCE ADDRESS'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             
             # ==========================================
             # 🎯 CLEAN DESIGNATIONS & FILTERS
@@ -1525,20 +1536,15 @@ with tab6:
                 name = str(row['NAME']).upper()
                 z_head = zone_heads.get(z, "Zonal MO-Supervisor")
                 
-                # Falguni Panchal Override
                 if "FALGUNI" in name: return "City TB Officer & MO-DTC"
-                
                 if sheet == "MO-SUPERVISOR": return "City TB Officer (Dr. S. K. Patel)"
                 elif sheet == "MO-MEDICAL COLLEGE": return f"City TB Officer & {z_head}"
                 else: return z_head
 
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
-            
-            # 🎯 CRITICAL BUG FIX: Force fill NaN values BEFORE grouping so STLS don't get deleted
             final_df = final_df.fillna("N/A")
             
-            # 🎯 IDENTITY MERGER
             def merge_tus(tu_series):
                 tus = set()
                 for tu_val in tu_series:
@@ -1547,13 +1553,17 @@ with tab6:
                             if item.strip(): tus.add(item.strip().title())
                 return ", ".join(sorted(tus)) if tus else "N/A"
             
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'EXTRA_CHARGE', 'CONTACT NO', 'EMAIL', 'HIERARCHY', 'REPORTS_TO']).agg({
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'EXTRA_CHARGE', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
                 'SOURCE_SHEET': 'first'
             }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
+            
+            # Combine name and extra charge for the final display
+            final_df['DISPLAY_NAME'] = final_df.apply(lambda x: f"{x['NAME'].title()} {x['EXTRA_CHARGE']}" if x['EXTRA_CHARGE'] else x['NAME'].title(), axis=1)
+            
             return final_df
         return pd.DataFrame()
 
@@ -1607,7 +1617,6 @@ with tab6:
             sel_tu = st.selectbox("🏥 Filter TB Unit", tus)
             
         with sc4:
-            # Clean Designation Dropdown Menu
             desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV"]
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
@@ -1620,59 +1629,36 @@ with tab6:
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 📇 MNC CORPORATE DIGITAL BUSINESS CARDS
-        cols = st.columns(3)
-        for idx, row in df_display.iterrows():
-            name = str(row.get('NAME', 'N/A')).title()
-            desig = str(row.get('DESIGNATION', 'N/A')).upper()
-            extra = str(row.get('EXTRA_CHARGE', ''))
-            zone = str(row.get('ZONE', 'N/A'))
-            tu = str(row.get('TB_UNIT', 'N/A'))
-            phone = str(row.get('CONTACT NO', 'N/A')).strip().replace('.0', '')
-            email = str(row.get('EMAIL', 'N/A')).strip()
-            reports_to = str(row.get('REPORTS_TO', 'N/A'))
-            h_level = row.get('HIERARCHY', 99)
+        # 🎯 NEW DATA TABLE FORMAT
+        if not df_display.empty:
+            # Select and map exactly to the columns you requested
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'RESIDENCE ADDRESS']].copy()
+            display_table = display_table.rename(columns={
+                'ZONE': 'Zone',
+                'TB_UNIT': 'TB Unit',
+                'PHI/UHC/CHC': 'PHI/UHC/CHC',
+                'DISPLAY_NAME': 'Name',
+                'DESIGNATION': 'Designation',
+                'CONTACT NO': 'Mobile No.',
+                'RESIDENCE ADDRESS': 'Residence Address'
+            })
             
-            if phone in ["N/A", "NAN", "NONE", ""]: phone = "Not Provided"
-            if email in ["N/A", "NAN", "NONE", ""]: email = "Not Provided"
+            # Format Contact Numbers cleanly (remove .0 if it imported as float)
+            display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
             
-            clean_phone = "".join(filter(str.isdigit, phone))
-            wa_link = f"https://wa.me/91{clean_phone}" if len(clean_phone) >= 10 else "#"
-            call_link = f"tel:+91{clean_phone}" if len(clean_phone) >= 10 else "#"
-            mail_link = f"mailto:{email}" if "@" in email else "#"
+            # Display full-width Interactive Table
+            st.dataframe(display_table, use_container_width=True, hide_index=True)
             
-            border_color = "#e11d48" if h_level == 1 else "#f59e0b" if h_level == 2 else "#10b981" if h_level == 3 else "#0ea5e9" if h_level == 4 else "#8b5cf6"
-            badge = "👑 ZONAL HEAD" if h_level == 1 else "⚕️ MEDICAL OFFICER" if h_level == 2 else "🧪 STLS" if h_level == 3 else "📋 STS" if h_level == 4 else "🩺 TBHV"
-            
-            if zone.upper() == "HEAD OFFICE":
-                location_html = f"<b>{zone}</b>"
-            else:
-                location_html = f"<b>{zone} Zone</b>"
-                
-            if h_level > 1 and tu.upper() not in ["N/A", "NAN", "NONE"]:
-                location_html += f" <span style='color:#cbd5e1;'>|</span> 🏥 {tu}"
-                
-            extra_html = f"<span style='color:#e11d48; display:block; margin-top:2px;'>{extra}</span>" if extra else ""
-            
-            card_html = f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 20px; border-top: 5px solid {border_color}; font-family: system-ui, -apple-system, sans-serif; transition: transform 0.2s;">
-<div style="margin-bottom: 12px;"><span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">{badge}</span></div>
-<div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.2;">{name}</div>
-<div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px;">{desig} {extra_html}</div>
-<div style="font-size: 13px; color: #334155; margin-bottom: 6px; line-height: 1.4;">📍 {location_html}</div>
-<div style="font-size: 13px; color: #334155; margin-bottom: 12px;">📞 <b>{phone}</b></div>
-<div style="background-color: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 3px solid #cbd5e1;">
-<div style="font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; font-weight: 700;">Reports To</div>
-<div style="font-size: 12px; color: #0f172a; font-weight: 600;">{reports_to}</div>
-</div>
-<div style="display: flex; gap: 8px; justify-content: space-between;">"""
-            if len(clean_phone) >= 10:
-                card_html += f"""<a href="{call_link}" style="text-decoration: none; background-color: #f1f5f9; color: #334155; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; border: 1px solid #e2e8f0; transition: 0.2s;">📞 Call</a><a href="{wa_link}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(37,211,102,0.2);">💬 WhatsApp</a>"""
-            if "@" in email:
-                card_html += f"""<a href="{mail_link}" target="_blank" style="text-decoration: none; background-color: #3b82f6; color: white; padding: 8px 0; border-radius: 20px; font-size: 12px; font-weight: 700; flex: 1; text-align: center; box-shadow: 0 2px 4px rgba(59,130,246,0.2);">✉️ Email</a>"""
-            card_html += "</div></div>"
-            
-            with cols[idx % 3]:
-                st.markdown(card_html, unsafe_allow_html=True)
+            # Provide Excel Download capability
+            st.download_button(
+                label="📥 Download Staff Directory Excel",
+                data=convert_df_to_excel(display_table, "Staff_Directory"),
+                file_name="AMC_NTEP_Staff_Directory.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key='dl_staff_dir'
+            )
+        else:
+            st.info("No staff profiles found matching the current filters.")
 
 # ==========================================
 # 🟢 TAB 7: PRESUMPTIVE TB (NEW)
