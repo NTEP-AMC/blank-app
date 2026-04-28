@@ -1772,12 +1772,29 @@ with tab7:
             }
             merged = merged.rename(columns=rename_dict)
             
+            # 🎯 CALCULATE GRAND TOTAL ROW
+            numeric_cols = [c for c in merged.columns if 'ZONE' not in c and '%' not in c]
+            grand_total = {col: merged[col].sum() for col in numeric_cols}
+            grand_total['ZONE'] = 'Grand total'
+            
+            # Recalculate true percentage for Grand Total
+            if grand_total['Episode_ID (previous day)'] > 0:
+                grand_total['% XRAY OFFERED (previous day)'] = round((grand_total['X ray offered yes no (previous day)'] / grand_total['Episode_ID (previous day)']) * 100, 1)
+            else: grand_total['% XRAY OFFERED (previous day)'] = 0.0
+                
+            if grand_total['Episode_ID (today)'] > 0:
+                grand_total['% XRAY OFFERED (today)'] = round((grand_total['X ray offered yes no (today)'] / grand_total['Episode_ID (today)']) * 100, 1)
+            else: grand_total['% XRAY OFFERED (today)'] = 0.0
+            
+            # Append Grand Total to the dataframe
+            merged = pd.concat([merged, pd.DataFrame([grand_total])], ignore_index=True)
+            
             # Format types
             for col in merged.columns:
                 if '%' in col: merged[col] = merged[col].astype(str) + '%'
                 elif 'ZONE' not in col: merged[col] = merged[col].astype(int)
             
-            # Dynamic Styling specific to XRAY OFFERED colors
+            # Dynamic Styling specific to XRAY OFFERED colors & Grand Total bolding
             def style_pres_table(styler):
                 def color_pct(val):
                     try:
@@ -1787,7 +1804,15 @@ with tab7:
                         elif v <= 75: return 'background-color: #F1C40F; color: black;' # Yellow
                         else: return 'background-color: #27AE60; color: white;' # Green
                     except: return ''
+                
+                # Apply background colors to percentage columns
                 styler.map(color_pct, subset=['% XRAY OFFERED (previous day)', '% XRAY OFFERED (today)'])
+                
+                # Make the "Grand total" row bold and visually distinct
+                grand_total_idx = merged.index[merged['ZONE'] == 'Grand total']
+                if not grand_total_idx.empty:
+                    styler.apply(lambda x: ['background-color: #dbeafe; font-weight: bold;' if x.name in grand_total_idx else '' for _ in x], axis=1)
+                
                 return styler
             
             st.dataframe(merged.style.pipe(style_pres_table), use_container_width=True, hide_index=True)
