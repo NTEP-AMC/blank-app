@@ -1687,6 +1687,10 @@ with tab7:
             df_p_t = df_pres_t.copy()
             df_p_y = df_pres_y.copy()
             
+            # 🎯 FIX: Force blanks to #N/A so it perfectly matches Looker Studio's #N/A row
+            df_p_t['ZONE'] = df_p_t['ZONE'].replace(["", "NAN", "NAT", "NONE", "NULL", "<NA>", "N/A"], "#N/A").fillna("#N/A")
+            df_p_y['ZONE'] = df_p_y['ZONE'].replace(["", "NAN", "NAT", "NONE", "NULL", "<NA>", "N/A"], "#N/A").fillna("#N/A")
+            
             c1, c2, c3 = st.columns(3)
             
             with c1:
@@ -1727,12 +1731,16 @@ with tab7:
         def get_pres_metrics(df):
             if df.empty: return pd.DataFrame()
             
-            df['Microscopy_Yes'] = df.get('Microscopy_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
-            df['NAAT_Yes'] = df.get('Naat_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
-            df['Xray_Yes'] = df.get('Xray_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
+            # 🎯 FIXED LOGIC: Mirrors Looker Studio Formula -> IF(OR(col="No", col=""), 0, 1)
+            blank_no_vals = ['NO', 'NAN', 'NONE', '', 'N/A', '<NA>']
+            
+            df['Microscopy_Yes'] = ~df.get('Microscopy_Offered', pd.Series(dtype=str)).astype(str).str.strip().str.upper().isin(blank_no_vals)
+            df['NAAT_Yes'] = ~df.get('Naat_Offered', pd.Series(dtype=str)).astype(str).str.strip().str.upper().isin(blank_no_vals)
+            df['Xray_Yes'] = ~df.get('Xray_Offered', pd.Series(dtype=str)).astype(str).str.strip().str.upper().isin(blank_no_vals)
+            
             df['Mic_Naat_Yes'] = df['Microscopy_Yes'] | df['NAAT_Yes']
             
-            grp = df.groupby('ZONE').agg(
+            grp = df.groupby('ZONE', dropna=False).agg(
                 Episode_ID=('Episode_ID', 'count'),
                 Microscopy=('Microscopy_Yes', 'sum'),
                 NAAT=('NAAT_Yes', 'sum'),
@@ -1786,7 +1794,6 @@ with tab7:
                 grand_total['% XRAY OFFERED (today)'] = round((grand_total['X ray offered yes no (today)'] / grand_total['Episode_ID (today)']) * 100, 1)
             else: grand_total['% XRAY OFFERED (today)'] = 0.0
             
-            # Append Grand Total to the dataframe
             merged = pd.concat([merged, pd.DataFrame([grand_total])], ignore_index=True)
             
             # Format types
@@ -1805,7 +1812,6 @@ with tab7:
                         else: return 'background-color: #27AE60; color: white;' # Green
                     except: return ''
                 
-                # Apply background colors to percentage columns
                 styler.map(color_pct, subset=['% XRAY OFFERED (previous day)', '% XRAY OFFERED (today)'])
                 
                 # Make the "Grand total" row bold and visually distinct
