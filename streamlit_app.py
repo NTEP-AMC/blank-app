@@ -1385,7 +1385,6 @@ with tab6:
         import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
-        # 🎯 ADDED LT CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
@@ -1448,7 +1447,7 @@ with tab6:
                 df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 df_clean['RESIDENCE ADDRESS'] = df_clean['RESIDENCE ADDRESS'].apply(lambda x: "N/A" if "@" in str(x) else x)
                 
-                # 🎯 NEW: DOT CENTER / DMC EXTRACTION FOR JOB LOCATION
+                # DOT CENTER / DMC EXTRACTION FOR JOB LOCATION
                 job_loc_col = next((c for c in df_s.columns if "DOT CENTER" in c or "DMC" in c), None)
                 df_clean['JOB_LOCATION_RAW'] = df_s[job_loc_col] if job_loc_col else "N/A"
 
@@ -1510,7 +1509,6 @@ with tab6:
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB HEALTH VISITOR (TBHV)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'FILTER_DESIG'] = "TBHV"
             
-            # 🎯 LT ADDED TO MAPPING
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'DESIGNATION'] = "LABORATORY TECHNICIAN (LT)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'FILTER_DESIG'] = "LT"
 
@@ -1559,11 +1557,21 @@ with tab6:
                         for item in str(tu_val).split(','):
                             if item.strip(): tus.add(item.strip().title())
                 return ", ".join(sorted(tus)) if tus else "N/A"
+                
+            # 🎯 NEW: MERGE MULTIPLE JOB LOCATIONS (Fixes TBHV Duplication)
+            def merge_locations(loc_series):
+                locs = set()
+                for loc_val in loc_series:
+                    val = str(loc_val).strip()
+                    if val.upper() not in ["N/A", "NAN", "NONE", ""]:
+                        locs.add(val.title())
+                return " & ".join(sorted(locs)) if locs else "N/A"
             
-            # 🎯 INCLUDE ALL COLUMNS IN GROUPBY SO NO DATA IS LOST
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'JOB_LOCATION_RAW', 'HIERARCHY', 'REPORTS_TO']).agg({
+            # 🎯 UPDATED GROUPBY: Removed JOB_LOCATION_RAW from the key to allow merging!
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'EXTRA_CHARGE', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
+                'JOB_LOCATION_RAW': merge_locations,
                 'SOURCE_SHEET': 'first'
             }).reset_index()
             
@@ -1585,7 +1593,7 @@ with tab6:
             final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_tu)
             final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_phi)
             
-            # 🎯 DYNAMIC JOB LOCATION & TIME ENGINE
+            # 🎯 DYNAMIC JOB LOCATION & TIME ENGINE (Uses the Merged Data)
             def construct_job_location(row):
                 sheet = row['SOURCE_SHEET']
                 if sheet == "MO-SUPERVISOR": return row['PHI/UHC/CHC']
@@ -1604,7 +1612,7 @@ with tab6:
             time_schedule = "9:00 AM to 5:00 PM Monday to Friday and 9:00 AM to 1:00 PM for Saturday"
             final_df['Job Location & Time'] = final_df['BASE_LOCATION'].astype(str) + " | " + time_schedule
             
-            # 🎯 PURE NAME DISPLAY (No Extra Text)
+            # PURE NAME DISPLAY
             final_df['DISPLAY_NAME'] = final_df['NAME'].str.title()
             
             return final_df
@@ -1616,7 +1624,7 @@ with tab6:
     if df_staff.empty:
         st.warning("⚠️ Staff Directory data could not be loaded. Please check the Google Sheet link and GIDs.")
     else:
-        # 🎯 BULLETPROOF LOGIN FILTER FIX FOR STAFF DIRECTORY
+        # BULLETPROOF LOGIN FILTER FIX FOR STAFF DIRECTORY
         if st.session_state.role == "ZONE":
             target_clean = st.session_state.target.upper().replace("ZONE", "").strip()
             def staff_zone_check(val):
@@ -1639,7 +1647,7 @@ with tab6:
         </style>
         """, unsafe_allow_html=True)
         
-        # 🎯 FILTERS UI
+        # FILTERS UI
         sc1, sc2, sc3, sc4, sc5 = st.columns(5)
         with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
         
