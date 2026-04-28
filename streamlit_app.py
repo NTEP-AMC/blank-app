@@ -217,7 +217,7 @@ df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 # ==========================================
-# 🎯 BULLETPROOF LOGIN FILTER (FIXED OVERLAP BUG)
+# 🎯 BULLETPROOF LOGIN FILTER (FIXED OVERLAP & MAPPING BUG)
 # ==========================================
 def filter_by_role(df, role, target):
     if df.empty: return df
@@ -235,13 +235,12 @@ def filter_by_role(df, role, target):
                 return target_up in v
             return df[df[tu_col].apply(strict_tu_check)]
             
-    # 2. ZONE FILTERING (Strict Isolation so North never matches North West)
+    # 2. ZONE FILTERING (Strict Isolation so North never matches North West, and MAPPING NOT DONE is hidden)
     elif role_up == "ZONE" and 'ZONE' in df.columns:
         target_clean = target_up.replace("ZONE", "").strip()
         def strict_zone_check(val):
             v_raw = str(val).upper().strip()
-            # Keep Mapping Not Done visible for error correction
-            if v_raw in ['N/A', 'NAN', 'MAPPING NOT DONE', '', 'NONE', 'NULL']: return True
+            # 🎯 FIX: Removing the rule that allowed MAPPING NOT DONE to slip through
             # Split strings just in case data comes with multi-zones
             v_list = [z.strip().replace("ZONE", "").strip() for z in v_raw.replace(',', '&').split('&')]
             return target_clean in v_list
@@ -441,6 +440,7 @@ with tab3:
     st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
     if not df_t3.empty:
         st.download_button("📥 Download Excel", convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients"), "Current_Patients.xlsx", key='dl3')
+
 # ==========================================
 # 🟢 TAB 4: PPT GENERATOR (SMART + CORPORATE + NAAT)
 # ==========================================
