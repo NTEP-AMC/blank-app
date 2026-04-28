@@ -1385,6 +1385,7 @@ with tab6:
         import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
+        # 🎯 ADDED LT CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
@@ -1558,7 +1559,6 @@ with tab6:
                             if item.strip(): tus.add(item.strip().title())
                 return ", ".join(sorted(tus)) if tus else "N/A"
                 
-            # 🎯 NEW: MERGE MULTIPLE JOB LOCATIONS (Fixes TBHV Duplication)
             def merge_locations(loc_series):
                 locs = set()
                 for loc_val in loc_series:
@@ -1567,8 +1567,8 @@ with tab6:
                         locs.add(val.title())
                 return " & ".join(sorted(locs)) if locs else "N/A"
             
-            # 🎯 UPDATED GROUPBY: Removed JOB_LOCATION_RAW from the key to allow merging!
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'EXTRA_CHARGE', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
+            # 🎯 FIXED GROUPBY: Removed EXTRA_CHARGE so it doesn't throw a KeyError!
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
                 'JOB_LOCATION_RAW': merge_locations,
@@ -1593,13 +1593,12 @@ with tab6:
             final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_tu)
             final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_phi)
             
-            # 🎯 DYNAMIC JOB LOCATION & TIME ENGINE (Uses the Merged Data)
             def construct_job_location(row):
                 sheet = row['SOURCE_SHEET']
                 if sheet == "MO-SUPERVISOR": return row['PHI/UHC/CHC']
                 elif sheet in ["STLS", "STS", "MO-MEDICAL COLLEGE"]: return row['TB_UNIT']
                 elif sheet in ["TBHV", "LT"]: 
-                    raw_loc = str(row['JOB_LOCATION_RAW']).strip()
+                    raw_loc = str(row.get('JOB_LOCATION_RAW', '')).strip()
                     return raw_loc if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""] else row['TB_UNIT']
                 return "N/A"
 
