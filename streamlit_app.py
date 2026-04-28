@@ -1385,13 +1385,14 @@ with tab6:
         import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
+        # 🎯 ADDED LT CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
             {"name": "STS", "gid": "1743236661", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
             {"name": "STLS", "gid": "450506055", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
             {"name": "TBHV", "gid": "1273132313", "name_col": "TBHV", "zone_col": None, "tu_col": "TU"},
-            {"name": "LT", "gid": "755154964", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
+            {"name": "LT", "gid": "755154964", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TU"},
         ]
         
         all_staff = []
@@ -1437,15 +1438,20 @@ with tab6:
                 email_col = next((c for c in df_s.columns if "EMAIL" in c or "MAIL" in c), None)
                 df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
 
-                # STRICT PHI EXTRACTION (Guarantees Email addresses are blocked from this column)
+                # STRICT PHI EXTRACTION
                 phi_col = next((c for c in df_s.columns if any(k in c for k in ["PHI", "UHC", "CHC", "FACIL", "INST"]) and "EMAIL" not in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
                 df_clean['PHI/UHC/CHC'] = df_clean['PHI/UHC/CHC'].apply(lambda x: "N/A" if "@" in str(x) else x)
 
+                # ADDRESS EXTRACTION
                 addr_col = next((c for c in df_s.columns if "ADDRESS" in c or "RESIDENCE" in c), None)
                 df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 df_clean['RESIDENCE ADDRESS'] = df_clean['RESIDENCE ADDRESS'].apply(lambda x: "N/A" if "@" in str(x) else x)
                 
+                # 🎯 NEW: DOT CENTER / DMC EXTRACTION FOR JOB LOCATION
+                job_loc_col = next((c for c in df_s.columns if "DOT CENTER" in c or "DMC" in c), None)
+                df_clean['JOB_LOCATION_RAW'] = df_s[job_loc_col] if job_loc_col else "N/A"
+
                 df_clean['SOURCE_SHEET'] = cfg["name"]
                 all_staff.append(df_clean)
             except Exception as e:
@@ -1479,9 +1485,9 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
 
-            # Format the extracted columns clearly
             final_df['PHI/UHC/CHC'] = final_df['PHI/UHC/CHC'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             final_df['RESIDENCE ADDRESS'] = final_df['RESIDENCE ADDRESS'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
+            final_df['JOB_LOCATION_RAW'] = final_df['JOB_LOCATION_RAW'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             
             # ==========================================
             # 🎯 CLEAN DESIGNATIONS & FILTERS
@@ -1504,22 +1510,9 @@ with tab6:
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB HEALTH VISITOR (TBHV)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'FILTER_DESIG'] = "TBHV"
             
+            # 🎯 LT ADDED TO MAPPING
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'DESIGNATION'] = "LABORATORY TECHNICIAN (LT)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'FILTER_DESIG'] = "LT"
-
-            # 🎯 OVERRIDE PHI AND TU FOR MO-SUPERVISORS ONLY
-            mo_mask = final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR'
-            
-            def format_mo_tu(z):
-                if str(z) not in ["N/A", "NAN", ""]: return f"All TB Units of {z.title()} Zone"
-                return "All TB Units"
-                
-            def format_mo_phi(z):
-                if str(z) not in ["N/A", "NAN", ""]: return f"All UHC/CHC/Medical College of {z.title()} Zone"
-                return "All UHC/CHC/Medical College"
-
-            final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_tu)
-            final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_phi)
 
             # Falguni S. Panchal Hardcode Override
             falguni_mask = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
@@ -1567,7 +1560,8 @@ with tab6:
                             if item.strip(): tus.add(item.strip().title())
                 return ", ".join(sorted(tus)) if tus else "N/A"
             
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
+            # 🎯 INCLUDE ALL COLUMNS IN GROUPBY SO NO DATA IS LOST
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'JOB_LOCATION_RAW', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
                 'SOURCE_SHEET': 'first'
@@ -1575,7 +1569,42 @@ with tab6:
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             
-            # PURE NAME DISPLAY (No Extra Text)
+            # ==========================================
+            # 🎯 FINAL FORMATTING FOR MO-SUPERVISORS & JOB LOCATIONS
+            # ==========================================
+            mo_mask = final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR'
+            
+            def format_mo_tu(z):
+                if str(z) not in ["N/A", "Nan", ""]: return f"All TB Units of {z.title()} Zone"
+                return "All TB Units"
+                
+            def format_mo_phi(z):
+                if str(z) not in ["N/A", "Nan", ""]: return f"All UHC/CHC/Medical College of {z.title()} Zone"
+                return "All UHC/CHC/Medical College"
+
+            final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_tu)
+            final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_phi)
+            
+            # 🎯 DYNAMIC JOB LOCATION & TIME ENGINE
+            def construct_job_location(row):
+                sheet = row['SOURCE_SHEET']
+                if sheet == "MO-SUPERVISOR": return row['PHI/UHC/CHC']
+                elif sheet in ["STLS", "STS", "MO-MEDICAL COLLEGE"]: return row['TB_UNIT']
+                elif sheet in ["TBHV", "LT"]: 
+                    raw_loc = str(row['JOB_LOCATION_RAW']).strip()
+                    return raw_loc if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""] else row['TB_UNIT']
+                return "N/A"
+
+            final_df['BASE_LOCATION'] = final_df.apply(construct_job_location, axis=1)
+            
+            # Force Falguni Panchal to Head Office
+            falguni_mask_final = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
+            final_df.loc[falguni_mask_final, 'BASE_LOCATION'] = "Arogya Bhavan"
+            
+            time_schedule = "9:00 AM to 5:00 PM Monday to Friday and 9:00 AM to 1:00 PM for Saturday"
+            final_df['Job Location & Time'] = final_df['BASE_LOCATION'].astype(str) + " | " + time_schedule
+            
+            # 🎯 PURE NAME DISPLAY (No Extra Text)
             final_df['DISPLAY_NAME'] = final_df['NAME'].str.title()
             
             return final_df
@@ -1610,7 +1639,7 @@ with tab6:
         </style>
         """, unsafe_allow_html=True)
         
-        # 🎯 ADDED PHI FILTER TO UI (5 Columns now)
+        # 🎯 FILTERS UI
         sc1, sc2, sc3, sc4, sc5 = st.columns(5)
         with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
         
@@ -1656,9 +1685,9 @@ with tab6:
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 🎯 DATA TABLE FORMAT WITH EMAIL ADDRESS AND PURE NAMES
+        # 🎯 DATA TABLE FORMAT WITH EMAIL ADDRESS, PURE NAMES & JOB LOCATION
         if not df_display.empty:
-            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS']].copy()
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'Job Location & Time']].copy()
             display_table = display_table.rename(columns={
                 'ZONE': 'Zone',
                 'TB_UNIT': 'TB Unit',
@@ -1672,14 +1701,14 @@ with tab6:
             
             # Format Contact Numbers cleanly
             display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
-            display_table['Mobile No.'] = display_table['Mobile No.'].replace(["N/A", "NAN", "NONE", "nan"], "Not Provided")
+            display_table['Mobile No.'] = display_table['Mobile No.'].replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             
             # Format Emails gracefully
-            display_table['Email Address'] = display_table['Email Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan"], "Not Provided")
+            display_table['Email Address'] = display_table['Email Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             display_table['Email Address'] = display_table['Email Address'].apply(lambda x: x.lower() if x != "Not Provided" else x)
             
             # Format Residence
-            display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan"], "Not Provided")
+            display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
 
             # Display full-width Interactive Table
             st.dataframe(display_table, use_container_width=True, hide_index=True)
