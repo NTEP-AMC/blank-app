@@ -1385,12 +1385,14 @@ with tab6:
         import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
+        # 🎯 ADDED LT CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
             {"name": "STS", "gid": "1743236661", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
             {"name": "STLS", "gid": "450506055", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
             {"name": "TBHV", "gid": "1273132313", "name_col": "TBHV", "zone_col": None, "tu_col": "TU"},
+            {"name": "LT", "gid": "755154964", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
         ]
         
         all_staff = []
@@ -1435,7 +1437,6 @@ with tab6:
                 email_col = next((c for c in df_s.columns if "EMAIL" in c), None)
                 df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
 
-                # 🎯 EXTRACTIONS FOR TABLE FORMAT (PHI & Address)
                 phi_col = next((c for c in df_s.columns if "PHI" in c or "UHC" in c or "CHC" in c or "FACILITY" in c or "INSTITUTE" in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
 
@@ -1475,9 +1476,12 @@ with tab6:
             final_df['TB_UNIT'] = final_df['TB_UNIT'].str.replace("/", ", ").str.replace("  ", " ").str.title()
             final_df['TB_UNIT'] = final_df['TB_UNIT'].replace(["", "Nan", "None", "N/A"], "N/A")
 
-            # Format the newly extracted columns clearly
+            # Format the extracted columns clearly
             final_df['PHI/UHC/CHC'] = final_df['PHI/UHC/CHC'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             final_df['RESIDENCE ADDRESS'] = final_df['RESIDENCE ADDRESS'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
+            
+            # 🎯 OVERRIDE PHI DESIGNATION FOR MO-SUPERVISORS ONLY
+            final_df.loc[final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR', 'PHI/UHC/CHC'] = "All UHC/CHC/Medical College"
             
             # ==========================================
             # 🎯 CLEAN DESIGNATIONS & FILTERS
@@ -1500,6 +1504,10 @@ with tab6:
             
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'DESIGNATION'] = "TB HEALTH VISITOR (TBHV)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'TBHV', 'FILTER_DESIG'] = "TBHV"
+            
+            # 🎯 LT ADDED TO MAPPING
+            final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'DESIGNATION'] = "LABORATORY TECHNICIAN (LT)"
+            final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'FILTER_DESIG'] = "LT"
 
             # Custom Overrides for Zonal Heads
             chirag_mask = final_df['NAME'].astype(str).str.upper().str.contains("CHIRAG") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
@@ -1508,7 +1516,7 @@ with tab6:
             ushma_mask = final_df['NAME'].astype(str).str.upper().str.contains("USHMA") & (final_df['SOURCE_SHEET'] == "MO-SUPERVISOR")
             final_df.loc[ushma_mask, 'EXTRA_CHARGE'] = "(Also monitoring East & North Zone)"
             
-            # 🎯 Falguni S. Panchal Hardcode Override
+            # Falguni S. Panchal Hardcode Override
             falguni_mask = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
             final_df.loc[falguni_mask, 'ZONE'] = "HEAD OFFICE"
             final_df.loc[falguni_mask, 'TB_UNIT'] = "Arogya Bhavan"
@@ -1528,6 +1536,7 @@ with tab6:
                 if sheet_name == "STLS": return 3 
                 if sheet_name == "STS": return 4
                 if sheet_name == "TBHV": return 5
+                if sheet_name == "LT": return 6
                 return 99
 
             def assign_reporting(row):
@@ -1617,7 +1626,8 @@ with tab6:
             sel_tu = st.selectbox("🏥 Filter TB Unit", tus)
             
         with sc4:
-            desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV"]
+            # 🎯 ADDED LT TO FILTERS
+            desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV", "LT"]
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
         # APPLY FILTERS
@@ -1629,10 +1639,9 @@ with tab6:
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 🎯 NEW DATA TABLE FORMAT
+        # 🎯 NEW DATA TABLE FORMAT WITH EMAIL ADDRESS
         if not df_display.empty:
-            # Select and map exactly to the columns you requested
-            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'RESIDENCE ADDRESS']].copy()
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS']].copy()
             display_table = display_table.rename(columns={
                 'ZONE': 'Zone',
                 'TB_UNIT': 'TB Unit',
@@ -1640,11 +1649,16 @@ with tab6:
                 'DISPLAY_NAME': 'Name',
                 'DESIGNATION': 'Designation',
                 'CONTACT NO': 'Mobile No.',
+                'EMAIL': 'Email Address',
                 'RESIDENCE ADDRESS': 'Residence Address'
             })
             
-            # Format Contact Numbers cleanly (remove .0 if it imported as float)
+            # Format Contact Numbers cleanly
             display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
+            
+            # Format Emails gracefully
+            display_table['Email Address'] = display_table['Email Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan"], "Not Provided")
+            display_table['Email Address'] = display_table['Email Address'].apply(lambda x: x.lower() if x != "Not Provided" else x)
             
             # Display full-width Interactive Table
             st.dataframe(display_table, use_container_width=True, hide_index=True)
@@ -1659,7 +1673,6 @@ with tab6:
             )
         else:
             st.info("No staff profiles found matching the current filters.")
-
 # ==========================================
 # 🟢 TAB 7: PRESUMPTIVE TB (NEW)
 # ==========================================
