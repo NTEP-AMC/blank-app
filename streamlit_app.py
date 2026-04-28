@@ -122,8 +122,14 @@ def load_all_data():
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
         curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
-        return m, c_mat, curr, t_df
-    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        try:
+            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str})
+            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str})
+        except:
+            p_today, p_yest = pd.DataFrame(), pd.DataFrame()
+            
+        return m, c_mat, curr, t_df, p_today, p_yest
+    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 @st.cache_data(ttl=300) 
 def get_live_dc():
@@ -213,7 +219,7 @@ def get_live_dc():
         return fetch_sheet(url_new), fetch_sheet(url_old)
     except: return pd.DataFrame(), pd.DataFrame()
 
-df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 # ==========================================
@@ -224,7 +230,6 @@ def filter_by_role(df, role, target):
     target_up = str(target).upper().strip()
     role_up = str(role).upper().strip()
     
-    # 1. TB UNIT FILTERING (Strict exclusion to prevent Vadaj matching Juna Vadaj)
     if role_up in ["TB_UNIT", "TB UNIT", "TU"]:
         tu_col = 'TB Unit' if 'TB Unit' in df.columns else 'TB_UNIT' if 'TB_UNIT' in df.columns else None
         if tu_col:
@@ -235,13 +240,10 @@ def filter_by_role(df, role, target):
                 return target_up in v
             return df[df[tu_col].apply(strict_tu_check)]
             
-    # 2. ZONE FILTERING (Strict Isolation so North never matches North West, and MAPPING NOT DONE is hidden)
     elif role_up == "ZONE" and 'ZONE' in df.columns:
         target_clean = target_up.replace("ZONE", "").strip()
         def strict_zone_check(val):
             v_raw = str(val).upper().strip()
-            # 🎯 FIX: Removing the rule that allowed MAPPING NOT DONE to slip through
-            # Split strings just in case data comes with multi-zones
             v_list = [z.strip().replace("ZONE", "").strip() for z in v_raw.replace(',', '&').split('&')]
             return target_clean in v_list
         return df[df['ZONE'].apply(strict_zone_check)]
@@ -253,6 +255,8 @@ df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_s
 df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
 df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
+df_pres_t = filter_by_role(df_pres_t_raw.copy(), st.session_state.role, st.session_state.target)
+df_pres_y = filter_by_role(df_pres_y_raw.copy(), st.session_state.role, st.session_state.target)
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
@@ -278,11 +282,11 @@ st.markdown("<div style='background-color:#1f618d; color:white; text-align:cente
 
 if not df_time.empty:
     with st.expander("🕒 Register Last Sync Timestamps (IST)"):
-        t_cols = st.columns(5)
+        t_cols = st.columns(6)
         for i, row in df_time.iterrows():
-            with t_cols[i % 5]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
+            with t_cols[i % 6]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -1669,3 +1673,124 @@ with tab6:
             
             with cols[idx % 3]:
                 st.markdown(card_html, unsafe_allow_html=True)
+
+# ==========================================
+# 🟢 TAB 7: PRESUMPTIVE TB (NEW)
+# ==========================================
+with tab7:
+    st.markdown("<h3 style='color: #1f618d;'>🔬 Presumptive TB Cases</h3>", unsafe_allow_html=True)
+    
+    if df_pres_t.empty and df_pres_y.empty:
+        st.warning("⚠️ No Presumptive TB data found. Please ensure registers are uploaded to the Colab pipeline.")
+    else:
+        with st.expander("🔽 Filters & Dates", expanded=True):
+            df_p_t = df_pres_t.copy()
+            df_p_y = df_pres_y.copy()
+            
+            c1, c2, c3 = st.columns(3)
+            
+            with c1:
+                if st.session_state.role == "ADMIN":
+                    s7_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_p_t, 'ZONE', 'tab7'), key='z7'))
+                    if s7_z: 
+                        df_p_t = df_p_t[df_p_t['ZONE'].isin(s7_z)]
+                        df_p_y = df_p_y[df_p_y['ZONE'].isin(s7_z)]
+                        
+                s7_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_p_t, 'TB Unit', 'tab7'), key='tu7'))
+                if s7_tu: 
+                    df_p_t = df_p_t[df_p_t['TB Unit'].isin(s7_tu)]
+                    df_p_y = df_p_y[df_p_y['TB Unit'].isin(s7_tu)]
+                    
+            with c2:
+                phi_col = 'Spectrum_Enrolment_PHI' if 'Spectrum_Enrolment_PHI' in df_p_t.columns else 'PHI_Clean'
+                if phi_col in df_p_t.columns:
+                    s7_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_p_t, phi_col, 'tab7'), key='phi7'))
+                    if s7_phi: 
+                        df_p_t = df_p_t[df_p_t[phi_col].isin(s7_phi)]
+                        df_p_y = df_p_y[df_p_y[phi_col].isin(s7_phi)]
+                        
+                s7_fac = st.multiselect("Facility Type", ["PUBLIC", "PRIVATE"], key='fac7')
+                if s7_fac:
+                    if 'Facility_Type_Extracted' in df_p_t.columns:
+                        df_p_t = df_p_t[df_p_t['Facility_Type_Extracted'].isin(s7_fac)]
+                        df_p_y = df_p_y[df_p_y['Facility_Type_Extracted'].isin(s7_fac)]
+                        
+            with c3:
+                if 'Spectrum_Presumptive_Till_Date' in df_p_t.columns:
+                    till_dates = st.date_input("Spectrum Presumptive Till Date", value=[], key="d7")
+                    if len(till_dates) == 2:
+                        df_p_t = df_p_t[pd.to_datetime(df_p_t['Spectrum_Presumptive_Till_Date'], errors='coerce').dt.date.between(till_dates[0], till_dates[1])]
+                        df_p_y = df_p_y[pd.to_datetime(df_p_y['Spectrum_Presumptive_Till_Date'], errors='coerce').dt.date.between(till_dates[0], till_dates[1])]
+
+        st.markdown("##### 📊 PTB CASES (Comparison Matrix)")
+        
+        def get_pres_metrics(df):
+            if df.empty: return pd.DataFrame()
+            
+            df['Microscopy_Yes'] = df.get('Microscopy_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
+            df['NAAT_Yes'] = df.get('Naat_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
+            df['Xray_Yes'] = df.get('Xray_Offered', pd.Series(dtype=str)).astype(str).str.upper() == 'YES'
+            df['Mic_Naat_Yes'] = df['Microscopy_Yes'] | df['NAAT_Yes']
+            
+            grp = df.groupby('ZONE').agg(
+                Episode_ID=('Episode_ID', 'count'),
+                Microscopy=('Microscopy_Yes', 'sum'),
+                NAAT=('NAAT_Yes', 'sum'),
+                Xray_Offered=('Xray_Yes', 'sum'),
+                Mic_Plus_Naat=('Mic_Naat_Yes', 'sum')
+            ).reset_index()
+            
+            grp['%_XRAY_OFFERED'] = (grp['Xray_Offered'] / grp['Episode_ID'] * 100).fillna(0).round(1)
+            return grp
+
+        met_t = get_pres_metrics(df_p_t)
+        met_y = get_pres_metrics(df_p_y)
+        
+        if not met_t.empty or not met_y.empty:
+            if met_y.empty: met_y = pd.DataFrame(columns=['ZONE', 'Episode_ID', 'Microscopy', 'NAAT', 'Xray_Offered', '%_XRAY_OFFERED', 'Mic_Plus_Naat'])
+            if met_t.empty: met_t = pd.DataFrame(columns=['ZONE', 'Episode_ID', 'Microscopy', 'NAAT', 'Xray_Offered', '%_XRAY_OFFERED', 'Mic_Plus_Naat'])
+            
+            merged = pd.merge(met_y, met_t, on='ZONE', how='outer', suffixes=(' (previous day)', ' (today)')).fillna(0)
+            
+            req_cols = ['ZONE', 'Episode_ID (previous day)', 'Episode_ID (today)', 'Microscopy (previous day)', 'Microscopy (today)', 
+                        'NAAT (previous day)', 'NAAT (today)', 'Xray_Offered (previous day)', 'Xray_Offered (today)', 
+                        '%_XRAY_OFFERED (previous day)', '%_XRAY_OFFERED (today)', 'Mic_Plus_Naat (previous day)', 'Mic_Plus_Naat (today)']
+            
+            for col in req_cols:
+                if col not in merged.columns: merged[col] = 0
+            
+            merged = merged[req_cols]
+            
+            # Clean Renaming for final display
+            rename_dict = {
+                'Xray_Offered (previous day)': 'X ray offered yes no (previous day)',
+                'Xray_Offered (today)': 'X ray offered yes no (today)',
+                '%_XRAY_OFFERED (previous day)': '% XRAY OFFERED (previous day)',
+                '%_XRAY_OFFERED (today)': '% XRAY OFFERED (today)',
+                'Mic_Plus_Naat (previous day)': 'microscopy + naat (previous day)',
+                'Mic_Plus_Naat (today)': 'microscopy + naat (today)'
+            }
+            merged = merged.rename(columns=rename_dict)
+            
+            # Format types
+            for col in merged.columns:
+                if '%' in col: merged[col] = merged[col].astype(str) + '%'
+                elif 'ZONE' not in col: merged[col] = merged[col].astype(int)
+            
+            # Dynamic Styling specific to XRAY OFFERED colors
+            def style_pres_table(styler):
+                def color_pct(val):
+                    try:
+                        v = float(str(val).replace('%', ''))
+                        if v < 60: return 'background-color: #E74C3C; color: white;' # Red
+                        elif v < 71: return 'background-color: #E67E22; color: white;' # Orange
+                        elif v <= 75: return 'background-color: #F1C40F; color: black;' # Yellow
+                        else: return 'background-color: #27AE60; color: white;' # Green
+                    except: return ''
+                styler.map(color_pct, subset=['% XRAY OFFERED (previous day)', '% XRAY OFFERED (today)'])
+                return styler
+            
+            st.dataframe(merged.style.pipe(style_pres_table), use_container_width=True, hide_index=True)
+            
+        else:
+            st.info("👍 No Presumptive TB records found for the selected filters.")
