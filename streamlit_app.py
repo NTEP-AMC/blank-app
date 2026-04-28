@@ -216,13 +216,37 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
+# ==========================================
+# 🎯 BULLETPROOF LOGIN FILTER (FIXED OVERLAP BUG)
+# ==========================================
 def filter_by_role(df, role, target):
     if df.empty: return df
     target_up = str(target).upper().strip()
-    if role == "TB_UNIT" and 'TB Unit' in df.columns:
-        return df[df['TB Unit'].astype(str).str.upper().str.contains(target_up, na=False)]
-    elif role == "ZONE" and 'ZONE' in df.columns:
-        return df[df['ZONE'].astype(str).str.upper().str.contains(target_up, na=False) | df['ZONE'].isin(['N/A', 'NAN', 'MAPPING NOT DONE'])]
+    role_up = str(role).upper().strip()
+    
+    # 1. TB UNIT FILTERING (Strict exclusion to prevent Vadaj matching Juna Vadaj)
+    if role_up in ["TB_UNIT", "TB UNIT", "TU"]:
+        tu_col = 'TB Unit' if 'TB Unit' in df.columns else 'TB_UNIT' if 'TB_UNIT' in df.columns else None
+        if tu_col:
+            def strict_tu_check(val):
+                v = str(val).upper().strip()
+                if target_up == "VADAJ" and ("JUNA" in v or "NAVA" in v): return False
+                if target_up == "RANIP" and "NEW" in v: return False
+                return target_up in v
+            return df[df[tu_col].apply(strict_tu_check)]
+            
+    # 2. ZONE FILTERING (Strict Isolation so North never matches North West)
+    elif role_up == "ZONE" and 'ZONE' in df.columns:
+        target_clean = target_up.replace("ZONE", "").strip()
+        def strict_zone_check(val):
+            v_raw = str(val).upper().strip()
+            # Keep Mapping Not Done visible for error correction
+            if v_raw in ['N/A', 'NAN', 'MAPPING NOT DONE', '', 'NONE', 'NULL']: return True
+            # Split strings just in case data comes with multi-zones
+            v_list = [z.strip().replace("ZONE", "").strip() for z in v_raw.replace(',', '&').split('&')]
+            return target_clean in v_list
+        return df[df['ZONE'].apply(strict_zone_check)]
+        
     return df
 
 df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
@@ -1535,8 +1559,22 @@ with tab6:
     if df_staff.empty:
         st.warning("⚠️ Staff Directory data could not be loaded. Please check the Google Sheet link and GIDs.")
     else:
+        # 🎯 BULLETPROOF LOGIN FILTER FIX FOR STAFF DIRECTORY
         if st.session_state.role == "ZONE":
-            df_staff = df_staff[df_staff['ZONE'].astype(str).str.upper().str.contains(st.session_state.target.upper(), na=False)]
+            target_clean = st.session_state.target.upper().replace("ZONE", "").strip()
+            def staff_zone_check(val):
+                v_list = [z.strip().replace("ZONE", "").strip() for z in str(val).upper().replace(',', '&').split('&')]
+                return target_clean in v_list
+            df_staff = df_staff[df_staff['ZONE'].apply(staff_zone_check)]
+            
+        elif st.session_state.role in ["TB_UNIT", "TB UNIT", "TU"]:
+            def staff_tu_check(val):
+                v = str(val).upper().strip()
+                t_up = st.session_state.target.upper().strip()
+                if t_up == "VADAJ" and ("JUNA" in v or "NAVA" in v): return False
+                if t_up == "RANIP" and "NEW" in v: return False
+                return t_up in v
+            df_staff = df_staff[df_staff['TB_UNIT'].apply(staff_tu_check)]
         
         st.markdown("""
         <style>
