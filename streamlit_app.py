@@ -1385,7 +1385,6 @@ with tab6:
         import re
         base_url = "https://docs.google.com/spreadsheets/d/1uFaHWm7spYKfpe-yrKhe7SC6GafEFM41w45_TnJ1Miw/export?format=csv&gid="
         
-        # 🎯 ADDED LT CONFIGURATION
         configs = [
             {"name": "MO-SUPERVISOR", "gid": "1725576011", "name_col": "NAME", "zone_col": "ZONE", "tu_col": None},
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
@@ -1434,23 +1433,26 @@ with tab6:
                 contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
                 df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
                 
-                # STRICT EMAIL EXTRACTION
                 email_col = next((c for c in df_s.columns if "EMAIL" in c or "MAIL" in c), None)
                 df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
 
-                # STRICT PHI EXTRACTION
                 phi_col = next((c for c in df_s.columns if any(k in c for k in ["PHI", "UHC", "CHC", "FACIL", "INST"]) and "EMAIL" not in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
                 df_clean['PHI/UHC/CHC'] = df_clean['PHI/UHC/CHC'].apply(lambda x: "N/A" if "@" in str(x) else x)
 
-                # ADDRESS EXTRACTION
                 addr_col = next((c for c in df_s.columns if "ADDRESS" in c or "RESIDENCE" in c), None)
                 df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 df_clean['RESIDENCE ADDRESS'] = df_clean['RESIDENCE ADDRESS'].apply(lambda x: "N/A" if "@" in str(x) else x)
                 
-                # DOT CENTER / DMC EXTRACTION FOR JOB LOCATION
-                job_loc_col = next((c for c in df_s.columns if "DOT CENTER" in c or "DMC" in c), None)
+                job_loc_col = next((c for c in df_s.columns if "DOT CENTER" in c or "DMC" in c or "JOB LOCATION" in c), None)
                 df_clean['JOB_LOCATION_RAW'] = df_s[job_loc_col] if job_loc_col else "N/A"
+
+                # 🎯 NEW: TYPE OF POSTING AND DOB EXTRACTION
+                post_col = next((c for c in df_s.columns if "NHM" in c or "GUHP" in c or "NTEP" in c or "AMC" in c), None)
+                df_clean['TYPE_OF_POSTING'] = df_s[post_col] if post_col else "N/A"
+
+                dob_col = next((c for c in df_s.columns if "DOB" in c), None)
+                df_clean['DOB'] = df_s[dob_col] if dob_col else "N/A"
 
                 df_clean['SOURCE_SHEET'] = cfg["name"]
                 all_staff.append(df_clean)
@@ -1463,7 +1465,6 @@ with tab6:
             final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
-            # 🎯 STRICT ZONE MAPPING
             def assign_strict_zone(row):
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
@@ -1488,10 +1489,9 @@ with tab6:
             final_df['PHI/UHC/CHC'] = final_df['PHI/UHC/CHC'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             final_df['RESIDENCE ADDRESS'] = final_df['RESIDENCE ADDRESS'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             final_df['JOB_LOCATION_RAW'] = final_df['JOB_LOCATION_RAW'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
+            final_df['TYPE_OF_POSTING'] = final_df['TYPE_OF_POSTING'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.upper()
+            final_df['DOB'] = final_df['DOB'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA, "NAT", "00:00:00"], "N/A").str.title()
             
-            # ==========================================
-            # 🎯 CLEAN DESIGNATIONS & FILTERS
-            # ==========================================
             final_df['DESIGNATION'] = ""
             final_df['FILTER_DESIG'] = ""
 
@@ -1518,7 +1518,6 @@ with tab6:
             final_df.loc[falguni_mask, 'ZONE'] = "HEAD OFFICE"
             final_df.loc[falguni_mask, 'TB_UNIT'] = "Arogya Bhavan"
             
-            # DYNAMIC REPORTING MAPPING
             mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
             zone_heads = {}
             for _, r in mo_sups.iterrows():
@@ -1564,13 +1563,16 @@ with tab6:
                 for loc_val in loc_series:
                     val = str(loc_val).strip()
                     if val.upper() not in ["N/A", "NAN", "NONE", ""]:
-                        locs.add(val.title())
+                        for item in val.split(','):
+                            if item.strip() and item.strip().upper() not in ["N/A", "NAN", "NONE"]:
+                                locs.add(item.strip().title())
                 return " & ".join(sorted(locs)) if locs else "N/A"
             
-            # 🎯 FIXED GROUPBY: Removed EXTRA_CHARGE so it doesn't throw a KeyError!
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'PHI/UHC/CHC', 'RESIDENCE ADDRESS', 'HIERARCHY', 'REPORTS_TO']).agg({
+            # 🎯 FIXED DEDUPLICATION: Removed PHI from the Groupby key to guarantee single rows for TBHVs!
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'DOB', 'TYPE_OF_POSTING', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
+                'PHI/UHC/CHC': merge_locations,
                 'JOB_LOCATION_RAW': merge_locations,
                 'SOURCE_SHEET': 'first'
             }).reset_index()
@@ -1599,19 +1601,25 @@ with tab6:
                 elif sheet in ["STLS", "STS", "MO-MEDICAL COLLEGE"]: return row['TB_UNIT']
                 elif sheet in ["TBHV", "LT"]: 
                     raw_loc = str(row.get('JOB_LOCATION_RAW', '')).strip()
-                    return raw_loc if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""] else row['TB_UNIT']
+                    if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""]: return raw_loc
+                    
+                    phi_loc = str(row.get('PHI/UHC/CHC', '')).strip()
+                    if phi_loc.upper() not in ["N/A", "NAN", "NONE", ""]: return phi_loc
+                    
+                    return row['TB_UNIT']
                 return "N/A"
 
             final_df['BASE_LOCATION'] = final_df.apply(construct_job_location, axis=1)
             
-            # Force Falguni Panchal to Head Office
             falguni_mask_final = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
             final_df.loc[falguni_mask_final, 'BASE_LOCATION'] = "Arogya Bhavan"
             
             time_schedule = "9:00 AM to 5:00 PM Monday to Friday and 9:00 AM to 1:00 PM for Saturday"
             final_df['Job Location & Time'] = final_df['BASE_LOCATION'].astype(str) + " | " + time_schedule
             
-            # PURE NAME DISPLAY
+            # Extract just the date part for DOB (Removes trailing 00:00:00)
+            final_df['DOB'] = final_df['DOB'].apply(lambda x: str(x).split(' ')[0] if x != "N/A" else x)
+            
             final_df['DISPLAY_NAME'] = final_df['NAME'].str.title()
             
             return final_df
@@ -1623,7 +1631,6 @@ with tab6:
     if df_staff.empty:
         st.warning("⚠️ Staff Directory data could not be loaded. Please check the Google Sheet link and GIDs.")
     else:
-        # BULLETPROOF LOGIN FILTER FIX FOR STAFF DIRECTORY
         if st.session_state.role == "ZONE":
             target_clean = st.session_state.target.upper().replace("ZONE", "").strip()
             def staff_zone_check(val):
@@ -1646,7 +1653,6 @@ with tab6:
         </style>
         """, unsafe_allow_html=True)
         
-        # FILTERS UI
         sc1, sc2, sc3, sc4, sc5 = st.columns(5)
         with sc1: search_q = st.text_input("🔍 Search Name, Number...", "")
         
@@ -1671,7 +1677,7 @@ with tab6:
             raw_phis = df_staff[df_staff['TB_UNIT'].str.contains(sel_tu, case=False, na=False)]['PHI/UHC/CHC'] if sel_tu != "All TB Units" else df_staff['PHI/UHC/CHC']
             all_phi_items = set()
             for phi_str in raw_phis.dropna():
-                for p in str(phi_str).split(','):
+                for p in str(phi_str).split('&'):
                     cleaned_p = p.strip()
                     if cleaned_p and cleaned_p.upper() not in ["N/A", "NAN", "NONE"] and "ALL UHC/CHC" not in cleaned_p.upper(): 
                         all_phi_items.add(cleaned_p)
@@ -1682,7 +1688,6 @@ with tab6:
             desigs = ["All Designations", "MO-Supervisor", "Medical Officer", "STLS", "STS", "TBHV", "LT"]
             sel_desig = st.selectbox("👨‍⚕️ Designation", desigs)
         
-        # APPLY FILTERS
         df_display = df_staff.copy()
         if search_q: df_display = df_display[df_display.apply(lambda row: row.astype(str).str.contains(search_q, case=False, na=False).any(), axis=1)]
         if sel_zone != "All Zones": df_display = df_display[df_display['ZONE'].str.contains(sel_zone, case=False, na=False)]
@@ -1692,35 +1697,32 @@ with tab6:
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 🎯 DATA TABLE FORMAT WITH EMAIL ADDRESS, PURE NAMES & JOB LOCATION
+        # 🎯 DATA TABLE FORMAT WITH EMAIL ADDRESS, PURE NAMES, POSTING & DOB
         if not df_display.empty:
-            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'Job Location & Time']].copy()
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'TYPE_OF_POSTING', 'DOB', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'Job Location & Time']].copy()
             display_table = display_table.rename(columns={
                 'ZONE': 'Zone',
                 'TB_UNIT': 'TB Unit',
                 'PHI/UHC/CHC': 'PHI/UHC/CHC',
                 'DISPLAY_NAME': 'Name',
                 'DESIGNATION': 'Designation',
+                'TYPE_OF_POSTING': 'Type of Posting',
+                'DOB': 'DOB',
                 'CONTACT NO': 'Mobile No.',
                 'EMAIL': 'Email Address',
                 'RESIDENCE ADDRESS': 'Residence Address'
             })
             
-            # Format Contact Numbers cleanly
             display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
             display_table['Mobile No.'] = display_table['Mobile No.'].replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             
-            # Format Emails gracefully
             display_table['Email Address'] = display_table['Email Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             display_table['Email Address'] = display_table['Email Address'].apply(lambda x: x.lower() if x != "Not Provided" else x)
             
-            # Format Residence
             display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
 
-            # Display full-width Interactive Table
             st.dataframe(display_table, use_container_width=True, hide_index=True)
             
-            # Provide Excel Download capability
             st.download_button(
                 label="📥 Download Staff Directory Excel",
                 data=convert_df_to_excel(display_table, "Staff_Directory"),
