@@ -884,7 +884,8 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=806626302"
+            # 🎯 UPDATED URL: Converted to CSV export format with the new GID (910963940)
+            naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"
             df_naat = pd.read_csv(naat_url, header=None)
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
             
