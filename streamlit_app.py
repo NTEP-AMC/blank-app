@@ -1993,7 +1993,11 @@ with tab8:
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
                 df.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 
+                # 🎯 Deduplicate columns to prevent AttributeError crashes from Notification Registers
+                df = df.loc[:, ~df.columns.duplicated()]
+                
                 c_map = {}
+                # First Pass: Strict Mapping based on Notification Register Structure
                 for c in df.columns:
                     cu = c.upper()
                     if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
@@ -2006,12 +2010,18 @@ with tab8:
                     elif "DIAGNOSIS" in cu and "DATE" in cu: c_map[c] = 'Diagnosis Date'
                     elif "INITIATION" in cu and "DATE" in cu: c_map[c] = 'Initiation Date'
                     elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
-                    elif "OUTCOME" in cu and "TREATMENT" not in cu: c_map[c] = 'Treatment Outcome'
+                    elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
                 
+                # Second Pass: Fallback for Outcome if "Treatment Outcome" wasn't explicitly named
                 for c in df.columns:
-                    if "TREATMENT" in c.upper() and "OUTCOME" in c.upper(): c_map[c] = 'Treatment Outcome'
+                    cu = c.upper()
+                    if c not in c_map:
+                        if "OUTCOME" in cu and "DATE" not in cu and "TREATMENT" not in cu:
+                            if 'Treatment Outcome' not in c_map.values():
+                                c_map[c] = 'Treatment Outcome'
                 
                 df = df.rename(columns=c_map)
+                df = df.loc[:, ~df.columns.duplicated()] 
                 
                 req_cols = ['Episode ID', 'Patient Name', 'TB Unit', 'PHI', 'Facility Type', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
                 for rc in req_cols:
@@ -2029,14 +2039,17 @@ with tab8:
     if df_this_week.empty:
         st.warning("⚠️ No data found in the 'This Week' Google Sheet.")
     else:
+        if df_prev_week.empty or 'Treatment Outcome' not in df_prev_week.columns:
+            df_prev_week = pd.DataFrame(columns=['Episode ID', 'Treatment Outcome'])
+            
         # 1. Clean Treatment Outcomes
         df_this_week['Treatment Outcome'] = df_this_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
         df_prev_week['Treatment Outcome'] = df_prev_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
 
-        # 2. Filter OUT Good Outcomes from This Week
+        # 2. Filter OUT Good Outcomes (Cured, Completed, Regimen Changed)
         good_outcomes = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
         is_adverse = ~df_this_week['Treatment Outcome'].str.contains('|'.join(good_outcomes), na=False) 
-        has_outcome = (df_this_week['Treatment Outcome'] != "") & (df_this_week['Treatment Outcome'] != "NAN") & (df_this_week['Treatment Outcome'] != "N/A")
+        has_outcome = (df_this_week['Treatment Outcome'] != "") & (df_this_week['Treatment Outcome'] != "NAN") & (df_this_week['Treatment Outcome'] != "N/A") & (df_this_week['Treatment Outcome'] != "NONE")
         
         df_this_adv = df_this_week[is_adverse & has_outcome].copy()
 
@@ -2046,10 +2059,14 @@ with tab8:
         def is_new_adverse(row):
             eid = str(row['Episode ID']).strip()
             curr_out = row['Treatment Outcome']
-            if eid not in prev_outcomes_dict: return True # Didn't exist last week
+            # If it didn't exist last week -> It's a new adverse outcome
+            if eid not in prev_outcomes_dict: return True 
             prev_out = prev_outcomes_dict[eid]
-            if prev_out in ["", "NAN", "N/A", "NONE"]: return True # Existed but had no outcome
-            if curr_out != prev_out: return True # Outcome changed to adverse
+            # If it existed last week but had no outcome -> It's a new adverse outcome
+            if prev_out in ["", "NAN", "N/A", "NONE"]: return True 
+            # If the outcome changed from something else to this adverse outcome -> It's new
+            if curr_out != prev_out: return True 
+            # Otherwise, it was already reported as adverse last week. Hide it.
             return False
 
         df_new_adv = df_this_adv[df_this_adv.apply(is_new_adverse, axis=1)].copy()
@@ -2064,10 +2081,10 @@ with tab8:
         else:
             df_new_adv['ZONE'] = "N/A"
 
-        # 5. Apply Strict Role Filters (Zone/TU logins)
+        # 5. Apply Strict Role Filters
         df_new_adv = filter_by_role(df_new_adv, st.session_state.role, st.session_state.target)
 
-        # 6. DYNAMIC UI OUTCOME SELECTOR
+        # 6. DYNAMIC UI OUTCOME SELECTOR (Like Differentiated Care)
         if not df_new_adv.empty:
             unique_outcomes = sorted(df_new_adv['Treatment Outcome'].unique().tolist())
             outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
@@ -2105,7 +2122,7 @@ with tab8:
                     if a_reg: df_filtered = df_filtered[df_filtered['TB_regimen'].isin(a_reg)]
 
                 with ac3:
-                    a_diag_dt = st.date_input("Diagnosis Date Range (Primary)", value=[], key="ad1_8")
+                    a_diag_dt = st.date_input("Diagnosis Date Range", value=[], key="ad1_8")
                     a_init_dt = st.date_input("Initiation Date Range", value=[], key="ad2_8")
                     a_out_dt = st.date_input("Outcome Date Range", value=[], key="ad3_8")
                     
@@ -2116,7 +2133,7 @@ with tab8:
             st.markdown(f"<div style='color: #C0392B; margin-bottom: 10px; font-weight: bold;'>Found {len(df_filtered)} Patient(s)</div>", unsafe_allow_html=True)
             
             if not df_filtered.empty:
-                final_display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
+                final_display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
                 st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
                 
                 st.download_button(f"📥 Download New Adverse Outcomes", convert_df_to_excel(df_filtered[final_display_cols], "Adverse_Outcomes"), f"New_Adverse_Outcomes.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_adv_out')
