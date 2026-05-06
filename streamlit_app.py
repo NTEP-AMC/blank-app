@@ -1437,10 +1437,7 @@ with tab6:
                 contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
                 df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
                 
-                email_col = next((c for c in df_s.columns if "EMAIL" in c or "MAIL" in c), None)
-                df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
-
-                # LOCATION EXTRACTION (PHI / DMC / DOT CENTER)
+                # STRICT PHI & DOT CENTER EXTRACTION
                 phi_col = next((c for c in df_s.columns if any(k in c for k in ["PHI", "UHC", "CHC", "FACIL", "INST", "DOT CENTER", "DMC"]) and "EMAIL" not in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
                 df_clean['PHI/UHC/CHC'] = df_clean['PHI/UHC/CHC'].apply(lambda x: "N/A" if "@" in str(x) else x)
@@ -1449,7 +1446,7 @@ with tab6:
                 df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 df_clean['RESIDENCE ADDRESS'] = df_clean['RESIDENCE ADDRESS'].apply(lambda x: "N/A" if "@" in str(x) else x)
                 
-                # 🎯 DAYS WORKING EXTRACTION (Grabs the "JOB LOCATION" column which holds the days)
+                # 🎯 WORKING DAYS EXTRACTION
                 days_col = next((c for c in df_s.columns if any(k in c for k in ["DAY", "JOB LOCATION"]) and "EMAIL" not in c), None)
                 df_clean['WORKING_DAYS'] = df_s[days_col] if days_col else "N/A"
 
@@ -1472,7 +1469,7 @@ with tab6:
             final_df = pd.concat(all_staff, ignore_index=True)
             final_df = final_df.dropna(subset=['NAME'])
             
-            # 🎯 SMART SPLITTER ENGINE (Separates 2 distinct people in 1 cell)
+            # 🎯 SMART SPLITTER ENGINE (Separates 2 names if entered in one cell via Alt+Enter)
             final_df['NAME'] = final_df['NAME'].astype(str).str.replace('\r', '\n')
             final_df['NAME'] = final_df['NAME'].str.split('\n')
             final_df = final_df.explode('NAME')
@@ -1481,18 +1478,30 @@ with tab6:
             final_df = final_df[final_df['NAME'] != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
+            # 🎯 CLEAN CONTACT NUMBER (Removes spaces to guarantee perfect grouping)
+            final_df['CONTACT NO'] = final_df['CONTACT NO'].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'[^\d]', '', regex=True)
+            final_df['CONTACT NO'] = final_df['CONTACT NO'].replace("", "N/A")
+
+            # 🎯 STRICT ZONE MAPPING (Fixed to include Ranip, Nobelnagar, Chandkheda, etc.)
             def assign_strict_zone(row):
-                raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
                 tu = str(row['TB_UNIT']).upper().strip()
-                search_string = f"{raw_z} {tu}"
+                if any(x in tu for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "South West"
+                if any(x in tu for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA"]): return "North West"
+                if any(x in tu for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "RANIP", "CHANDKHEDA"]): return "West"
+                if any(x in tu for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "LAMBHA", "PIPLAJ", "NAROL"]): return "South"
+                if any(x in tu for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "MADHUPURA", "KHANDIA", "DUDHESHWAR"]): return "Central"
+                if any(x in tu for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "RAMOL", "NIKOL", "ODHAV"]): return "East"
+                if any(x in tu for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR"]): return "North"
                 
-                if any(x in search_string for x in ["SOUTH WEST", "JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL"]): return "South West"
-                if any(x in search_string for x in ["NORTH WEST", "SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA"]): return "North West"
-                if any(x in search_string for x in ["WEST", "VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ"]): return "West"
-                if any(x in search_string for x in ["SOUTH", "DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA"]): return "South"
-                if any(x in search_string for x in ["CENTRAL", "ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL"]): return "Central"
-                if any(x in search_string for x in ["EAST", "AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR"]): return "East"
-                if any(x in search_string for x in ["NORTH", "BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY"]): return "North"
+                raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
+                if "SOUTH WEST" in raw_z: return "South West"
+                if "NORTH WEST" in raw_z: return "North West"
+                if "WEST" in raw_z: return "West"
+                if "SOUTH" in raw_z: return "South"
+                if "CENTRAL" in raw_z: return "Central"
+                if "EAST" in raw_z: return "East"
+                if "NORTH" in raw_z: return "North"
+                
                 return "AMC"
                 
             final_df['ZONE'] = final_df.apply(assign_strict_zone, axis=1)
@@ -1504,9 +1513,10 @@ with tab6:
 
             final_df['PHI/UHC/CHC'] = final_df['PHI/UHC/CHC'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
             final_df['RESIDENCE ADDRESS'] = final_df['RESIDENCE ADDRESS'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.title()
-            final_df['WORKING_DAYS'] = final_df['WORKING_DAYS'].astype(str).str.replace('\n', ' ').str.strip(',').str.title()
+            final_df['WORKING_DAYS'] = final_df['WORKING_DAYS'].astype(str).str.replace('\n', ', ').str.strip(',').str.title()
             final_df['TYPE_OF_POSTING'] = final_df['TYPE_OF_POSTING'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.upper()
             final_df['DOB'] = final_df['DOB'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA, "NAT", "00:00:00"], "N/A").str.title()
+            final_df['ON_TREATMENT'] = final_df['ON_TREATMENT'].astype(str).replace(r'\.0$', '', regex=True).replace(["NAN", "NONE", "N/A", "nan"], "-")
             
             final_df['DESIGNATION'] = ""
             final_df['FILTER_DESIG'] = ""
@@ -1565,7 +1575,28 @@ with tab6:
             final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
             final_df = final_df.fillna("N/A")
             
-            # 🎯 AGGREGATION HELPERS
+            # 🎯 ATTACH SPECIFIC DAYS DIRECTLY TO LOCATIONS BEFORE GROUPING
+            def construct_job_location(row):
+                sheet = row['SOURCE_SHEET']
+                if sheet == "MO-SUPERVISOR": loc = row['PHI/UHC/CHC']
+                elif sheet in ["STLS", "STS", "MO-MEDICAL COLLEGE"]: loc = row['TB_UNIT']
+                elif sheet in ["TBHV", "LT"]: 
+                    raw_loc = str(row.get('PHI/UHC/CHC', '')).strip()
+                    if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""]: loc = raw_loc
+                    else: loc = row['TB_UNIT']
+                else: loc = "N/A"
+                
+                days = str(row['WORKING_DAYS']).strip()
+                if days.upper() in ["N/A", "NAN", "NONE", ""]:
+                    if sheet in ['MO-SUPERVISOR', 'STLS', 'STS', 'MO-MEDICAL COLLEGE', 'LT']:
+                        days = "Monday To Saturday"
+                    else: days = ""
+                
+                if days: return f"{loc} [{days}]"
+                return loc
+
+            final_df['JOB_LOC_AND_DAYS'] = final_df.apply(construct_job_location, axis=1)
+            
             def merge_tus(tu_series):
                 tus = set()
                 for tu_val in tu_series:
@@ -1579,18 +1610,10 @@ with tab6:
                 for loc_val in loc_series:
                     val = str(loc_val).strip()
                     if val.upper() not in ["N/A", "NAN", "NONE", ""]:
-                        for item in val.split(','):
-                            if item.strip() and item.strip().upper() not in ["N/A", "NAN", "NONE"]:
-                                locs.add(item.strip().title())
+                        locs.add(val)
                 return " & ".join(sorted(locs)) if locs else "N/A"
                 
-            def merge_days(day_series):
-                days = set()
-                for d in day_series:
-                    val = str(d).strip().strip(',')
-                    if val.upper() not in ["N/A", "NAN", "NONE", ""]: days.add(val)
-                return " & ".join(sorted(days)) if days else "Monday To Saturday"
-                
+            # SUMMATOR ENGINE
             def sum_on_treatment(series):
                 total = 0
                 has_val = False
@@ -1603,51 +1626,28 @@ with tab6:
                     except: pass
                 return str(int(total)) if has_val else "-"
             
-            # 🎯 PHONE NUMBER FUSION (Groups identical people across multiple rows into one!)
-            final_df = final_df.groupby(['NAME', 'CONTACT NO', 'DESIGNATION', 'FILTER_DESIG', 'DOB', 'TYPE_OF_POSTING', 'HIERARCHY', 'REPORTS_TO']).agg({
-                'ZONE': lambda x: ' & '.join(sorted(set(x))),
-                'TB_UNIT': merge_tus,
-                'PHI/UHC/CHC': merge_locations,
-                'WORKING_DAYS': merge_days,
+            # 🎯 AGGRESSIVE GROUPBY (Groups by Name & Contact Number to Fuse Rows!)
+            final_df = final_df.groupby(['NAME', 'CONTACT NO', 'DESIGNATION', 'FILTER_DESIG', 'SOURCE_SHEET', 'HIERARCHY', 'REPORTS_TO']).agg({
+                'ZONE': lambda x: ' & '.join(sorted(set([z for z in x if z != "N/A"]))),
+                'TB_UNIT': lambda x: ' & '.join(sorted(set([t.title() for t in x if str(t).upper() not in ["N/A", "NAN", "NONE"]]))),
+                'PHI/UHC/CHC': lambda x: ' & '.join(sorted(set([p.title() for p in x if str(p).upper() not in ["N/A", "NAN", "NONE"]]))),
+                'JOB_LOC_AND_DAYS': merge_locations, # Merges specific locations + their days
                 'ON_TREATMENT': sum_on_treatment,
-                'RESIDENCE ADDRESS': 'first', # Pulls the primary address
-                'SOURCE_SHEET': 'first'
+                'TYPE_OF_POSTING': 'first',
+                'DOB': 'first',
+                'RESIDENCE ADDRESS': 'first'
             }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             
+            # Final touchups
             mo_mask = final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR'
-            
-            def format_mo_tu(z):
-                if str(z) not in ["N/A", "Nan", ""]: return f"All TB Units of {z.title()} Zone"
-                return "All TB Units"
-                
-            def format_mo_phi(z):
-                if str(z) not in ["N/A", "Nan", ""]: return f"All UHC/CHC/Medical College of {z.title()} Zone"
-                return "All UHC/CHC/Medical College"
-
-            final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_tu)
-            final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(format_mo_phi)
-            
-            # 🎯 DYNAMIC JOB LOCATION & DAYS
-            def construct_job_location(row):
-                sheet = row['SOURCE_SHEET']
-                if sheet == "MO-SUPERVISOR": return row['PHI/UHC/CHC']
-                elif sheet in ["STLS", "STS", "MO-MEDICAL COLLEGE"]: return row['TB_UNIT']
-                elif sheet in ["TBHV", "LT"]: 
-                    raw_loc = str(row.get('PHI/UHC/CHC', '')).strip()
-                    if raw_loc.upper() not in ["N/A", "NAN", "NONE", ""]: return raw_loc
-                    return row['TB_UNIT']
-                return "N/A"
-
-            final_df['BASE_LOCATION'] = final_df.apply(construct_job_location, axis=1)
+            final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(lambda z: f"All TB Units of {z.title()} Zone" if str(z) not in ["N/A", ""] else "All TB Units")
+            final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(lambda z: f"All UHC/CHC/Medical College of {z.title()} Zone" if str(z) not in ["N/A", ""] else "All UHC/CHC/Medical College")
+            final_df.loc[mo_mask, 'JOB_LOC_AND_DAYS'] = final_df.loc[mo_mask, 'PHI/UHC/CHC'] + " [Monday To Saturday]"
             
             falguni_mask_final = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
-            final_df.loc[falguni_mask_final, 'BASE_LOCATION'] = "Arogya Bhavan"
-            
-            # Attaches days dynamically without fixed time!
-            final_df['Job Location & Days'] = final_df['BASE_LOCATION'].astype(str) + " | " + final_df['WORKING_DAYS'].astype(str)
-            final_df['Job Location & Days'] = final_df['Job Location & Days'].str.replace(r' \| N/A', '', regex=True)
+            final_df.loc[falguni_mask_final, 'JOB_LOC_AND_DAYS'] = "Arogya Bhavan [Monday To Saturday]"
             
             final_df['DOB'] = final_df['DOB'].apply(lambda x: str(x).split(' ')[0] if x != "N/A" else x)
             final_df['DISPLAY_NAME'] = final_df['NAME'].str.title()
@@ -1728,8 +1728,8 @@ with tab6:
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
         if not df_display.empty:
-            # 🎯 FINAL TABLE FORMATTING (Removed Email, added TBHV On Treatment column)
-            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'ON_TREATMENT', 'TYPE_OF_POSTING', 'DOB', 'CONTACT NO', 'RESIDENCE ADDRESS', 'Job Location & Days']].copy()
+            # 🎯 PERFECTED TABLE OUTPUT
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'ON_TREATMENT', 'TYPE_OF_POSTING', 'DOB', 'CONTACT NO', 'RESIDENCE ADDRESS', 'JOB_LOC_AND_DAYS']].copy()
             display_table = display_table.rename(columns={
                 'ZONE': 'Zone',
                 'TB_UNIT': 'TB Unit',
@@ -1740,14 +1740,14 @@ with tab6:
                 'TYPE_OF_POSTING': 'Type of Posting',
                 'DOB': 'DOB',
                 'CONTACT NO': 'Mobile No.',
-                'RESIDENCE ADDRESS': 'Residence Address'
+                'RESIDENCE ADDRESS': 'Residence Address',
+                'JOB_LOC_AND_DAYS': 'Job Location & Days'
             })
             
             display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
             display_table['Mobile No.'] = display_table['Mobile No.'].replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
 
-            # 🎯 Fully responsive table view
             st.dataframe(display_table, use_container_width=True, hide_index=True)
             
             st.download_button(
