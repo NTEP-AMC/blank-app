@@ -1969,7 +1969,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (DELTA TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES 
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Weekly Delta)</h3>", unsafe_allow_html=True)
@@ -2056,10 +2056,12 @@ with tab8:
         df_this_week['Treatment Outcome'] = df_this_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
         df_prev_week['Treatment Outcome'] = df_prev_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
 
-        # 2. Filter OUT Good Outcomes (Cured, Completed, Regimen Changed)
+        # 2. Filter OUT Good Outcomes and completely remove all variants of (Blanks)
         good_outcomes = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
+        blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
+        
         is_adverse = ~df_this_week['Treatment Outcome'].str.contains('|'.join(good_outcomes), na=False) 
-        has_outcome = (df_this_week['Treatment Outcome'] != "") & (df_this_week['Treatment Outcome'] != "NAN") & (df_this_week['Treatment Outcome'] != "N/A") & (df_this_week['Treatment Outcome'] != "NONE")
+        has_outcome = ~df_this_week['Treatment Outcome'].isin(blank_variants)
         
         df_this_adv = df_this_week[is_adverse & has_outcome].copy()
 
@@ -2073,7 +2075,7 @@ with tab8:
             if eid not in prev_outcomes_dict: return True 
             prev_out = prev_outcomes_dict[eid]
             # If it existed last week but had no outcome -> It's a new adverse outcome
-            if prev_out in ["", "NAN", "N/A", "NONE"]: return True 
+            if prev_out in blank_variants: return True 
             # If the outcome changed from something else to this adverse outcome -> It's new
             if curr_out != prev_out: return True 
             # Otherwise, it was already reported as adverse last week. Hide it.
@@ -2098,7 +2100,8 @@ with tab8:
 
         # 6. DYNAMIC UI OUTCOME SELECTOR
         if not df_new_adv.empty:
-            unique_outcomes = sorted(df_new_adv['Treatment Outcome'].unique().tolist())
+            # Safely generate the unique outcome list while stripping out any remaining blanks
+            unique_outcomes = sorted([x for x in df_new_adv['Treatment Outcome'].unique().tolist() if str(x).strip() not in blank_variants])
             outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
             
             st.markdown("<div style='background-color:#f9ebea; padding:12px; border-radius:8px; border: 1px solid #f5b7b1; margin-bottom:15px;'>", unsafe_allow_html=True)
