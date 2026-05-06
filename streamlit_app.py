@@ -284,7 +284,10 @@ if not df_time.empty:
     with st.expander("🕒 Register Last Sync Timestamps (IST)"):
         t_cols = st.columns(6)
         for i, row in df_time.iterrows():
-            with t_cols[i % 6]: st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:#E67E22;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
+            # 🎯 If it's Differentiated Care, force the color to Green for "Live"
+            color = "#27AE60" if "Live" in str(row['Last Updated']) else "#E67E22"
+            with t_cols[i % 6]: 
+                st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB"])
 
