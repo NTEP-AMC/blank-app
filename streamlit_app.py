@@ -1437,9 +1437,6 @@ with tab6:
                 contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
                 df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
                 
-                email_col = next((c for c in df_s.columns if "EMAIL" in c or "MAIL" in c), None)
-                df_clean['EMAIL'] = df_s[email_col] if email_col else "N/A"
-
                 phi_col = next((c for c in df_s.columns if any(k in c for k in ["PHI", "UHC", "CHC", "FACIL", "INST"]) and "EMAIL" not in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
                 df_clean['PHI/UHC/CHC'] = df_clean['PHI/UHC/CHC'].apply(lambda x: "N/A" if "@" in str(x) else x)
@@ -1451,12 +1448,15 @@ with tab6:
                 job_loc_col = next((c for c in df_s.columns if "DOT CENTER" in c or "DMC" in c or "JOB LOCATION" in c), None)
                 df_clean['JOB_LOCATION_RAW'] = df_s[job_loc_col] if job_loc_col else "N/A"
 
-                # 🎯 NEW: TYPE OF POSTING AND DOB EXTRACTION
                 post_col = next((c for c in df_s.columns if "NHM" in c or "GUHP" in c or "NTEP" in c or "AMC" in c), None)
                 df_clean['TYPE_OF_POSTING'] = df_s[post_col] if post_col else "N/A"
 
                 dob_col = next((c for c in df_s.columns if "DOB" in c), None)
                 df_clean['DOB'] = df_s[dob_col] if dob_col else "N/A"
+
+                # 🎯 NEW: ON TREATMENT PATIENT EXTRACTION FOR TBHV
+                pat_col = next((c for c in df_s.columns if "ON TREATMENT" in c and "PUBLIC" in c), None)
+                df_clean['ON_TREATMENT'] = df_s[pat_col] if pat_col else "N/A"
 
                 df_clean['SOURCE_SHEET'] = cfg["name"]
                 all_staff.append(df_clean)
@@ -1466,7 +1466,14 @@ with tab6:
         if all_staff:
             final_df = pd.concat(all_staff, ignore_index=True)
             final_df = final_df.dropna(subset=['NAME'])
-            final_df = final_df[final_df['NAME'].astype(str).str.strip() != ""]
+            
+            # 🎯 SMART SPLITTER ENGINE (Solves 2 names in 1 cell issue)
+            final_df['NAME'] = final_df['NAME'].astype(str).str.replace('\r', '\n')
+            final_df['NAME'] = final_df['NAME'].str.split('\n')
+            final_df = final_df.explode('NAME') # Creates separate rows for each name!
+            
+            final_df['NAME'] = final_df['NAME'].str.strip()
+            final_df = final_df[final_df['NAME'] != ""]
             final_df = final_df[~final_df['NAME'].astype(str).str.upper().isin(["NAN", "NONE"])]
             
             def assign_strict_zone(row):
@@ -1496,6 +1503,9 @@ with tab6:
             final_df['TYPE_OF_POSTING'] = final_df['TYPE_OF_POSTING'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA], "N/A").str.upper()
             final_df['DOB'] = final_df['DOB'].astype(str).str.upper().replace(["", "NAN", "NONE", "NaN", pd.NA, "NAT", "00:00:00"], "N/A").str.title()
             
+            # Format ON TREATMENT Patient Load cleanly
+            final_df['ON_TREATMENT'] = final_df['ON_TREATMENT'].astype(str).replace(r'\.0$', '', regex=True).replace(["NAN", "NONE", "N/A", "nan"], "-")
+            
             final_df['DESIGNATION'] = ""
             final_df['FILTER_DESIG'] = ""
 
@@ -1517,7 +1527,6 @@ with tab6:
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'DESIGNATION'] = "LABORATORY TECHNICIAN (LT)"
             final_df.loc[final_df['SOURCE_SHEET'] == 'LT', 'FILTER_DESIG'] = "LT"
 
-            # Falguni S. Panchal Hardcode Override
             falguni_mask = final_df['NAME'].astype(str).str.upper().str.contains("FALGUNI")
             final_df.loc[falguni_mask, 'ZONE'] = "HEAD OFFICE"
             final_df.loc[falguni_mask, 'TB_UNIT'] = "Arogya Bhavan"
@@ -1572,20 +1581,17 @@ with tab6:
                                 locs.add(item.strip().title())
                 return " & ".join(sorted(locs)) if locs else "N/A"
             
-            # 🎯 FIXED DEDUPLICATION: Removed PHI from the Groupby key to guarantee single rows for TBHVs!
-            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'DOB', 'TYPE_OF_POSTING', 'HIERARCHY', 'REPORTS_TO']).agg({
+            final_df = final_df.groupby(['NAME', 'DESIGNATION', 'FILTER_DESIG', 'CONTACT NO', 'RESIDENCE ADDRESS', 'DOB', 'TYPE_OF_POSTING', 'HIERARCHY', 'REPORTS_TO']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set(x))),
                 'TB_UNIT': merge_tus,
                 'PHI/UHC/CHC': merge_locations,
                 'JOB_LOCATION_RAW': merge_locations,
+                'ON_TREATMENT': 'first', # Pulls the exact patient load
                 'SOURCE_SHEET': 'first'
             }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             
-            # ==========================================
-            # 🎯 FINAL FORMATTING FOR MO-SUPERVISORS & JOB LOCATIONS
-            # ==========================================
             mo_mask = final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR'
             
             def format_mo_tu(z):
@@ -1621,9 +1627,7 @@ with tab6:
             time_schedule = "9:00 AM to 5:00 PM Monday to Friday and 9:00 AM to 1:00 PM for Saturday"
             final_df['Job Location & Time'] = final_df['BASE_LOCATION'].astype(str) + " | " + time_schedule
             
-            # Extract just the date part for DOB (Removes trailing 00:00:00)
             final_df['DOB'] = final_df['DOB'].apply(lambda x: str(x).split(' ')[0] if x != "N/A" else x)
-            
             final_df['DISPLAY_NAME'] = final_df['NAME'].str.title()
             
             return final_df
@@ -1701,30 +1705,28 @@ with tab6:
         
         st.markdown(f"<div style='color: #64748b; margin-bottom: 20px; font-weight: 600; font-size: 14px;'>Found {len(df_display)} Profiles</div>", unsafe_allow_html=True)
         
-        # 🎯 DATA TABLE FORMAT WITH EMAIL ADDRESS, PURE NAMES, POSTING & DOB
         if not df_display.empty:
-            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'TYPE_OF_POSTING', 'DOB', 'CONTACT NO', 'EMAIL', 'RESIDENCE ADDRESS', 'Job Location & Time']].copy()
+            # 🎯 FINAL TABLE FORMATTING (Removed Email, added TBHV On Treatment column)
+            display_table = df_display[['ZONE', 'TB_UNIT', 'PHI/UHC/CHC', 'DISPLAY_NAME', 'DESIGNATION', 'ON_TREATMENT', 'TYPE_OF_POSTING', 'DOB', 'CONTACT NO', 'RESIDENCE ADDRESS', 'Job Location & Time']].copy()
             display_table = display_table.rename(columns={
                 'ZONE': 'Zone',
                 'TB_UNIT': 'TB Unit',
                 'PHI/UHC/CHC': 'PHI/UHC/CHC',
                 'DISPLAY_NAME': 'Name',
                 'DESIGNATION': 'Designation',
+                'ON_TREATMENT': 'On Treatment (Public)',
                 'TYPE_OF_POSTING': 'Type of Posting',
                 'DOB': 'DOB',
                 'CONTACT NO': 'Mobile No.',
-                'EMAIL': 'Email Address',
                 'RESIDENCE ADDRESS': 'Residence Address'
             })
             
             display_table['Mobile No.'] = display_table['Mobile No.'].astype(str).str.replace(r'\.0$', '', regex=True)
             display_table['Mobile No.'] = display_table['Mobile No.'].replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             
-            display_table['Email Address'] = display_table['Email Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
-            display_table['Email Address'] = display_table['Email Address'].apply(lambda x: x.lower() if x != "Not Provided" else x)
-            
             display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
 
+            # 🎯 Fully responsive table view
             st.dataframe(display_table, use_container_width=True, hide_index=True)
             
             st.download_button(
@@ -1736,6 +1738,7 @@ with tab6:
             )
         else:
             st.info("No staff profiles found matching the current filters.")
+
 # ==========================================
 # 🟢 TAB 7: PRESUMPTIVE TB (NEW)
 # ==========================================
