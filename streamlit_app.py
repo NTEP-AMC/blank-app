@@ -713,29 +713,59 @@ with tab4:
 
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
-            target_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835"
-            df_sheet1 = pd.read_csv(target_url, header=None)
             
-            h_idx1 = 0
-            for i in range(3):
-                if any(td in df_sheet1.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
-                    h_idx1 = i; break
+            # 🎯 MULTI-SHEET SCANNING LOGIC (May & April)
+            zone_urls = [
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835", # May
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1784911612"  # April
+            ]
             
-            header_row1 = df_sheet1.iloc[h_idx1].fillna("").astype(str)
-            col_indices1 = [idx for idx, val in enumerate(header_row1) if val.replace("  ", " ").strip() in target_date_strings]
+            fac_urls = [
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # May
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2032153600" # April
+            ]
+
+            # ----------------------------------------------------
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS
+            # ----------------------------------------------------
+            zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
-            if col_indices1:
-                res1 = []
-                for row_idx in range(h_idx1 + 1, len(df_sheet1)):
-                    z_name = str(df_sheet1.iloc[row_idx, 0]).strip().title()
-                    if z_name.upper() == "AMC": z_name = "AMC" 
-                    if z_name in fixed_targets:
-                        ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
-                        t_day = fixed_targets[z_name]
-                        m_target = t_day * w_days
-                        pct = round((ach_total / m_target) * 100, 1) if m_target > 0 else 0
-                        res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": pct})
-                
+            for url in zone_urls:
+                try:
+                    df_sheet1 = pd.read_csv(url, header=None)
+                    h_idx1 = 0
+                    for i in range(3):
+                        if any(td in df_sheet1.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
+                            h_idx1 = i; break
+                            
+                    header_row1 = df_sheet1.iloc[h_idx1].fillna("").astype(str)
+                    col_indices1 = [idx for idx, val in enumerate(header_row1) if val.replace("  ", " ").strip() in target_date_strings]
+                    
+                    if col_indices1:
+                        for row_idx in range(h_idx1 + 1, len(df_sheet1)):
+                            z_name = str(df_sheet1.iloc[row_idx, 0]).strip().title()
+                            if z_name in zone_achievements:
+                                ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
+                                zone_achievements[z_name] += ach_total
+                except: continue
+
+            # Build Zone Table
+            res1 = []
+            for z_name, ach_total in zone_achievements.items():
+                if ach_total > 0 or True: # Include even if 0 if dates exist
+                    t_day = fixed_targets[z_name]
+                    m_target = t_day * w_days
+                    pct = round((ach_total / m_target) * 100, 1) if m_target > 0 else 0
+                    res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": pct})
+            
+            if res1:
+                # Add AMC Total
+                amc_target_day = fixed_targets["AMC"]
+                amc_month_target = amc_target_day * w_days
+                amc_achieved = sum(r["TOTAL ACHIEVED"] for r in res1)
+                amc_pct = round((amc_achieved / amc_month_target) * 100, 1) if amc_month_target > 0 else 0
+                res1.append({"ZONE": "AMC", "TARGET PER DAY": amc_target_day, "MONTH TARGET": amc_month_target, "TOTAL ACHIEVED": amc_achieved, "ACHIEVEMENT %": amc_pct})
+
                 df_display1 = pd.DataFrame(res1)
                 df_display1["ACHIEVEMENT %"] = df_display1["ACHIEVEMENT %"].astype(str) + "%"
                 
@@ -754,34 +784,48 @@ with tab4:
                             pct_val = float(str(row.iloc[j]).replace('%', ''))
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
-            fac_url = "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0"
-            df_fac = pd.read_csv(fac_url, header=None)
-            
-            h_idx2 = 0
-            for i in range(4):
-                if any(td in df_fac.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
-                    h_idx2 = i; break
-            
-            header_fac = df_fac.iloc[h_idx2].fillna("").astype(str)
-            col_indices_fac = [idx for idx, val in enumerate(header_fac) if val.replace("  ", " ").strip() in target_date_strings]
+            # ----------------------------------------------------
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS
+            # ----------------------------------------------------
+            fac_achievements = {} # Key: (Zone, Facility Name, Type), Value: Achieved Total
 
-            if col_indices_fac:
+            for url in fac_urls:
+                try:
+                    df_fac = pd.read_csv(url, header=None)
+                    h_idx2 = 0
+                    for i in range(4):
+                        if any(td in df_fac.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
+                            h_idx2 = i; break
+                    
+                    header_fac = df_fac.iloc[h_idx2].fillna("").astype(str)
+                    col_indices_fac = [idx for idx, val in enumerate(header_fac) if val.replace("  ", " ").strip() in target_date_strings]
+
+                    if col_indices_fac:
+                        for row_idx in range(h_idx2 + 1, len(df_fac)):
+                            zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
+                            fac_name = str(df_fac.iloc[row_idx, 1]).strip()
+                            if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
+                                
+                            achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
+                            fac_type = "OTHER"
+                            
+                            if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type = "UHC"
+                            elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type = "CHC"
+                            
+                            if fac_type in ["UHC", "CHC"]:
+                                dict_key = (zone_guj, fac_name, fac_type)
+                                if dict_key in fac_achievements: fac_achievements[dict_key] += achieved_total
+                                else: fac_achievements[dict_key] = achieved_total
+                except: continue
+
+            # Build Facility Tables
+            if fac_achievements:
                 fac_data = []
-                for row_idx in range(h_idx2 + 1, len(df_fac)):
-                    zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
-                    fac_name = str(df_fac.iloc[row_idx, 1]).strip()
-                    if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
-                        
-                    achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
-                    fac_type, target_daily = "OTHER", 0
-                    
-                    if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type, target_daily = "UHC", 4
-                    elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type, target_daily = "CHC", 16
-                    
-                    if fac_type in ["UHC", "CHC"]:
-                        month_target = target_daily * w_days
-                        ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
-                        fac_data.append({"Zone": zone_guj, "Facility Name": fac_name, "Type": fac_type, "Target": month_target, "Achieved": achieved_total, "Achievement %": ach_pct})
+                for (zone_guj, fac_name, fac_type), achieved_total in fac_achievements.items():
+                    target_daily = 4 if fac_type == "UHC" else 16
+                    month_target = target_daily * w_days
+                    ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
+                    fac_data.append({"Zone": zone_guj, "Facility Name": fac_name, "Type": fac_type, "Target": month_target, "Achieved": achieved_total, "Achievement %": ach_pct})
                 
                 df_fac_processed = pd.DataFrame(fac_data)
 
@@ -899,7 +943,6 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🎯 UPDATED URL: Converted to CSV export format with the new GID (910963940)
             naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"
             df_naat = pd.read_csv(naat_url, header=None)
             df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
@@ -998,6 +1041,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
