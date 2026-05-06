@@ -1979,6 +1979,7 @@ with tab8:
     def load_adverse_outcomes():
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
+        url_zone = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1891241473"
         
         def parse_sheet(url):
             try:
@@ -1993,11 +1994,10 @@ with tab8:
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
                 df.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 
-                # 🎯 Deduplicate columns to prevent AttributeError crashes from Notification Registers
+                # 🎯 Deduplicate columns to prevent AttributeError crashes
                 df = df.loc[:, ~df.columns.duplicated()]
                 
                 c_map = {}
-                # First Pass: Strict Mapping based on Notification Register Structure
                 for c in df.columns:
                     cu = c.upper()
                     if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
@@ -2012,7 +2012,6 @@ with tab8:
                     elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
                     elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
                 
-                # Second Pass: Fallback for Outcome if "Treatment Outcome" wasn't explicitly named
                 for c in df.columns:
                     cu = c.upper()
                     if c not in c_map:
@@ -2030,11 +2029,22 @@ with tab8:
                 return df[req_cols].copy()
             except:
                 return pd.DataFrame()
+
+        # 🎯 Fetch and build the Zone Map explicitly for this Tab
+        try:
+            df_z_map = pd.read_csv(url_zone, header=None, skiprows=1, usecols=[0,1], dtype=str)
+            df_z_map.columns = ['PHI_Map', 'Zone_Map']
+            df_z_map['PHI_Map'] = df_z_map['PHI_Map'].astype(str).str.strip().str.upper()
+            df_z_map['Zone_Map'] = df_z_map['Zone_Map'].astype(str).str.strip().str.upper()
+            df_z_map['Join_Key'] = df_z_map['PHI_Map'].apply(lambda x: re.sub(r'[^A-Z0-9]', '', str(x)))
+            df_z_map = df_z_map.drop_duplicates(subset=['Join_Key'], keep='first')
+        except:
+            df_z_map = pd.DataFrame()
                 
-        return parse_sheet(url_this), parse_sheet(url_prev)
+        return parse_sheet(url_this), parse_sheet(url_prev), df_z_map
 
     with st.spinner("Analyzing Weekly Outcome Deltas..."):
-        df_this_week, df_prev_week = load_adverse_outcomes()
+        df_this_week, df_prev_week, df_z_local = load_adverse_outcomes()
 
     if df_this_week.empty:
         st.warning("⚠️ No data found in the 'This Week' Google Sheet.")
@@ -2071,20 +2081,22 @@ with tab8:
 
         df_new_adv = df_this_adv[df_this_adv.apply(is_new_adverse, axis=1)].copy()
 
-        # 4. Map ZONE using PHI
+        # 4. Map ZONE using the new local PHI sub-sheet
         df_new_adv['PHI_Clean'] = df_new_adv['PHI'].astype(str).str.strip().str.upper()
         df_new_adv['PHI_Join_Key'] = df_new_adv['PHI_Clean'].apply(lambda x: re.sub(r'[^A-Z0-9]', '', str(x)))
-        if not df_z.empty:
-            df_new_adv = df_new_adv.merge(df_z[['Join_Key', 'Zone_Map']], left_on='PHI_Join_Key', right_on='Join_Key', how='left')
+        if not df_z_local.empty:
+            df_new_adv = df_new_adv.merge(df_z_local[['Join_Key', 'Zone_Map']], left_on='PHI_Join_Key', right_on='Join_Key', how='left')
             df_new_adv['ZONE'] = df_new_adv['Zone_Map'].fillna("N/A")
             df_new_adv = df_new_adv.drop(columns=['PHI_Clean', 'PHI_Join_Key', 'Join_Key', 'Zone_Map'], errors='ignore')
         else:
             df_new_adv['ZONE'] = "N/A"
+            
+        df_new_adv['ZONE'] = df_new_adv['ZONE'].replace(["", "NAN", "NAT", "NONE", "NULL", "<NA>"], "N/A").fillna("N/A")
 
         # 5. Apply Strict Role Filters
         df_new_adv = filter_by_role(df_new_adv, st.session_state.role, st.session_state.target)
 
-        # 6. DYNAMIC UI OUTCOME SELECTOR (Like Differentiated Care)
+        # 6. DYNAMIC UI OUTCOME SELECTOR
         if not df_new_adv.empty:
             unique_outcomes = sorted(df_new_adv['Treatment Outcome'].unique().tolist())
             outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
