@@ -133,14 +133,18 @@ def load_all_data():
 
 @st.cache_data(ttl=300) 
 def get_live_dc():
-    try:
-        def fetch_sheet(url):
+    def fetch_sheet(url):
+        try:
             df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
-            header_row = 0
-            for i in range(min(5, len(df))):
+            header_row = -1
+            # 🎯 Expanded search area to 20 rows in case headers were pushed down!
+            for i in range(min(20, len(df))):
                 row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
                 if "EPISODE" in row_str and "NAME" in row_str:
                     header_row = i; break
+            
+            if header_row == -1: return pd.DataFrame() # Fallback if headers are missing
+                
             header_vals = df.iloc[header_row].fillna("").astype(str).str.upper()
             df = df.iloc[header_row+1:].reset_index(drop=True)
             
@@ -213,11 +217,19 @@ def get_live_dc():
                         'Elig_3RD_MONTH': elig_3m, 'Elig_4TH_MONTH': elig_4m, 'Elig_5TH_MONTH': elig_5m, 'Elig_6TH_MONTH': elig_6m
                     })
             return pd.DataFrame(diff_data)
+        except Exception as e:
+            return pd.DataFrame()
 
+    try:
         url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
-        return fetch_sheet(url_new), fetch_sheet(url_old)
-    except: return pd.DataFrame(), pd.DataFrame()
+        
+        df_new = fetch_sheet(url_new)
+        df_old = fetch_sheet(url_old)
+        
+        return df_new, df_old
+    except:
+        return pd.DataFrame(), pd.DataFrame()
 
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
