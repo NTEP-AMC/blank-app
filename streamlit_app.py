@@ -645,7 +645,7 @@ with tab4:
     # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC/HOSPITAL)</h3>", unsafe_allow_html=True)
 
     with st.container():
         tc1, tc2, tc3 = st.columns(3)
@@ -714,7 +714,6 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🎯 MULTI-SHEET SCANNING LOGIC (May & April)
             zone_urls = [
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835", # May
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1784911612"  # April
@@ -752,14 +751,13 @@ with tab4:
             # Build Zone Table
             res1 = []
             for z_name, ach_total in zone_achievements.items():
-                if ach_total > 0 or True: # Include even if 0 if dates exist
+                if ach_total > 0 or True:
                     t_day = fixed_targets[z_name]
                     m_target = t_day * w_days
                     pct = round((ach_total / m_target) * 100, 1) if m_target > 0 else 0
                     res1.append({"ZONE": z_name, "TARGET PER DAY": t_day, "MONTH TARGET": m_target, "TOTAL ACHIEVED": ach_total, "ACHIEVEMENT %": pct})
             
             if res1:
-                # Add AMC Total
                 amc_target_day = fixed_targets["AMC"]
                 amc_month_target = amc_target_day * w_days
                 amc_achieved = sum(r["TOTAL ACHIEVED"] for r in res1)
@@ -787,7 +785,7 @@ with tab4:
             # ----------------------------------------------------
             # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (Including Hospitals)
             # ----------------------------------------------------
-            fac_achievements = {} # Key: (Zone, Facility Name, Type), Value: Achieved Total
+            fac_achievements = {}
 
             for url in fac_urls:
                 try:
@@ -809,7 +807,6 @@ with tab4:
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             fac_type = "OTHER"
                             
-                            # 🎯 NEW CLASSIFICATION LOGIC INCLUDING HOSPITALS
                             if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type = "UHC"
                             elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type = "CHC"
                             elif "હોસ્પિટલ" in fac_name: fac_type = "HOSPITAL"
@@ -825,10 +822,10 @@ with tab4:
                 fac_data = []
                 for (zone_guj, fac_name, fac_type), achieved_total in fac_achievements.items():
                     
-                    # ⚠️ UPDATE THIS TARGET IF NEEDED: Set default hospital daily target to 50
+                    # 🎯 UPDATED TARGET: Hospital daily target set strictly to 30
                     if fac_type == "UHC": target_daily = 4
                     elif fac_type == "CHC": target_daily = 16
-                    elif fac_type == "HOSPITAL": target_daily = 50 
+                    elif fac_type == "HOSPITAL": target_daily = 30 
                     
                     month_target = target_daily * w_days
                     ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
@@ -1073,7 +1070,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-    
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
