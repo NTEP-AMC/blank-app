@@ -785,7 +785,7 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (Including Hospitals)
             # ----------------------------------------------------
             fac_achievements = {} # Key: (Zone, Facility Name, Type), Value: Achieved Total
 
@@ -809,10 +809,12 @@ with tab4:
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             fac_type = "OTHER"
                             
+                            # 🎯 NEW CLASSIFICATION LOGIC INCLUDING HOSPITALS
                             if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type = "UHC"
                             elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type = "CHC"
+                            elif "હોસ્પિટલ" in fac_name: fac_type = "HOSPITAL"
                             
-                            if fac_type in ["UHC", "CHC"]:
+                            if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (zone_guj, fac_name, fac_type)
                                 if dict_key in fac_achievements: fac_achievements[dict_key] += achieved_total
                                 else: fac_achievements[dict_key] = achieved_total
@@ -822,13 +824,19 @@ with tab4:
             if fac_achievements:
                 fac_data = []
                 for (zone_guj, fac_name, fac_type), achieved_total in fac_achievements.items():
-                    target_daily = 4 if fac_type == "UHC" else 16
+                    
+                    # ⚠️ UPDATE THIS TARGET IF NEEDED: Set default hospital daily target to 50
+                    if fac_type == "UHC": target_daily = 4
+                    elif fac_type == "CHC": target_daily = 16
+                    elif fac_type == "HOSPITAL": target_daily = 50 
+                    
                     month_target = target_daily * w_days
                     ach_pct = round((achieved_total / month_target) * 100, 1) if month_target > 0 else 0
                     fac_data.append({"Zone": zone_guj, "Facility Name": fac_name, "Type": fac_type, "Target": month_target, "Achieved": achieved_total, "Achievement %": ach_pct})
                 
                 df_fac_processed = pd.DataFrame(fac_data)
 
+                # --- 📉 UHC SLIDES ---
                 if not df_fac_processed.empty:
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
@@ -849,6 +857,7 @@ with tab4:
                                 if j == 4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_uhc.iloc[orig_idx]["Achievement %"])
 
+                # --- 🏥 CHC SLIDES ---
                 if not df_fac_processed.empty:
                     df_chc = df_fac_processed[df_fac_processed["Type"] == "CHC"].sort_values("Achievement %", ascending=False).drop(columns=["Type"]).reset_index(drop=True)
                     df_chc_display = df_chc.copy()
@@ -868,6 +877,29 @@ with tab4:
                                 if j == 4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_chc.iloc[orig_idx]["Achievement %"])
                                 elif row_idx_c % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
+                
+                # --- 🏥 HOSPITAL SLIDES (NEW) ---
+                if not df_fac_processed.empty:
+                    df_hosp = df_fac_processed[df_fac_processed["Type"] == "HOSPITAL"].sort_values("Achievement %", ascending=False).drop(columns=["Type"]).reset_index(drop=True)
+                    
+                    if not df_hosp.empty:
+                        df_hosp_display = df_hosp.copy()
+                        df_hosp_display["Achievement %"] = df_hosp_display["Achievement %"].astype(str) + "%"
+                        
+                        for i in range(0, len(df_hosp_display), 12):
+                            chunk = df_hosp_display.iloc[i:i+12]
+                            s4 = add_corporate_slide(prs, f"🏥 Hospital Performance Overview{' (Part ' + str(i//12 + 1) + ')' if len(df_hosp_display)>12 else ''}")
+                            t4 = s4.shapes.add_table(len(chunk) + 1, len(chunk.columns), Inches(0.5), Inches(1.2), Inches(9.0), Inches(0.35))
+                            format_corporate_table(t4.table, chunk, [Inches(1.5), Inches(4.0), Inches(1.0), Inches(1.0), Inches(1.5)], font_size=11)
+                            for row_idx_c, (orig_idx, row) in enumerate(chunk.iterrows()):
+                                for j in range(len(chunk.columns)):
+                                    cell = t4.table.cell(row_idx_c+1, j); cell.text = str(row.iloc[j])
+                                    for p in cell.text_frame.paragraphs: 
+                                        p.font.size = Pt(11)
+                                        if j > 1: p.alignment = PP_ALIGN.CENTER
+                                    if j == 4:
+                                        cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_hosp.iloc[orig_idx]["Achievement %"])
+                                    elif row_idx_c % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
             
             out_io = io.BytesIO()
             prs.save(out_io)
@@ -1041,7 +1073,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-
+    
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
