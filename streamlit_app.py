@@ -301,7 +301,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -1967,3 +1967,160 @@ with tab7:
             
         else:
             st.info("👍 No Presumptive TB records found for the selected filters.")
+
+# ==========================================
+# 🟢 TAB 8: ADVERSE OUTCOMES (DELTA TRACKER)
+# ==========================================
+with tab8:
+    st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Weekly Delta)</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically compares This Week vs Previous Week to isolate newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
+
+    @st.cache_data(ttl=300)
+    def load_adverse_outcomes():
+        url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
+        url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
+        
+        def parse_sheet(url):
+            try:
+                df_raw = pd.read_csv(url, header=None, low_memory=False, dtype=str)
+                h_idx = -1
+                for i in range(min(15, len(df_raw))):
+                    row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper())
+                    if "EPISODE" in row_str and "NAME" in row_str:
+                        h_idx = i; break
+                if h_idx == -1: return pd.DataFrame()
+                
+                df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
+                df.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
+                
+                c_map = {}
+                for c in df.columns:
+                    cu = c.upper()
+                    if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
+                    elif "PATIENT" in cu and "NAME" in cu: c_map[c] = 'Patient Name'
+                    elif "UNIT" in cu or "TBU" in cu: c_map[c] = 'TB Unit'
+                    elif "PHI" in cu: c_map[c] = 'PHI'
+                    elif "FACILITY" in cu or "SECTOR" in cu: c_map[c] = 'Facility Type'
+                    elif "TYPE" in cu and "CASE" in cu: c_map[c] = 'Type of Case'
+                    elif "REGIMEN" in cu: c_map[c] = 'TB_regimen'
+                    elif "DIAGNOSIS" in cu and "DATE" in cu: c_map[c] = 'Diagnosis Date'
+                    elif "INITIATION" in cu and "DATE" in cu: c_map[c] = 'Initiation Date'
+                    elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
+                    elif "OUTCOME" in cu and "TREATMENT" not in cu: c_map[c] = 'Treatment Outcome'
+                
+                for c in df.columns:
+                    if "TREATMENT" in c.upper() and "OUTCOME" in c.upper(): c_map[c] = 'Treatment Outcome'
+                
+                df = df.rename(columns=c_map)
+                
+                req_cols = ['Episode ID', 'Patient Name', 'TB Unit', 'PHI', 'Facility Type', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
+                for rc in req_cols:
+                    if rc not in df.columns: df[rc] = "N/A"
+                    
+                return df[req_cols].copy()
+            except:
+                return pd.DataFrame()
+                
+        return parse_sheet(url_this), parse_sheet(url_prev)
+
+    with st.spinner("Analyzing Weekly Outcome Deltas..."):
+        df_this_week, df_prev_week = load_adverse_outcomes()
+
+    if df_this_week.empty:
+        st.warning("⚠️ No data found in the 'This Week' Google Sheet.")
+    else:
+        # 1. Clean Treatment Outcomes
+        df_this_week['Treatment Outcome'] = df_this_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
+        df_prev_week['Treatment Outcome'] = df_prev_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
+
+        # 2. Filter OUT Good Outcomes from This Week
+        good_outcomes = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
+        is_adverse = ~df_this_week['Treatment Outcome'].str.contains('|'.join(good_outcomes), na=False) 
+        has_outcome = (df_this_week['Treatment Outcome'] != "") & (df_this_week['Treatment Outcome'] != "NAN") & (df_this_week['Treatment Outcome'] != "N/A")
+        
+        df_this_adv = df_this_week[is_adverse & has_outcome].copy()
+
+        # 3. VLOOKUP ENGINE (Find strictly NEW outcomes)
+        prev_outcomes_dict = dict(zip(df_prev_week['Episode ID'].astype(str).str.strip(), df_prev_week['Treatment Outcome']))
+        
+        def is_new_adverse(row):
+            eid = str(row['Episode ID']).strip()
+            curr_out = row['Treatment Outcome']
+            if eid not in prev_outcomes_dict: return True # Didn't exist last week
+            prev_out = prev_outcomes_dict[eid]
+            if prev_out in ["", "NAN", "N/A", "NONE"]: return True # Existed but had no outcome
+            if curr_out != prev_out: return True # Outcome changed to adverse
+            return False
+
+        df_new_adv = df_this_adv[df_this_adv.apply(is_new_adverse, axis=1)].copy()
+
+        # 4. Map ZONE using PHI
+        df_new_adv['PHI_Clean'] = df_new_adv['PHI'].astype(str).str.strip().str.upper()
+        df_new_adv['PHI_Join_Key'] = df_new_adv['PHI_Clean'].apply(lambda x: re.sub(r'[^A-Z0-9]', '', str(x)))
+        if not df_z.empty:
+            df_new_adv = df_new_adv.merge(df_z[['Join_Key', 'Zone_Map']], left_on='PHI_Join_Key', right_on='Join_Key', how='left')
+            df_new_adv['ZONE'] = df_new_adv['Zone_Map'].fillna("N/A")
+            df_new_adv = df_new_adv.drop(columns=['PHI_Clean', 'PHI_Join_Key', 'Join_Key', 'Zone_Map'], errors='ignore')
+        else:
+            df_new_adv['ZONE'] = "N/A"
+
+        # 5. Apply Strict Role Filters (Zone/TU logins)
+        df_new_adv = filter_by_role(df_new_adv, st.session_state.role, st.session_state.target)
+
+        # 6. DYNAMIC UI OUTCOME SELECTOR
+        if not df_new_adv.empty:
+            unique_outcomes = sorted(df_new_adv['Treatment Outcome'].unique().tolist())
+            outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
+            
+            st.markdown("<div style='background-color:#f9ebea; padding:12px; border-radius:8px; border: 1px solid #f5b7b1; margin-bottom:15px;'>", unsafe_allow_html=True)
+            sel_adv_outcome = st.radio("📌 Select Adverse Outcome Category to View:", outcome_options, horizontal=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            df_filtered = df_new_adv.copy()
+            if sel_adv_outcome != "ALL NEW ADVERSE OUTCOMES":
+                df_filtered = df_filtered[df_filtered['Treatment Outcome'] == sel_adv_outcome]
+
+            # 7. FILTERS & DATES
+            with st.expander("🔽 Advanced Filters & Dates", expanded=False):
+                ac1, ac2, ac3 = st.columns(3)
+                with ac1:
+                    if st.session_state.role == "ADMIN":
+                        a_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_filtered, 'ZONE', 'tab8'), key='az8'))
+                        if a_z: df_filtered = df_filtered[df_filtered['ZONE'].isin(a_z)]
+                    
+                    a_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_filtered, 'TB Unit', 'tab8'), key='atu8'))
+                    if a_tu: df_filtered = df_filtered[df_filtered['TB Unit'].isin(a_tu)]
+                    
+                    a_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_filtered, 'PHI', 'tab8'), key='aphi8'))
+                    if a_phi: df_filtered = df_filtered[df_filtered['PHI'].isin(a_phi)]
+
+                with ac2:
+                    a_fac = clean_selection(st.multiselect("Facility Type", get_options_with_counts(df_filtered, 'Facility Type', 'tab8'), key='afac8'))
+                    if a_fac: df_filtered = df_filtered[df_filtered['Facility Type'].isin(a_fac)]
+                    
+                    a_case = clean_selection(st.multiselect("Type of Case", get_options_with_counts(df_filtered, 'Type of Case', 'tab8'), key='acase8'))
+                    if a_case: df_filtered = df_filtered[df_filtered['Type of Case'].isin(a_case)]
+                    
+                    a_reg = clean_selection(st.multiselect("TB Regimen", get_options_with_counts(df_filtered, 'TB_regimen', 'tab8'), key='areg8'))
+                    if a_reg: df_filtered = df_filtered[df_filtered['TB_regimen'].isin(a_reg)]
+
+                with ac3:
+                    a_diag_dt = st.date_input("Diagnosis Date Range (Primary)", value=[], key="ad1_8")
+                    a_init_dt = st.date_input("Initiation Date Range", value=[], key="ad2_8")
+                    a_out_dt = st.date_input("Outcome Date Range", value=[], key="ad3_8")
+                    
+            if len(a_diag_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Diagnosis Date'), errors='coerce').dt.date.between(a_diag_dt[0], a_diag_dt[1])]
+            if len(a_init_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Initiation Date'), errors='coerce').dt.date.between(a_init_dt[0], a_init_dt[1])]
+            if len(a_out_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Outcome Date'), errors='coerce').dt.date.between(a_out_dt[0], a_out_dt[1])]
+
+            st.markdown(f"<div style='color: #C0392B; margin-bottom: 10px; font-weight: bold;'>Found {len(df_filtered)} Patient(s)</div>", unsafe_allow_html=True)
+            
+            if not df_filtered.empty:
+                final_display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
+                st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
+                
+                st.download_button(f"📥 Download New Adverse Outcomes", convert_df_to_excel(df_filtered[final_display_cols], "Adverse_Outcomes"), f"New_Adverse_Outcomes.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_adv_out')
+            else:
+                st.info("👍 No patients match the selected filters.")
+        else:
+            st.success("🎉 Excellent! No new adverse outcomes were reported this week compared to last week.")
