@@ -1969,32 +1969,45 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES 
+# 🟢 TAB 8: ADVERSE OUTCOMES (DELTA TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Weekly Delta)</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically compares This Week vs Previous Week to isolate newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=3600, show_spinner=False) # Increased cache to 1 Hour!
     def load_adverse_outcomes():
+        import urllib.request
+        import io
+        
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
         url_zone = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1891241473"
         
         def parse_sheet(url):
             try:
-                df_raw = pd.read_csv(url, header=None, low_memory=False, dtype=str)
+                # 🎯 Anti-Hang Mechanism: Strict 60-second timeout
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    csv_data = response.read()
+                    
+                df_raw = pd.read_csv(io.BytesIO(csv_data), header=None, low_memory=False, dtype=str)
+                
                 h_idx = -1
                 for i in range(min(15, len(df_raw))):
                     row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper())
                     if "EPISODE" in row_str and "NAME" in row_str:
                         h_idx = i; break
+                        
                 if h_idx == -1: return pd.DataFrame()
                 
+                # Assign Headers
+                df_raw.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
-                df.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 
-                # 🎯 Deduplicate columns to prevent AttributeError crashes
+                # 🎯 Aggressive Memory Cleanup: Destroy the raw massive dataframe
+                del df_raw
+                
                 df = df.loc[:, ~df.columns.duplicated()]
                 
                 c_map = {}
@@ -2022,15 +2035,18 @@ with tab8:
                 df = df.rename(columns=c_map)
                 df = df.loc[:, ~df.columns.duplicated()] 
                 
+                # 🎯 Memory Optimizer: Keep ONLY the 11 columns we need, drop the other 100+
                 req_cols = ['Episode ID', 'Patient Name', 'TB Unit', 'PHI', 'Facility Type', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
+                available_cols = [c for c in req_cols if c in df.columns]
+                df = df[available_cols].copy()
+                
                 for rc in req_cols:
                     if rc not in df.columns: df[rc] = "N/A"
                     
-                return df[req_cols].copy()
-            except:
+                return df
+            except Exception as e:
                 return pd.DataFrame()
 
-        # 🎯 Fetch and build the Zone Map explicitly for this Tab
         try:
             df_z_map = pd.read_csv(url_zone, header=None, skiprows=1, usecols=[0,1], dtype=str)
             df_z_map.columns = ['PHI_Map', 'Zone_Map']
@@ -2043,11 +2059,11 @@ with tab8:
                 
         return parse_sheet(url_this), parse_sheet(url_prev), df_z_map
 
-    with st.spinner("Analyzing Weekly Outcome Deltas..."):
+    with st.spinner("Analyzing Massive Weekly Outcome Deltas (This might take 30-45 seconds)..."):
         df_this_week, df_prev_week, df_z_local = load_adverse_outcomes()
 
     if df_this_week.empty:
-        st.warning("⚠️ No data found in the 'This Week' Google Sheet.")
+        st.error("⚠️ Connection Timeout or No Data found. Google Sheets may be blocked. Please refresh the page.")
     else:
         if df_prev_week.empty or 'Treatment Outcome' not in df_prev_week.columns:
             df_prev_week = pd.DataFrame(columns=['Episode ID', 'Treatment Outcome'])
@@ -2071,14 +2087,10 @@ with tab8:
         def is_new_adverse(row):
             eid = str(row['Episode ID']).strip()
             curr_out = row['Treatment Outcome']
-            # If it didn't exist last week -> It's a new adverse outcome
             if eid not in prev_outcomes_dict: return True 
             prev_out = prev_outcomes_dict[eid]
-            # If it existed last week but had no outcome -> It's a new adverse outcome
             if prev_out in blank_variants: return True 
-            # If the outcome changed from something else to this adverse outcome -> It's new
             if curr_out != prev_out: return True 
-            # Otherwise, it was already reported as adverse last week. Hide it.
             return False
 
         df_new_adv = df_this_adv[df_this_adv.apply(is_new_adverse, axis=1)].copy()
@@ -2100,7 +2112,6 @@ with tab8:
 
         # 6. DYNAMIC UI OUTCOME SELECTOR
         if not df_new_adv.empty:
-            # Safely generate the unique outcome list while stripping out any remaining blanks
             unique_outcomes = sorted([x for x in df_new_adv['Treatment Outcome'].unique().tolist() if str(x).strip() not in blank_variants])
             outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
             
