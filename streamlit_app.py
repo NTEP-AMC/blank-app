@@ -2222,15 +2222,23 @@ with tab9:
         page = 1
         error_message = ""
         
-        # 🎯 Advanced Pagination Engine with Strict Error Surfacing
+        # 🎯 Gentle Pagination Engine (Chunks of 50 to prevent 400 Bad Request limits)
         while True:
-            url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&per_page=1000&page={page}"
+            url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&page={page}"
             try:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 response = requests.get(url, headers=headers, timeout=30)
                 
-                # 🔥 Catch exact server blocks!
-                if response.status_code == 403 or response.status_code == 401:
+                # 🔥 Handle Epicollect quirks!
+                if response.status_code == 400:
+                    if page == 1:
+                        error_message = "**HTTP 400 Bad Request:** Epicollect5 rejected the request. Check if the project slug is perfectly correct."
+                        break
+                    else:
+                        # If we get a 400 on later pages, it just means we hit the end!
+                        break
+                        
+                elif response.status_code == 403 or response.status_code == 401:
                     error_message = f"**HTTP {response.status_code} Forbidden:** Epicollect5 is blocking access. Your project '{slug}' is set to PRIVATE. You must go to Epicollect5 -> Project Details -> Access -> Set to 'Public'."
                     break
                 elif response.status_code == 404:
@@ -2248,8 +2256,8 @@ with tab9:
                 
                 all_dfs.append(df)
                 
-                # If we got less than 1000 records, it means we hit the final page
-                if len(df) < 1000: break
+                # Epicollect default limit is 50. If we got less, there are no more pages.
+                if len(df) < 50: break
                 page += 1
                 
             except Exception as e:
@@ -2264,7 +2272,7 @@ with tab9:
 
     if df_epi_raw.empty:
         if fetch_error:
-            st.error(fetch_error) # Prints the EXACT reason it failed!
+            st.error(fetch_error)
         else:
             st.warning("⚠️ No data found for this project.")
     else:
