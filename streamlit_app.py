@@ -2217,12 +2217,13 @@ with tab9:
     def load_epicollect_data(slug):
         import requests
         import io
+        import time
         
         all_dfs = []
         page = 1
         error_message = ""
         
-        # 🎯 Unstoppable Pagination Engine
+        # 🎯 Polite Pagination Engine (Bypasses the 250-entry Anti-Bot Firewall)
         while True:
             url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&page={page}"
             try:
@@ -2230,43 +2231,52 @@ with tab9:
                 response = requests.get(url, headers=headers, timeout=30)
                 
                 # Handle API Blocks
-                if response.status_code == 400:
-                    if page == 1:
-                        error_message = "**HTTP 400 Bad Request:** Epicollect5 rejected the request."
-                        break
-                    else: break
+                if response.status_code == 429:
+                    time.sleep(2) # Rate limit hit! Wait 2 seconds and retry this page.
+                    continue
+                elif response.status_code == 400:
+                    if page == 1: error_message = "**HTTP 400:** Epicollect5 rejected the request."
+                    break # On later pages, a 400 just means we've exceeded the final page.
                 elif response.status_code in [401, 403]:
-                    error_message = f"**HTTP {response.status_code} Forbidden:** Your project '{slug}' is set to PRIVATE. Change it to 'Public' in Epicollect5."
+                    error_message = f"**HTTP {response.status_code}:** Project '{slug}' is PRIVATE. Make it 'Public'."
                     break
                 elif response.status_code == 404:
-                    error_message = f"**HTTP 404 Not Found:** The project '{slug}' does not exist."
+                    error_message = f"**HTTP 404:** Project '{slug}' not found."
                     break
                 elif response.status_code != 200:
                     error_message = f"**HTTP {response.status_code}:** API Error."
                     break
                 
-                # Read the CSV page
-                df = pd.read_csv(io.StringIO(response.text), dtype=str)
+                # 🎯 Safe CSV Reading (Prevents Pandas crashes on empty final pages)
+                try:
+                    df = pd.read_csv(io.StringIO(response.text), dtype=str)
+                except pd.errors.EmptyDataError:
+                    break 
                 
-                # 🎯 The Fix: Only stop when the page is completely empty (0 rows). This bypasses the deleted-row trap!
                 if len(df) == 0: break
                 
-                # 🎯 The Fix: Rescued created_at and uploaded_at from the drop list!
                 cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'title']
                 df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
                 
                 all_dfs.append(df)
+                
+                if len(df) < 50: break # Epicollect's default is 50. If we get 49, it's the last page.
+                
                 page += 1
+                time.sleep(0.5) # ⏳ THE FIX: 0.5s pause to prevent IP ban/firewall drops!
                 
             except Exception as e:
                 error_message = f"**Connection Error:** {str(e)}"
                 break
                 
         if not all_dfs: return pd.DataFrame(), error_message
-        return pd.concat(all_dfs, ignore_index=True), ""
+        return pd.concat(all_dfs, ignore_index=True), error_message
 
-    with st.spinner(f"Fetching ALL Live Entries for {sel_proj_name} (This may take a moment for large projects)..."):
+    with st.spinner(f"Fetching ALL Live Entries for {sel_proj_name} (Pausing between pages to prevent firewall blocks)..."):
         df_epi_raw, fetch_error = load_epicollect_data(sel_slug)
+
+    if fetch_error and not df_epi_raw.empty:
+        st.toast(f"⚠️ Sync paused early: {fetch_error}")
 
     if df_epi_raw.empty:
         if fetch_error: st.error(fetch_error)
@@ -2307,7 +2317,7 @@ with tab9:
                 )
                 col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
 
-        # 4. Filters UI (Added Date Filter)
+        # 4. Filters UI
         st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
         
         fc1, fc2, fc3 = st.columns(3)
@@ -2321,7 +2331,6 @@ with tab9:
             else:
                 sel_epi_zone = "All Zones"
         with fc3:
-            # 🎯 The Fix: New Dynamic Date Range Picker
             epi_date_range = st.date_input("📅 Filter by Upload Date Range", value=[], key=f"date_{sel_slug}")
 
         # 5. Apply Filters
@@ -2334,7 +2343,6 @@ with tab9:
         if len(epi_date_range) == 2:
             upload_col = next((c for c in df_epi.columns if "Upload" in str(c)), None)
             if upload_col:
-                # Convert the Epicollect string dates into Python datetime objects for perfect math filtering
                 temp_dates = pd.to_datetime(df_epi[upload_col], errors='coerce').dt.date
                 df_epi = df_epi[(temp_dates >= epi_date_range[0]) & (temp_dates <= epi_date_range[1])]
 
