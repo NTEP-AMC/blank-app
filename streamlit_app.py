@@ -2222,42 +2222,40 @@ with tab9:
         page = 1
         error_message = ""
         
-        # 🎯 Gentle Pagination Engine (Chunks of 50 to prevent 400 Bad Request limits)
+        # 🎯 Unstoppable Pagination Engine
         while True:
             url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&page={page}"
             try:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 response = requests.get(url, headers=headers, timeout=30)
                 
-                # 🔥 Handle Epicollect quirks!
+                # Handle API Blocks
                 if response.status_code == 400:
                     if page == 1:
-                        error_message = "**HTTP 400 Bad Request:** Epicollect5 rejected the request. Check if the project slug is perfectly correct."
+                        error_message = "**HTTP 400 Bad Request:** Epicollect5 rejected the request."
                         break
-                    else:
-                        # If we get a 400 on later pages, it just means we hit the end!
-                        break
-                        
-                elif response.status_code == 403 or response.status_code == 401:
-                    error_message = f"**HTTP {response.status_code} Forbidden:** Epicollect5 is blocking access. Your project '{slug}' is set to PRIVATE. You must go to Epicollect5 -> Project Details -> Access -> Set to 'Public'."
+                    else: break
+                elif response.status_code in [401, 403]:
+                    error_message = f"**HTTP {response.status_code} Forbidden:** Your project '{slug}' is set to PRIVATE. Change it to 'Public' in Epicollect5."
                     break
                 elif response.status_code == 404:
-                    error_message = f"**HTTP 404 Not Found:** The project slug '{slug}' does not exist."
+                    error_message = f"**HTTP 404 Not Found:** The project '{slug}' does not exist."
                     break
                 elif response.status_code != 200:
-                    error_message = f"**HTTP {response.status_code}:** Failed to fetch data from Epicollect5 API."
+                    error_message = f"**HTTP {response.status_code}:** API Error."
                     break
                 
+                # Read the CSV page
                 df = pd.read_csv(io.StringIO(response.text), dtype=str)
-                if df.empty: break
                 
-                cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'created_at', 'uploaded_at', 'title']
+                # 🎯 The Fix: Only stop when the page is completely empty (0 rows). This bypasses the deleted-row trap!
+                if len(df) == 0: break
+                
+                # 🎯 The Fix: Rescued created_at and uploaded_at from the drop list!
+                cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'title']
                 df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
                 
                 all_dfs.append(df)
-                
-                # Epicollect default limit is 50. If we got less, there are no more pages.
-                if len(df) < 50: break
                 page += 1
                 
             except Exception as e:
@@ -2267,18 +2265,15 @@ with tab9:
         if not all_dfs: return pd.DataFrame(), error_message
         return pd.concat(all_dfs, ignore_index=True), ""
 
-    with st.spinner(f"Fetching Live Entries for {sel_proj_name}..."):
+    with st.spinner(f"Fetching ALL Live Entries for {sel_proj_name} (This may take a moment for large projects)..."):
         df_epi_raw, fetch_error = load_epicollect_data(sel_slug)
 
     if df_epi_raw.empty:
-        if fetch_error:
-            st.error(fetch_error)
-        else:
-            st.warning("⚠️ No data found for this project.")
+        if fetch_error: st.error(fetch_error)
+        else: st.warning("⚠️ No data found for this project.")
     else:
         df_epi = df_epi_raw.copy()
         
-        # --- DYNAMIC COLUMN CLEANER AND CONFIG BUILDER ---
         col_config = {}
         
         # 1. Clean messy Epicollect column names
@@ -2289,7 +2284,7 @@ with tab9:
             new_cols[c] = clean_name
         df_epi = df_epi.rename(columns=new_cols)
         
-        # 2. Smarter Latitude/Longitude Finder (Fixes truncated "LOCATI" names)
+        # 2. Location to Map Link Converter
         lat_col = next((c for c in df_epi.columns if "Lat" in str(c)), None)
         lon_col = next((c for c in df_epi.columns if "Long" in str(c) or "Lon" in str(c)), None)
         
@@ -2302,7 +2297,7 @@ with tab9:
             col_config['📍 Google Map'] = st.column_config.LinkColumn("📍 Google Map", display_text="🗺️ Open Map")
             df_epi = df_epi.drop(columns=[lat_col, lon_col])
 
-        # 3. Photo Feature ONLY applies to Home Visits
+        # 3. Photo Links (Home Visits Only)
         if "Home Visit" in sel_proj_name:
             photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
             for p_col in photo_cols:
@@ -2312,10 +2307,10 @@ with tab9:
                 )
                 col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
 
-        # 4. Filters UI
+        # 4. Filters UI (Added Date Filter)
         st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
         
-        fc1, fc2 = st.columns(2)
+        fc1, fc2, fc3 = st.columns(3)
         with fc1:
             search_epi = st.text_input("🔍 Search Submissions (Name, ID, etc.)", "", key=f"search_epi_{sel_slug}")
         with fc2:
@@ -2325,16 +2320,27 @@ with tab9:
                 sel_epi_zone = st.selectbox("🏢 Filter Zone", zones, key=f"zone_{sel_slug}")
             else:
                 sel_epi_zone = "All Zones"
+        with fc3:
+            # 🎯 The Fix: New Dynamic Date Range Picker
+            epi_date_range = st.date_input("📅 Filter by Upload Date Range", value=[], key=f"date_{sel_slug}")
 
         # 5. Apply Filters
         if search_epi:
             df_epi = df_epi[df_epi.apply(lambda row: row.astype(str).str.contains(search_epi, case=False, na=False).any(), axis=1)]
+            
         if sel_epi_zone != "All Zones" and zone_col:
             df_epi = df_epi[df_epi[zone_col].astype(str) == sel_epi_zone]
+            
+        if len(epi_date_range) == 2:
+            upload_col = next((c for c in df_epi.columns if "Upload" in str(c)), None)
+            if upload_col:
+                # Convert the Epicollect string dates into Python datetime objects for perfect math filtering
+                temp_dates = pd.to_datetime(df_epi[upload_col], errors='coerce').dt.date
+                df_epi = df_epi[(temp_dates >= epi_date_range[0]) & (temp_dates <= epi_date_range[1])]
 
         st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_epi)} Entries</div>", unsafe_allow_html=True)
         
-        # 6. Display Table with Visual Config (Images and Links)
+        # 6. Display Table
         st.dataframe(df_epi, column_config=col_config, use_container_width=True, hide_index=True)
         
         st.download_button(
