@@ -2234,9 +2234,9 @@ with tab9:
         df_epi = df_epi_raw.copy()
         project_slug = "amc-ntep-initial-tb-patient-home-visit-form"
         
-        # 1. Dynamically find Zone, Location, and Photo columns based on your form
+        # 1. Dynamically find Zone, Location, and Photo columns
         zone_col = next((c for c in df_epi.columns if "zone" in str(c).lower()), None)
-        loc_col = next((c for c in df_epi.columns if "location" in str(c).lower() or "lat" in str(c).lower()), None)
+        loc_col = "HOME VISIT LOCATION" if "HOME VISIT LOCATION" in df_epi.columns else next((c for c in df_epi.columns if "location" in str(c).lower()), None)
         photo_col = next((c for c in df_epi.columns if "photo" in str(c).lower() or "image" in str(c).lower()), None)
         
         # 2. UI Layout for Filters
@@ -2262,27 +2262,28 @@ with tab9:
         col_config = {}
         
         if photo_col:
-            # Convert Epicollect filename to full rendering image URL
+            # 🎯 FIX: Epicollect forces a secure download header. 
+            # We convert this into a beautiful clickable button so you can instantly view/download it.
             df_epi[photo_col] = df_epi[photo_col].apply(
                 lambda x: f"https://five.epicollect.net/api/export/media/{project_slug}?type=photo&format=entry_original&name={x}" 
                 if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
             )
-            col_config[photo_col] = st.column_config.ImageColumn("📸 Visit Photo", help="Geotagged Photo from App")
+            col_config[photo_col] = st.column_config.LinkColumn("📸 Visit Photo", display_text="🖼️ View / Download Photo")
             
         if loc_col:
-            # Extract Lat/Lon and create a 1-tap Google Maps Link
+            # 🎯 FIX: Bulletproof Google Maps URL format that guarantees a red pin drops on the location
             df_epi['Map Link'] = df_epi[loc_col].apply(
-                lambda x: f"https://www.google.com/maps/search/?api=1&query={str(x).replace(' ', '')}" 
-                if pd.notna(x) and str(x).strip() != "" else None
+                lambda x: f"https://maps.google.com/?q={str(x).replace(' ', '')}" 
+                if pd.notna(x) and str(x).strip() != "" and ',' in str(x) else None
             )
-            col_config['Map Link'] = st.column_config.LinkColumn("📍 Map Link", display_text="📍 View on Map")
+            col_config['Map Link'] = st.column_config.LinkColumn("📍 Map Link", display_text="🗺️ Open Map Location")
 
         st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_epi)} Entries</div>", unsafe_allow_html=True)
         
         # 5. Display Table with Visual Config
         st.dataframe(df_epi, column_config=col_config, use_container_width=True, hide_index=True)
         
-        # 6. Excel Download (Raw URL formats are preserved for Excel exports)
+        # 6. Excel Download
         st.download_button(
             label="📥 Download Home Visit Data (Excel)",
             data=convert_df_to_excel(df_epi, "Home_Visits"),
