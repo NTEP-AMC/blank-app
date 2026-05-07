@@ -2217,17 +2217,34 @@ with tab9:
     def load_epicollect_data(slug):
         import urllib.request
         import io
-        url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv"
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                csv_data = response.read()
-            df = pd.read_csv(io.BytesIO(csv_data), dtype=str)
-            cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'created_at', 'uploaded_at', 'title']
-            df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
-            return df
-        except Exception as e:
-            return pd.DataFrame()
+        
+        all_dfs = []
+        page = 1
+        
+        # 🎯 Pagination Engine: Automatically loops to fetch 1000 records at a time (fixes the 50 limit!)
+        while True:
+            url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&per_page=1000&page={page}"
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    csv_data = response.read()
+                
+                df = pd.read_csv(io.BytesIO(csv_data), dtype=str)
+                if df.empty: break
+                
+                cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'created_at', 'uploaded_at', 'title']
+                df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
+                
+                all_dfs.append(df)
+                
+                # If we got less than 1000 records, it means we hit the final page
+                if len(df) < 1000: break
+                page += 1
+            except Exception as e:
+                break
+                
+        if not all_dfs: return pd.DataFrame()
+        return pd.concat(all_dfs, ignore_index=True)
 
     with st.spinner(f"Fetching Live Entries for {sel_proj_name}..."):
         df_epi_raw = load_epicollect_data(sel_slug)
@@ -2248,9 +2265,9 @@ with tab9:
             new_cols[c] = clean_name
         df_epi = df_epi.rename(columns=new_cols)
         
-        # 2. Find Latitude and Longitude to make a Google Maps Link
-        lat_col = next((c for c in df_epi.columns if "Lat" in str(c) and "Location" in str(c)), None)
-        lon_col = next((c for c in df_epi.columns if "Long" in str(c) and "Location" in str(c)), None)
+        # 2. Smarter Latitude/Longitude Finder (Fixes truncated "LOCATI" names)
+        lat_col = next((c for c in df_epi.columns if "Lat" in str(c)), None)
+        lon_col = next((c for c in df_epi.columns if "Long" in str(c) or "Lon" in str(c)), None)
         
         if lat_col and lon_col:
             df_epi['📍 Google Map'] = df_epi.apply(
@@ -2259,19 +2276,18 @@ with tab9:
                 axis=1
             )
             col_config['📍 Google Map'] = st.column_config.LinkColumn("📍 Google Map", display_text="🗺️ Open Map")
-            # Hide the raw lat/lon columns to make the table cleaner
             df_epi = df_epi.drop(columns=[lat_col, lon_col])
 
-        # 3. Find Photo columns and configure ImageColumn
-        photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
-        for p_col in photo_cols:
-            # Convert filename to full image URL
-            df_epi[p_col] = df_epi[p_col].apply(
-                lambda x: f"https://five.epicollect.net/api/export/media/{sel_slug}?type=photo&format=entry_original&name={x}" 
-                if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
-            )
-            # Tell Streamlit to render this as an actual Image!
-            col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
+        # 3. Photo Feature ONLY applies to Home Visits
+        if "Home Visit" in sel_proj_name:
+            photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
+            for p_col in photo_cols:
+                # Convert filename to full image URL
+                df_epi[p_col] = df_epi[p_col].apply(
+                    lambda x: f"https://five.epicollect.net/api/export/media/{sel_slug}?type=photo&format=entry_original&name={x}" 
+                    if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
+                )
+                col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
 
         # 4. Filters UI
         st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
