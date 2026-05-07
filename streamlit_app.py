@@ -301,7 +301,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Home Visits"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -2198,96 +2198,110 @@ with tab8:
             st.success("🎉 Excellent! No new adverse outcomes were reported this week compared to last week.")
 
 # ==========================================
-# 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (HOME VISITS)
+# 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
 # ==========================================
 with tab9:
-    st.markdown("<h3 style='color: #8E44AD;'>📱 Initial TB Patient Home Visit (Live Data)</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Live syncing data directly from the Epicollect5 mobile application.</i></div>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #8E44AD;'>📱 Epicollect5 Live Data Sync</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Live syncing data directly from the Epicollect5 mobile applications.</i></div>", unsafe_allow_html=True)
+
+    # 🎯 Multi-Project Selector
+    projects = {
+        "🏠 Initial TB Patient Home Visit": "amc-ntep-initial-tb-patient-home-visit-form",
+        "🏥 Private Notification Facilities": "private-notification-facilities"
+    }
+    
+    sel_proj_name = st.selectbox("📌 Select Project to View:", list(projects.keys()))
+    sel_slug = projects[sel_proj_name]
 
     @st.cache_data(ttl=300, show_spinner=False)
-    def load_epicollect_data():
+    def load_epicollect_data(slug):
         import urllib.request
         import io
-        
-        project_slug = "amc-ntep-initial-tb-patient-home-visit-form"
-        url = f"https://five.epicollect.net/api/export/entries/{project_slug}?format=csv"
-        
+        url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=30) as response:
                 csv_data = response.read()
             df = pd.read_csv(io.BytesIO(csv_data), dtype=str)
-            
-            cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch']
+            cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'created_at', 'uploaded_at', 'title']
             df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
-            
             return df
         except Exception as e:
             return pd.DataFrame()
 
-    with st.spinner("Fetching Live Entries from Epicollect5..."):
-        df_epi_raw = load_epicollect_data()
+    with st.spinner(f"Fetching Live Entries for {sel_proj_name}..."):
+        df_epi_raw = load_epicollect_data(sel_slug)
 
     if df_epi_raw.empty:
         st.warning("⚠️ No data found. Make sure your Epicollect5 project access is set to 'Public'.")
     else:
         df_epi = df_epi_raw.copy()
-        project_slug = "amc-ntep-initial-tb-patient-home-visit-form"
         
-        # 1. Dynamically find Zone, Location, and Photo columns
-        zone_col = next((c for c in df_epi.columns if "zone" in str(c).lower()), None)
-        loc_col = "HOME VISIT LOCATION" if "HOME VISIT LOCATION" in df_epi.columns else next((c for c in df_epi.columns if "location" in str(c).lower()), None)
-        photo_col = next((c for c in df_epi.columns if "photo" in str(c).lower() or "image" in str(c).lower()), None)
+        # --- DYNAMIC COLUMN CLEANER AND CONFIG BUILDER ---
+        col_config = {}
         
-        # 2. UI Layout for Filters
+        # 1. Clean messy Epicollect column names (e.g. "40_Geotagged_Visit_P" -> "Geotagged Visit P")
+        import re
+        new_cols = {}
+        for c in df_epi.columns:
+            clean_name = re.sub(r'^\d+_?', '', c).replace('_', ' ').strip().title()
+            new_cols[c] = clean_name
+        df_epi = df_epi.rename(columns=new_cols)
+        
+        # 2. Find Latitude and Longitude to make a Google Maps Link
+        lat_col = next((c for c in df_epi.columns if "Lat" in str(c) and "Location" in str(c)), None)
+        lon_col = next((c for c in df_epi.columns if "Long" in str(c) and "Location" in str(c)), None)
+        
+        if lat_col and lon_col:
+            df_epi['📍 Google Map'] = df_epi.apply(
+                lambda r: f"https://www.google.com/maps?q={r[lat_col]},{r[lon_col]}" 
+                if pd.notna(r[lat_col]) and pd.notna(r[lon_col]) and str(r[lat_col]).strip() != "" else None, 
+                axis=1
+            )
+            col_config['📍 Google Map'] = st.column_config.LinkColumn("📍 Google Map", display_text="🗺️ Open Map")
+            # Hide the raw lat/lon columns to make the table cleaner
+            df_epi = df_epi.drop(columns=[lat_col, lon_col])
+
+        # 3. Find Photo columns and configure ImageColumn
+        photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
+        for p_col in photo_cols:
+            # Convert filename to full image URL
+            df_epi[p_col] = df_epi[p_col].apply(
+                lambda x: f"https://five.epicollect.net/api/export/media/{sel_slug}?type=photo&format=entry_original&name={x}" 
+                if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
+            )
+            # Tell Streamlit to render this as an actual Image!
+            col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
+
+        # 4. Filters UI
         st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
         
         fc1, fc2 = st.columns(2)
         with fc1:
-            search_epi = st.text_input("🔍 Search Submissions (Name, ID, etc.)", "", key="search_epi")
+            search_epi = st.text_input("🔍 Search Submissions (Name, ID, etc.)", "", key=f"search_epi_{sel_slug}")
         with fc2:
+            zone_col = next((c for c in df_epi.columns if "Zone" in str(c)), None)
             if zone_col:
                 zones = ["All Zones"] + sorted([str(z) for z in df_epi[zone_col].dropna().unique() if str(z).strip() != ""])
-                sel_epi_zone = st.selectbox("🏢 Filter Zone", zones)
+                sel_epi_zone = st.selectbox("🏢 Filter Zone", zones, key=f"zone_{sel_slug}")
             else:
                 sel_epi_zone = "All Zones"
 
-        # 3. Apply Filters
+        # 5. Apply Filters
         if search_epi:
             df_epi = df_epi[df_epi.apply(lambda row: row.astype(str).str.contains(search_epi, case=False, na=False).any(), axis=1)]
         if sel_epi_zone != "All Zones" and zone_col:
             df_epi = df_epi[df_epi[zone_col].astype(str) == sel_epi_zone]
 
-        # 4. Format Photos and Location Links
-        col_config = {}
-        
-        if photo_col:
-            # 🎯 FIX: Epicollect forces a secure download header. 
-            # We convert this into a beautiful clickable button so you can instantly view/download it.
-            df_epi[photo_col] = df_epi[photo_col].apply(
-                lambda x: f"https://five.epicollect.net/api/export/media/{project_slug}?type=photo&format=entry_original&name={x}" 
-                if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
-            )
-            col_config[photo_col] = st.column_config.LinkColumn("📸 Visit Photo", display_text="🖼️ View / Download Photo")
-            
-        if loc_col:
-            # 🎯 FIX: Bulletproof Google Maps URL format that guarantees a red pin drops on the location
-            df_epi['Map Link'] = df_epi[loc_col].apply(
-                lambda x: f"https://maps.google.com/?q={str(x).replace(' ', '')}" 
-                if pd.notna(x) and str(x).strip() != "" and ',' in str(x) else None
-            )
-            col_config['Map Link'] = st.column_config.LinkColumn("📍 Map Link", display_text="🗺️ Open Map Location")
-
         st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_epi)} Entries</div>", unsafe_allow_html=True)
         
-        # 5. Display Table with Visual Config
+        # 6. Display Table with Visual Config (Images and Links)
         st.dataframe(df_epi, column_config=col_config, use_container_width=True, hide_index=True)
         
-        # 6. Excel Download
         st.download_button(
-            label="📥 Download Home Visit Data (Excel)",
-            data=convert_df_to_excel(df_epi, "Home_Visits"),
-            file_name="AMC_NTEP_Home_Visits.xlsx",
+            label=f"📥 Download {sel_proj_name} Data (Excel)",
+            data=convert_df_to_excel(df_epi, "Live_Data"),
+            file_name=f"{sel_slug}_Live_Data.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key='dl_epi'
+            key=f'dl_epi_{sel_slug}'
         )
