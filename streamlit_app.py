@@ -301,7 +301,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Home Visits"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -2196,3 +2196,65 @@ with tab8:
                 st.info("👍 No patients match the selected filters.")
         else:
             st.success("🎉 Excellent! No new adverse outcomes were reported this week compared to last week.")
+
+# ==========================================
+# 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (HOME VISITS)
+# ==========================================
+with tab9:
+    st.markdown("<h3 style='color: #8E44AD;'>📱 Initial TB Patient Home Visit (Live Data)</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Live syncing data directly from the Epicollect5 mobile application.</i></div>", unsafe_allow_html=True)
+
+    @st.cache_data(ttl=300, show_spinner=False) # Auto-refreshes every 5 minutes
+    def load_epicollect_data():
+        import urllib.request
+        import io
+        
+        # 🎯 Your exact Epicollect5 project slug from the screenshot
+        project_slug = "amc-ntep-initial-tb-patient-home-visit-form"
+        url = f"https://five.epicollect.net/api/export/entries/{project_slug}?format=csv"
+        
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                csv_data = response.read()
+            df = pd.read_csv(io.BytesIO(csv_data), dtype=str)
+            
+            # Clean up the system columns that Epicollect adds (optional, makes it cleaner)
+            cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch']
+            df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
+            
+            return df
+        except Exception as e:
+            return pd.DataFrame()
+
+    with st.spinner("Fetching Live Entries from Epicollect5..."):
+        df_epi = load_epicollect_data()
+
+    if df_epi.empty:
+        st.warning("⚠️ No data found. (Note: If your Epicollect5 project is set to 'Private', the public API cannot read it. It must be 'Public' for this direct sync to work).")
+    else:
+        # 1. High-level metric
+        st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
+        
+        # 2. Add Search Bar
+        search_epi = st.text_input("🔍 Search Submissions (Name, ID, etc.)", "", key="search_epi")
+        
+        if search_epi:
+            # Filters the dataframe across all columns based on search query
+            df_display_epi = df_epi[df_epi.apply(lambda row: row.astype(str).str.contains(search_epi, case=False, na=False).any(), axis=1)]
+        else:
+            df_display_epi = df_epi.copy()
+            
+        st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_display_epi)} Entries</div>", unsafe_allow_html=True)
+        
+        # 3. Display the Table
+        st.dataframe(df_display_epi, use_container_width=True, hide_index=True)
+        
+        # 4. Excel Download
+        st.download_button(
+            label="📥 Download Home Visit Data (Excel)",
+            data=convert_df_to_excel(df_display_epi, "Home_Visits"),
+            file_name="AMC_NTEP_Home_Visits.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key='dl_epi'
+        )
