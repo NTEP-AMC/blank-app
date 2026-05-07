@@ -2215,21 +2215,32 @@ with tab9:
 
     @st.cache_data(ttl=300, show_spinner=False)
     def load_epicollect_data(slug):
-        import urllib.request
+        import requests
         import io
         
         all_dfs = []
         page = 1
+        error_message = ""
         
-        # 🎯 Pagination Engine: Automatically loops to fetch 1000 records at a time (fixes the 50 limit!)
+        # 🎯 Advanced Pagination Engine with Strict Error Surfacing
         while True:
             url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&per_page=1000&page={page}"
             try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    csv_data = response.read()
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                response = requests.get(url, headers=headers, timeout=30)
                 
-                df = pd.read_csv(io.BytesIO(csv_data), dtype=str)
+                # 🔥 Catch exact server blocks!
+                if response.status_code == 403 or response.status_code == 401:
+                    error_message = f"**HTTP {response.status_code} Forbidden:** Epicollect5 is blocking access. Your project '{slug}' is set to PRIVATE. You must go to Epicollect5 -> Project Details -> Access -> Set to 'Public'."
+                    break
+                elif response.status_code == 404:
+                    error_message = f"**HTTP 404 Not Found:** The project slug '{slug}' does not exist."
+                    break
+                elif response.status_code != 200:
+                    error_message = f"**HTTP {response.status_code}:** Failed to fetch data from Epicollect5 API."
+                    break
+                
+                df = pd.read_csv(io.StringIO(response.text), dtype=str)
                 if df.empty: break
                 
                 cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'created_at', 'uploaded_at', 'title']
@@ -2240,24 +2251,29 @@ with tab9:
                 # If we got less than 1000 records, it means we hit the final page
                 if len(df) < 1000: break
                 page += 1
+                
             except Exception as e:
+                error_message = f"**Connection Error:** {str(e)}"
                 break
                 
-        if not all_dfs: return pd.DataFrame()
-        return pd.concat(all_dfs, ignore_index=True)
+        if not all_dfs: return pd.DataFrame(), error_message
+        return pd.concat(all_dfs, ignore_index=True), ""
 
     with st.spinner(f"Fetching Live Entries for {sel_proj_name}..."):
-        df_epi_raw = load_epicollect_data(sel_slug)
+        df_epi_raw, fetch_error = load_epicollect_data(sel_slug)
 
     if df_epi_raw.empty:
-        st.warning("⚠️ No data found. Make sure your Epicollect5 project access is set to 'Public'.")
+        if fetch_error:
+            st.error(fetch_error) # Prints the EXACT reason it failed!
+        else:
+            st.warning("⚠️ No data found for this project.")
     else:
         df_epi = df_epi_raw.copy()
         
         # --- DYNAMIC COLUMN CLEANER AND CONFIG BUILDER ---
         col_config = {}
         
-        # 1. Clean messy Epicollect column names (e.g. "40_Geotagged_Visit_P" -> "Geotagged Visit P")
+        # 1. Clean messy Epicollect column names
         import re
         new_cols = {}
         for c in df_epi.columns:
@@ -2282,7 +2298,6 @@ with tab9:
         if "Home Visit" in sel_proj_name:
             photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
             for p_col in photo_cols:
-                # Convert filename to full image URL
                 df_epi[p_col] = df_epi[p_col].apply(
                     lambda x: f"https://five.epicollect.net/api/export/media/{sel_slug}?type=photo&format=entry_original&name={x}" 
                     if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
