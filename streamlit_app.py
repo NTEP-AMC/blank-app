@@ -358,23 +358,33 @@ with tab1:
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    # 👇👇👇 UNIVERSAL CLINICAL STATUS ENGINE 👇👇👇
+    # 👇👇👇 BULLETPROOF UNIVERSAL CLINICAL STATUS ENGINE 👇👇👇
     if not df_disp.empty:
         with st.spinner("Calculating Universal Clinical Status & Treatment Days..."):
-            # 1. Safely pull dates across ALL registers (fills with NaT if a register doesn't have the column)
-            diag_dt_calc = pd.to_datetime(df_disp.get('Diagnosis Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
-            init_dt_calc = pd.to_datetime(df_disp.get('Initiation Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
-            out_dt_calc = pd.to_datetime(df_disp.get('Outcome Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
+            
+            # 1. Safely pull dates ensuring PERFECT index alignment (Fixes the N/A bug)
+            def get_date_col(col_name):
+                if col_name in df_disp.columns:
+                    return pd.to_datetime(df_disp[col_name], errors='coerce')
+                return pd.Series([pd.NaT]*len(df_disp), index=df_disp.index)
+
+            diag_dt_calc = get_date_col('Diagnosis Date')
+            init_dt_calc = get_date_col('Initiation Date')
+            out_dt_calc = get_date_col('Outcome Date')
             today_calc = pd.Timestamp.today().normalize()
 
             # 2. Extract Outcome strictly and check for blanks
             blank_outcomes = ["", "NAN", "N/A", "NONE", "<NA>", "NULL", "NAT"]
-            outcome_series = df_disp.get('Treatment Outcome', pd.Series(['']*len(df_disp))).astype(str).str.strip().str.upper()
+            if 'Treatment Outcome' in df_disp.columns:
+                outcome_series = df_disp['Treatment Outcome'].astype(str).str.strip().str.upper()
+            else:
+                outcome_series = pd.Series([""] * len(df_disp), index=df_disp.index)
+            
             has_outcome_calc = ~outcome_series.isin(blank_outcomes)
 
             # Initialize tracking columns
-            df_disp['Treatment Status'] = "N/A"
-            df_disp['On Treatment Days'] = "N/A"
+            df_disp['Treatment Status'] = ""
+            df_disp['On Treatment Days'] = ""
 
             # 🔴 RULE 1: Not Put On (Outcome MUST be Blank & Initiation MUST be Blank)
             df_disp.loc[(~has_outcome_calc) & init_dt_calc.isna(), 'Treatment Status'] = "Not Put On"
@@ -385,11 +395,15 @@ with tab1:
             # 🟢 RULE 3: Treatment Given (Initiation Date Exists)
             df_disp.loc[init_dt_calc.notna(), 'Treatment Status'] = "Treatment Given"
 
-            # ⏳ RULE 4: On Treatment Days (Diag & Init exist, Outcome Date Future, Outcome is Blank)
-            otd_mask = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (out_dt_calc > today_calc) & (~has_outcome_calc)
+            # ⏳ RULE 4: On Treatment Days (Diag & Init exist, Outcome Date exists, Outcome is Blank) -> Future restriction removed!
+            otd_mask = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (~has_outcome_calc)
             if otd_mask.any():
                 days_diff = (out_dt_calc[otd_mask] - init_dt_calc[otd_mask]).dt.days.astype(int).astype(str)
                 df_disp.loc[otd_mask, 'On Treatment Days'] = days_diff + " Days"
+
+            # ✨ Visual Cleaner: Strip "None" out of Extend Status so it shows properly Blank!
+            if 'Extend Status' in df_disp.columns:
+                df_disp['Extend Status'] = df_disp['Extend Status'].astype(str).replace(['None', 'nan', 'NaN', 'N/A', '<NA>'], '')
 
             # 3. Clean UI Reordering (Forces columns to sit next to Treatment Outcome)
             cols = df_disp.columns.tolist()
