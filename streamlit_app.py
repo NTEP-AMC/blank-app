@@ -358,36 +358,40 @@ with tab1:
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    # 👇👇👇 NEW CLINICAL STATUS ENGINE INTEGRATED HERE 👇👇👇
+    # 👇👇👇 UNIVERSAL CLINICAL STATUS ENGINE 👇👇👇
     if not df_disp.empty:
-        with st.spinner("Calculating Clinical Status & Treatment Days..."):
-            diag_dt_calc = pd.to_datetime(df_disp['Diagnosis Date'], errors='coerce')
-            init_dt_calc = pd.to_datetime(df_disp['Initiation Date'], errors='coerce')
-            out_dt_calc = pd.to_datetime(df_disp['Outcome Date'], errors='coerce')
+        with st.spinner("Calculating Universal Clinical Status & Treatment Days..."):
+            # 1. Safely pull dates across ALL registers (fills with NaT if a register doesn't have the column)
+            diag_dt_calc = pd.to_datetime(df_disp.get('Diagnosis Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
+            init_dt_calc = pd.to_datetime(df_disp.get('Initiation Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
+            out_dt_calc = pd.to_datetime(df_disp.get('Outcome Date', pd.Series([pd.NaT]*len(df_disp))), errors='coerce')
             today_calc = pd.Timestamp.today().normalize()
 
-            blank_outcomes = ["", "NAN", "N/A", "NONE", "<NA>", "NULL"]
-            has_outcome_calc = ~df_disp['Treatment Outcome'].astype(str).str.strip().str.upper().isin(blank_outcomes)
+            # 2. Extract Outcome strictly and check for blanks
+            blank_outcomes = ["", "NAN", "N/A", "NONE", "<NA>", "NULL", "NAT"]
+            outcome_series = df_disp.get('Treatment Outcome', pd.Series(['']*len(df_disp))).astype(str).str.strip().str.upper()
+            has_outcome_calc = ~outcome_series.isin(blank_outcomes)
 
+            # Initialize tracking columns
             df_disp['Treatment Status'] = "N/A"
             df_disp['On Treatment Days'] = "N/A"
 
-            # 🔴 RULE 1: Not Put On (Outcome Blank & Initiation Blank)
+            # 🔴 RULE 1: Not Put On (Outcome MUST be Blank & Initiation MUST be Blank)
             df_disp.loc[(~has_outcome_calc) & init_dt_calc.isna(), 'Treatment Status'] = "Not Put On"
 
-            # 🔴 RULE 2: Initial Defaulter (Diag exists, Init Blank, Outcome Date is Past/Today, Outcome Exists)
+            # 🔴 RULE 2: Initial Defaulter (Diag exists, Init Blank, Outcome Date is Past/Today, and Outcome MUST BE FILLED)
             df_disp.loc[diag_dt_calc.notna() & init_dt_calc.isna() & out_dt_calc.notna() & (out_dt_calc <= today_calc) & has_outcome_calc, 'Treatment Status'] = "Initial Defaulter"
 
             # 🟢 RULE 3: Treatment Given (Initiation Date Exists)
             df_disp.loc[init_dt_calc.notna(), 'Treatment Status'] = "Treatment Given"
 
-            # ⏳ RULE 4: On Treatment Days (Diag & Init exist, Outcome Date Future, Outcome Blank)
+            # ⏳ RULE 4: On Treatment Days (Diag & Init exist, Outcome Date Future, Outcome is Blank)
             otd_mask = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (out_dt_calc > today_calc) & (~has_outcome_calc)
             if otd_mask.any():
                 days_diff = (out_dt_calc[otd_mask] - init_dt_calc[otd_mask]).dt.days.astype(int).astype(str)
                 df_disp.loc[otd_mask, 'On Treatment Days'] = days_diff + " Days"
 
-            # Reorder columns to put them perfectly next to Treatment Outcome
+            # 3. Clean UI Reordering (Forces columns to sit next to Treatment Outcome)
             cols = df_disp.columns.tolist()
             if 'Treatment Status' in cols: cols.remove('Treatment Status')
             if 'On Treatment Days' in cols: cols.remove('On Treatment Days')
@@ -396,7 +400,7 @@ with tab1:
                 cols.insert(insert_idx, 'Treatment Status')
                 cols.insert(insert_idx + 1, 'On Treatment Days')
                 df_disp = df_disp[cols]
-    # 👆👆👆 END NEW CLINICAL STATUS ENGINE 👆👆👆
+    # 👆👆👆 END UNIVERSAL CLINICAL STATUS ENGINE 👆👆👆
 
     st.markdown(f"<div style='color: #2E86C1; margin-bottom: 10px; font-weight: bold;'>Found {len(df_disp)} Patient(s)</div>", unsafe_allow_html=True)
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
