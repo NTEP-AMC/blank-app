@@ -2033,29 +2033,26 @@ with tab8:
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
                 
                 del df_raw
-                
-                # 🎯 Deduplicate columns just in case
                 df = df.loc[:, ~df.columns.duplicated()]
                 
                 c_map = {}
                 
-                # 🎯 STRICT COLUMN INDEX MAPPING (Ignores Header Text)
-                if len(df.columns) > 4:
-                    c_map[df.columns[2]] = 'TB Unit'       # Column C (Index 2)
-                    c_map[df.columns[3]] = 'Facility Type' # Column D (Index 3)
-                    c_map[df.columns[4]] = 'PHI'           # Column E (Index 4)
+                # 🎯 STRICT COLUMN INDEX MAPPING (Ignores confusing Header Texts)
+                if len(df.columns) > 64:
+                    c_map[df.columns[2]] = 'TB Unit'          # Column C (Index 2)
+                    c_map[df.columns[3]] = 'Facility Type'    # Column D (Index 3)
+                    c_map[df.columns[4]] = 'PHI'              # Column E (Index 4)
+                    c_map[df.columns[64]] = 'Initiation Date' # Column BM (Index 64)
                 
-                # 🎯 Map the rest dynamically based on text
+                # 🎯 Map the rest dynamically
                 for c in df.columns:
-                    if c in c_map: continue # Skip if we already mapped it by exact index above
-                    
+                    if c in c_map: continue 
                     cu = str(c).upper()
                     if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
                     elif "PATIENT" in cu and "NAME" in cu: c_map[c] = 'Patient Name'
                     elif "TYPE" in cu and "CASE" in cu: c_map[c] = 'Type of Case'
                     elif "REGIMEN" in cu: c_map[c] = 'TB_regimen'
                     elif "DIAGNOSIS" in cu and "DATE" in cu: c_map[c] = 'Diagnosis Date'
-                    elif "INITIATION" in cu and "DATE" in cu: c_map[c] = 'Initiation Date'
                     elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
                     elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
                 
