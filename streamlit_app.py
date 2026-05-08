@@ -386,12 +386,14 @@ with tab1:
                 has_outcome = pd.Series([False]*len(df_disp), index=df_disp.index)
 
             # Initialize empty columns
-            df_disp['Treatment Status'] = ""
-            df_disp['On Treatment Days'] = ""
+            df_disp['Treatment Status'] = pd.NA
+            df_disp['On Treatment Days'] = pd.NA
 
             # 3. Notification Register Mask (Only target patients who belong to Notification)
-            pend_str = df_disp.get('Pending Status', pd.Series([''], index=df_disp.index)).fillna("").astype(str).str.upper()
-            ext_str = df_disp.get('Extend Status', pd.Series([''], index=df_disp.index)).fillna("").astype(str).str.upper()
+            # 🎯 FIX: Using scalar "" for empty series to prevent Pandas crash
+            pend_str = df_disp.get('Pending Status', pd.Series("", index=df_disp.index)).fillna("").astype(str).str.upper()
+            ext_str = df_disp.get('Extend Status', pd.Series("", index=df_disp.index)).fillna("").astype(str).str.upper()
+            
             is_notif = pend_str.str.contains("OUTCOME|NOT PUT ON", na=False) | ext_str.str.contains("EXTENDED", na=False) | has_outcome | init_dt.notna()
 
             # --- APPLY STRICT CLINICAL RULES ---
@@ -401,8 +403,8 @@ with tab1:
             df_disp.loc[mask_npo, 'Treatment Status'] = "Not Put On"
             df_disp.loc[mask_npo, 'On Treatment Days'] = "Not Put On"
 
-            # 🔴 RULE 2: Initial Defaulter (Diag Exists, Init Blank, Outcome Date Past/Today, AND OUTCOME MUST BE PRESENT)
-            mask_defaulter = is_notif & diag_dt.notna() & init_dt.isna() & out_dt.notna() & (out_dt <= today) & has_outcome
+            # 🔴 RULE 2: Initial Defaulter (Diag Exists, Init Blank, AND OUTCOME MUST BE PRESENT)
+            mask_defaulter = is_notif & diag_dt.notna() & init_dt.isna() & has_outcome
             df_disp.loc[mask_defaulter, 'Treatment Status'] = "Initial Defaulter"
 
             # 🟢 RULE 3: Treatment Given (Init Date Exists)
@@ -414,6 +416,12 @@ with tab1:
             if mask_days.any():
                 days_val = (out_dt[mask_days] - init_dt[mask_days]).dt.days.astype(int).astype(str) + " Days"
                 df_disp.loc[mask_days, 'On Treatment Days'] = days_val
+
+            # ⏳ RULE 5: On Treatment Days (Outcome Date is completely missing, calculate to Today)
+            mask_days_today = is_notif & diag_dt.notna() & init_dt.notna() & out_dt.isna() & (~has_outcome)
+            if mask_days_today.any():
+                days_today_val = (today - init_dt[mask_days_today]).dt.days.astype(int).astype(str) + " Days"
+                df_disp.loc[mask_days_today, 'On Treatment Days'] = days_today_val
 
             # --- DYNAMIC PENDING STATUS CLEANUP ---
             if 'Pending Status' in df_disp.columns:
