@@ -451,7 +451,6 @@ with tab1:
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
     if not df_disp.empty:
         st.download_button("📥 Download Master Excel", convert_df_to_excel(df_disp, "Master_Report"), "Master_Report.xlsx", key='dl1')
-
 # ==========================================
 # 🟢 TAB 2: DAILY COMPARISON (NO DATES DISPLAYED)
 # ==========================================
