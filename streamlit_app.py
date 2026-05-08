@@ -358,14 +358,18 @@ with tab1:
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    # 👇👇👇 BULLETPROOF UNIVERSAL CLINICAL STATUS ENGINE 👇👇👇
+    # 👇👇👇 BULLETPROOF NOTIFICATION REGISTER ENGINE 👇👇👇
     if not df_disp.empty:
-        with st.spinner("Calculating Universal Clinical Status & Treatment Days..."):
+        with st.spinner("Calculating Clinical Status from Notification Register..."):
             
-            # ✨ VISUAL & LOGIC CLEANER: Destroy all literal Colab strings so they become true blanks!
-            df_disp = df_disp.replace(['None', 'nan', 'NaN', 'N/A', '<NA>', 'NaT'], '')
+            # 1. 🚨 BRUTE FORCE STRING CLEANER: Destroy all fake "None" strings so Pandas sees true blanks!
+            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']:
+                if c in df_disp.columns:
+                    df_disp[c] = df_disp[c].astype(str).str.strip().str.upper()
+                    # Replaces text with a true Python Null (pd.NA)
+                    df_disp[c] = df_disp[c].replace(['NONE', 'NAN', 'NAT', 'NULL', '<NA>', 'N/A', ''], pd.NA)
             
-            # 1. Safely pull dates ensuring PERFECT index alignment
+            # 2. Extract strictly aligned columns
             def get_date_col(col_name):
                 if col_name in df_disp.columns:
                     return pd.to_datetime(df_disp[col_name], errors='coerce')
@@ -376,46 +380,51 @@ with tab1:
             out_dt_calc = get_date_col('Outcome Date')
             today_calc = pd.Timestamp.today().normalize()
 
-            # 2. Extract Outcome strictly
+            # Check if Outcome has actual text (because we cleaned it, .notna() works flawlessly)
             if 'Treatment Outcome' in df_disp.columns:
-                outcome_series = df_disp['Treatment Outcome'].astype(str).str.strip().str.upper()
+                has_outcome_calc = df_disp['Treatment Outcome'].notna()
             else:
-                outcome_series = pd.Series([""] * len(df_disp), index=df_disp.index)
-            
-            # 🎯 MASSIVE FIX: Explicitly exclude "N/A" and "NONE" so blank outcomes are truly detected as Blank!
-            blank_outcomes = ["", "NAN", "N/A", "NONE", "<NA>", "NULL", "NAT"]
-            has_outcome_calc = ~outcome_series.isin(blank_outcomes)
+                has_outcome_calc = pd.Series([False]*len(df_disp), index=df_disp.index)
 
-            # Initialize tracking columns
-            df_disp['Treatment Status'] = ""
-            df_disp['On Treatment Days'] = ""
+            # Initialize Tracking Columns
+            df_disp['Treatment Status'] = pd.NA
+            df_disp['On Treatment Days'] = pd.NA
 
-            # 🔴 RULE 1: Not Put On (Outcome MUST be Blank & Initiation MUST be Blank)
+            # 🔴 RULE 1: Not Put On (Outcome Blank & Initiation Blank)
             df_disp.loc[(~has_outcome_calc) & init_dt_calc.isna(), 'Treatment Status'] = "Not Put On"
 
-            # 🔴 RULE 2: Initial Defaulter (Diag exists, Init Blank, Outcome Date is Past/Today, AND Outcome MUST BE FILLED)
-            df_disp.loc[diag_dt_calc.notna() & init_dt_calc.isna() & out_dt_calc.notna() & (out_dt_calc <= today_calc) & has_outcome_calc, 'Treatment Status'] = "Initial Defaulter"
+            # 🔴 RULE 2: Initial Defaulter (Diag exists, Init Blank, AND Outcome MUST BE FILLED)
+            is_initial_defaulter = diag_dt_calc.notna() & init_dt_calc.isna() & has_outcome_calc
+            df_disp.loc[is_initial_defaulter, 'Treatment Status'] = "Initial Defaulter"
+
+            # ✨ UI FIX: Actively ERASE "Not Put On" from Pending Status for Initial Defaulters!
+            if 'Pending Status' in df_disp.columns:
+                # Remove the phrase, clean up double + signs, and strip the edges
+                cleaned_status = df_disp.loc[is_initial_defaulter, 'Pending Status'].astype(str).str.replace('Not Put On', '', regex=False)
+                cleaned_status = cleaned_status.str.replace(r'\+\s*\+', '+', regex=True).str.strip(' +')
+                df_disp.loc[is_initial_defaulter, 'Pending Status'] = cleaned_status
 
             # 🟢 RULE 3: Treatment Given (Initiation Date Exists)
             df_disp.loc[init_dt_calc.notna(), 'Treatment Status'] = "Treatment Given"
 
-            # ⏳ RULE 4: On Treatment Days (If Outcome Date exists and is future)
+            # ⏳ RULE 4: On Treatment Days (If Outcome Date exists and is future, calculate to Outcome Date)
             otd_mask_future = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (out_dt_calc > today_calc) & (~has_outcome_calc)
             if otd_mask_future.any():
                 days_diff_future = (out_dt_calc[otd_mask_future] - init_dt_calc[otd_mask_future]).dt.days.astype(int).astype(str)
                 df_disp.loc[otd_mask_future, 'On Treatment Days'] = days_diff_future + " Days"
                 
-            # ⏳ RULE 5 (FALLBACK): If Outcome Date is missing but Initiation exists, calculate to TODAY!
+            # ⏳ RULE 5: On Treatment Days (If Outcome Date is blank, calculate to TODAY)
             otd_mask_blank_out = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.isna() & (~has_outcome_calc)
             if otd_mask_blank_out.any():
                 days_diff_today = (today_calc - init_dt_calc[otd_mask_blank_out]).dt.days.astype(int).astype(str)
-                df_disp.loc[otd_mask_blank_out, 'On Treatment Days'] = days_diff_today + " Days (To Today)"
+                df_disp.loc[otd_mask_blank_out, 'On Treatment Days'] = days_diff_today + " Days"
 
-            # ✨ Visual Cleaner: Strip "None" out of Extend Status
+            # 3. Final Visual Cleanup for the UI (Turns pd.NA back into clean blanks for display)
+            df_disp = df_disp.fillna('')
             if 'Extend Status' in df_disp.columns:
                 df_disp['Extend Status'] = df_disp['Extend Status'].astype(str).replace(['None', 'nan', 'NaN', 'N/A', '<NA>'], '')
 
-            # 3. Clean UI Reordering (Forces columns to sit next to Treatment Outcome)
+            # 4. UI Reordering (Forces columns to sit next to Treatment Outcome)
             cols = df_disp.columns.tolist()
             if 'Treatment Status' in cols: cols.remove('Treatment Status')
             if 'On Treatment Days' in cols: cols.remove('On Treatment Days')
@@ -424,7 +433,7 @@ with tab1:
                 cols.insert(insert_idx, 'Treatment Status')
                 cols.insert(insert_idx + 1, 'On Treatment Days')
                 df_disp = df_disp[cols]
-    # 👆👆👆 END UNIVERSAL CLINICAL STATUS ENGINE 👆👆👆
+    # 👆👆👆 END NOTIFICATION REGISTER ENGINE 👆👆👆
 
     st.markdown(f"<div style='color: #2E86C1; margin-bottom: 10px; font-weight: bold;'>Found {len(df_disp)} Patient(s)</div>", unsafe_allow_html=True)
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
