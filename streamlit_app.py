@@ -362,7 +362,7 @@ with tab1:
     if not df_disp.empty:
         with st.spinner("Calculating Universal Clinical Status & Treatment Days..."):
             
-            # ✨ VISUAL & LOGIC CLEANER: Destroy all literal "None" strings from Colab so they become true blanks!
+            # ✨ VISUAL & LOGIC CLEANER: Destroy all literal Colab strings so they become true blanks!
             df_disp = df_disp.replace(['None', 'nan', 'NaN', 'N/A', '<NA>', 'NaT'], '')
             
             # 1. Safely pull dates ensuring PERFECT index alignment
@@ -376,14 +376,15 @@ with tab1:
             out_dt_calc = get_date_col('Outcome Date')
             today_calc = pd.Timestamp.today().normalize()
 
-            # 2. Extract Outcome strictly and check for blanks
+            # 2. Extract Outcome strictly
             if 'Treatment Outcome' in df_disp.columns:
                 outcome_series = df_disp['Treatment Outcome'].astype(str).str.strip().str.upper()
             else:
                 outcome_series = pd.Series([""] * len(df_disp), index=df_disp.index)
             
-            # 🎯 STRICT RULE: Must contain actual text to be considered an available outcome!
-            has_outcome_calc = (outcome_series != "") & (outcome_series != "NONE") & (outcome_series != "NAN")
+            # 🎯 MASSIVE FIX: Explicitly exclude "N/A" and "NONE" so blank outcomes are truly detected as Blank!
+            blank_outcomes = ["", "NAN", "N/A", "NONE", "<NA>", "NULL", "NAT"]
+            has_outcome_calc = ~outcome_series.isin(blank_outcomes)
 
             # Initialize tracking columns
             df_disp['Treatment Status'] = ""
@@ -398,11 +399,21 @@ with tab1:
             # 🟢 RULE 3: Treatment Given (Initiation Date Exists)
             df_disp.loc[init_dt_calc.notna(), 'Treatment Status'] = "Treatment Given"
 
-            # ⏳ RULE 4: On Treatment Days (Diag & Init exist, Outcome Date exists, Outcome is Blank)
-            otd_mask = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (~has_outcome_calc)
-            if otd_mask.any():
-                days_diff = (out_dt_calc[otd_mask] - init_dt_calc[otd_mask]).dt.days.astype(int).astype(str)
-                df_disp.loc[otd_mask, 'On Treatment Days'] = days_diff + " Days"
+            # ⏳ RULE 4: On Treatment Days (If Outcome Date exists and is future)
+            otd_mask_future = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.notna() & (out_dt_calc > today_calc) & (~has_outcome_calc)
+            if otd_mask_future.any():
+                days_diff_future = (out_dt_calc[otd_mask_future] - init_dt_calc[otd_mask_future]).dt.days.astype(int).astype(str)
+                df_disp.loc[otd_mask_future, 'On Treatment Days'] = days_diff_future + " Days"
+                
+            # ⏳ RULE 5 (FALLBACK): If Outcome Date is missing but Initiation exists, calculate to TODAY!
+            otd_mask_blank_out = diag_dt_calc.notna() & init_dt_calc.notna() & out_dt_calc.isna() & (~has_outcome_calc)
+            if otd_mask_blank_out.any():
+                days_diff_today = (today_calc - init_dt_calc[otd_mask_blank_out]).dt.days.astype(int).astype(str)
+                df_disp.loc[otd_mask_blank_out, 'On Treatment Days'] = days_diff_today + " Days (To Today)"
+
+            # ✨ Visual Cleaner: Strip "None" out of Extend Status
+            if 'Extend Status' in df_disp.columns:
+                df_disp['Extend Status'] = df_disp['Extend Status'].astype(str).replace(['None', 'nan', 'NaN', 'N/A', '<NA>'], '')
 
             # 3. Clean UI Reordering (Forces columns to sit next to Treatment Outcome)
             cols = df_disp.columns.tolist()
