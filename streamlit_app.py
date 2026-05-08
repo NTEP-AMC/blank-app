@@ -2034,20 +2034,24 @@ with tab8:
                 
                 del df_raw
                 
+                # 🎯 Deduplicate columns just in case
                 df = df.loc[:, ~df.columns.duplicated()]
                 
                 c_map = {}
+                
+                # 🎯 STRICT COLUMN INDEX MAPPING (Ignores Header Text)
+                if len(df.columns) > 4:
+                    c_map[df.columns[2]] = 'TB Unit'       # Column C (Index 2)
+                    c_map[df.columns[3]] = 'Facility Type' # Column D (Index 3)
+                    c_map[df.columns[4]] = 'PHI'           # Column E (Index 4)
+                
+                # 🎯 Map the rest dynamically based on text
                 for c in df.columns:
-                    cu = c.upper()
+                    if c in c_map: continue # Skip if we already mapped it by exact index above
+                    
+                    cu = str(c).upper()
                     if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
                     elif "PATIENT" in cu and "NAME" in cu: c_map[c] = 'Patient Name'
-                    # 🎯 STRICT MAPPING: Force the system to use "Current" TBU and HF
-                    elif "CURRENT_TBU" in cu or "CURRENT TBU" in cu: c_map[c] = 'TB Unit'
-                    elif "CURRENT_HF" in cu or "CURRENT HF" in cu: c_map[c] = 'PHI'
-                    # Safe fallbacks if column names change slightly
-                    elif ("UNIT" in cu or "TBU" in cu) and 'TB Unit' not in c_map.values(): c_map[c] = 'TB Unit'
-                    elif "PHI" in cu and 'PHI' not in c_map.values(): c_map[c] = 'PHI'
-                    elif "FACILITY" in cu or "SECTOR" in cu: c_map[c] = 'Facility Type'
                     elif "TYPE" in cu and "CASE" in cu: c_map[c] = 'Type of Case'
                     elif "REGIMEN" in cu: c_map[c] = 'TB_regimen'
                     elif "DIAGNOSIS" in cu and "DATE" in cu: c_map[c] = 'Diagnosis Date'
@@ -2055,9 +2059,10 @@ with tab8:
                     elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
                     elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
                 
+                # Fallback for Treatment Outcome if it wasn't caught
                 for c in df.columns:
-                    cu = c.upper()
                     if c not in c_map:
+                        cu = str(c).upper()
                         if "OUTCOME" in cu and "DATE" not in cu and "TREATMENT" not in cu:
                             if 'Treatment Outcome' not in c_map.values():
                                 c_map[c] = 'Treatment Outcome'
