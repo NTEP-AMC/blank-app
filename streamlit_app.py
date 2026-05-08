@@ -2004,7 +2004,7 @@ with tab8:
     st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Weekly Delta)</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically compares This Week vs Previous Week to isolate newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
 
-    @st.cache_data(ttl=3600, show_spinner=False) # Increased cache to 1 Hour!
+    @st.cache_data(ttl=3600, show_spinner=False)
     def load_adverse_outcomes():
         import urllib.request
         import io
@@ -2015,7 +2015,6 @@ with tab8:
         
         def parse_sheet(url):
             try:
-                # 🎯 Anti-Hang Mechanism: Strict 60-second timeout
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=60) as response:
                     csv_data = response.read()
@@ -2030,11 +2029,9 @@ with tab8:
                         
                 if h_idx == -1: return pd.DataFrame()
                 
-                # Assign Headers
                 df_raw.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
                 
-                # 🎯 Aggressive Memory Cleanup: Destroy the raw massive dataframe
                 del df_raw
                 
                 df = df.loc[:, ~df.columns.duplicated()]
@@ -2044,8 +2041,12 @@ with tab8:
                     cu = c.upper()
                     if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
                     elif "PATIENT" in cu and "NAME" in cu: c_map[c] = 'Patient Name'
-                    elif "UNIT" in cu or "TBU" in cu: c_map[c] = 'TB Unit'
-                    elif "PHI" in cu: c_map[c] = 'PHI'
+                    # 🎯 STRICT MAPPING: Force the system to use "Current" TBU and HF
+                    elif "CURRENT_TBU" in cu or "CURRENT TBU" in cu: c_map[c] = 'TB Unit'
+                    elif "CURRENT_HF" in cu or "CURRENT HF" in cu: c_map[c] = 'PHI'
+                    # Safe fallbacks if column names change slightly
+                    elif ("UNIT" in cu or "TBU" in cu) and 'TB Unit' not in c_map.values(): c_map[c] = 'TB Unit'
+                    elif "PHI" in cu and 'PHI' not in c_map.values(): c_map[c] = 'PHI'
                     elif "FACILITY" in cu or "SECTOR" in cu: c_map[c] = 'Facility Type'
                     elif "TYPE" in cu and "CASE" in cu: c_map[c] = 'Type of Case'
                     elif "REGIMEN" in cu: c_map[c] = 'TB_regimen'
@@ -2064,7 +2065,6 @@ with tab8:
                 df = df.rename(columns=c_map)
                 df = df.loc[:, ~df.columns.duplicated()] 
                 
-                # 🎯 Memory Optimizer: Keep ONLY the 11 columns we need, drop the other 100+
                 req_cols = ['Episode ID', 'Patient Name', 'TB Unit', 'PHI', 'Facility Type', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
                 available_cols = [c for c in req_cols if c in df.columns]
                 df = df[available_cols].copy()
