@@ -358,26 +358,19 @@ with tab1:
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    # 👇👇👇 NEW SIMPLE CLINICAL STATUS ENGINE 👇👇👇
+    # 👇👇👇 STRICT ISOLATION CLINICAL ENGINE 👇👇👇
     if not df_disp.empty:
         with st.spinner("Calculating Clinical Status..."):
             
-            # Initialize empty columns
-            df_disp['Treatment Status'] = ""
-            df_disp['On Treatment Days'] = ""
+            # 1. VISUAL CLEANER: Safely wipe out fake NAs without deleting real outcomes!
+            for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']:
+                if c in df_disp.columns:
+                    df_disp[c] = df_disp[c].astype(str).str.strip().str.upper()
+                    df_disp[c] = df_disp[c].replace(['NONE', 'NAN', 'NAT', 'NULL', '<NA>', 'N/A', ''], pd.NA)
 
-            # 1. Identify patients ONLY in Notification Register
-            out_str = df_disp.get('Treatment Outcome', pd.Series(['']*len(df_disp))).astype(str).str.strip().str.upper()
-            pending_str = df_disp.get('Pending Status', pd.Series(['']*len(df_disp))).astype(str)
-            ext_str = df_disp.get('Extend Status', pd.Series(['']*len(df_disp))).astype(str)
-
-            is_notif = (out_str != "N/A") | pending_str.str.contains("Outcome|Not Put On", case=False, na=False) | ext_str.str.contains("Extended", case=False, na=False)
-
-            # 2. Parse Dates safely
             def get_dt(col_name):
                 if col_name in df_disp.columns:
-                    clean_s = df_disp[col_name].astype(str).replace(['N/A', 'NONE', 'NAN', 'NAT', 'NULL', '<NA>', ''], pd.NA)
-                    return pd.to_datetime(clean_s, errors='coerce')
+                    return pd.to_datetime(df_disp[col_name], errors='coerce')
                 return pd.Series([pd.NaT]*len(df_disp), index=df_disp.index)
 
             diag_dt = get_dt('Diagnosis Date')
@@ -385,39 +378,52 @@ with tab1:
             out_dt = get_dt('Outcome Date')
             today = pd.Timestamp.today().normalize()
 
-            # 3. Check for valid Outcome
-            has_outcome = (out_str != "N/A") & (out_str != "NONE") & (out_str != "NAN") & (out_str != "") & (out_str != "<NA>")
+            # Check if Outcome has text
+            if 'Treatment Outcome' in df_disp.columns:
+                has_outcome = df_disp['Treatment Outcome'].notna()
+            else:
+                has_outcome = pd.Series([False]*len(df_disp), index=df_disp.index)
 
-            # 🔴 RULE 1: Not Put On (Show in BOTH columns as requested)
+            # Initialize completely blank columns
+            df_disp['Treatment Status'] = pd.NA
+            df_disp['On Treatment Days'] = pd.NA
+
+            # 🎯 STRICT ISOLATION: A patient is from Notification ONLY IF they have Notification Actions!
+            # If they are just from Lab or Consent, this returns False and they are completely ignored.
+            pending_str = df_disp.get('Pending Status', pd.Series(['']*len(df_disp))).astype(str)
+            ext_str = df_disp.get('Extend Status', pd.Series(['']*len(df_disp))).astype(str)
+            is_notif = pending_str.str.contains("Outcome|Not Put On", case=False, na=False) | ext_str.str.contains("Extended", case=False, na=False)
+
+            # 🔴 RULE 1: Not Put On (Isolated to Notification patients, show in both columns)
             mask_not_put_on = is_notif & (~has_outcome) & init_dt.isna()
             df_disp.loc[mask_not_put_on, 'Treatment Status'] = "Not Put On"
             df_disp.loc[mask_not_put_on, 'On Treatment Days'] = "Not Put On"
 
-            # 🔴 RULE 2: Initial Defaulter (Outcome CANNOT be blank)
+            # 🔴 RULE 2: Initial Defaulter (Diag exists, Init Blank, AND Outcome MUST BE FILLED)
             mask_init_def = is_notif & diag_dt.notna() & init_dt.isna() & has_outcome
             df_disp.loc[mask_init_def, 'Treatment Status'] = "Initial Defaulter"
 
-            # 🟢 RULE 3: Treatment Given
+            # ✨ UI FIX: Actively ERASE "Not Put On" from Pending Status for Initial Defaulters!
+            if 'Pending Status' in df_disp.columns:
+                cleaned_status = df_disp.loc[mask_init_def, 'Pending Status'].astype(str).str.replace('Not Put On', '', regex=False)
+                cleaned_status = cleaned_status.str.replace(r'\+\s*\+', '+', regex=True).str.strip(' +')
+                df_disp.loc[mask_init_def, 'Pending Status'] = cleaned_status
+
+            # 🟢 RULE 3: Treatment Given (Initiation Date Exists)
             mask_tx_given = is_notif & init_dt.notna()
             df_disp.loc[mask_tx_given, 'Treatment Status'] = "Treatment Given"
 
-            # ⏳ RULE 4: On Treatment Days (Count Days)
-            # Scenario A: Outcome Date is Present, Outcome is Blank
-            mask_otd_future = is_notif & init_dt.notna() & out_dt.notna() & (~has_outcome)
-            if mask_otd_future.any():
-                df_disp.loc[mask_otd_future, 'On Treatment Days'] = (out_dt[mask_otd_future] - init_dt[mask_otd_future]).dt.days.astype(int).astype(str) + " Days"
+            # ⏳ RULE 4: On Treatment Days (Count Days between Initiation Date and FUTURE Outcome Date)
+            mask_otd = is_notif & diag_dt.notna() & init_dt.notna() & out_dt.notna() & (out_dt > today) & (~has_outcome)
+            if mask_otd.any():
+                df_disp.loc[mask_otd, 'On Treatment Days'] = (out_dt[mask_otd] - init_dt[mask_otd]).dt.days.astype(int).astype(str) + " Days"
 
-            # Scenario B: Outcome Date is Blank, Outcome is Blank (Calculate to Today)
-            mask_otd_today = is_notif & init_dt.notna() & out_dt.isna() & (~has_outcome)
-            if mask_otd_today.any():
-                df_disp.loc[mask_otd_today, 'On Treatment Days'] = (today - init_dt[mask_otd_today]).dt.days.astype(int).astype(str) + " Days"
-
-            # Clean UI formatting (Remove fake NaNs for presentation)
+            # 3. Clean up the UI (Convert Python NAs into pure blank cells)
             df_disp = df_disp.fillna('')
             if 'Extend Status' in df_disp.columns:
                 df_disp['Extend Status'] = df_disp['Extend Status'].astype(str).replace(['None', 'nan', 'NaN', 'N/A', '<NA>'], '')
 
-            # Reorder columns to insert new ones right after Treatment Outcome
+            # 4. Insert Columns next to Treatment Outcome
             cols = df_disp.columns.tolist()
             if 'Treatment Status' in cols: cols.remove('Treatment Status')
             if 'On Treatment Days' in cols: cols.remove('On Treatment Days')
@@ -426,7 +432,7 @@ with tab1:
                 cols.insert(insert_idx, 'Treatment Status')
                 cols.insert(insert_idx + 1, 'On Treatment Days')
                 df_disp = df_disp[cols]
-    # 👆👆👆 END NEW SIMPLE CLINICAL STATUS ENGINE 👆👆👆
+    # 👆👆👆 END STRICT ISOLATION CLINICAL ENGINE 👆👆👆
 
     st.markdown(f"<div style='color: #2E86C1; margin-bottom: 10px; font-weight: bold;'>Found {len(df_disp)} Patient(s)</div>", unsafe_allow_html=True)
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
