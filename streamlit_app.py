@@ -358,7 +358,7 @@ with tab1:
             for i, (k, v) in enumerate(others):
                 with oc_cols[i % 4]: st.markdown(draw_card(k, v, colors.get(k, "#34495E"), "📌"), unsafe_allow_html=True)
     
-    # 👇👇👇 CLINICAL STATUS ENGINE (Powered by Master Notification Dates) 👇👇👇
+    # 👇👇👇 CLINICAL STATUS ENGINE 👇👇👇
     if not df_disp.empty:
         with st.spinner("Calculating Clinical Status..."):
             import re
@@ -392,10 +392,10 @@ with tab1:
             # 🎯 MASK: Only apply math if they have valid notification dates OR an outcome OR a notification-related pending status.
             has_notif_data = diag_dt.notna() | init_dt.notna() | has_outcome | df_disp['Pending Status'].fillna("").astype(str).str.upper().str.contains("OUTCOME|NOT PUT ON", na=False)
 
-            # 🔴 RULE 1: Not Put On (Init is Blank AND Outcome is Blank)
+            # 🔴 RULE 1: Not Put On (Init is Blank AND Outcome is Blank) -> Removed from Days!
             mask_npo = has_notif_data & init_dt.isna() & (~has_outcome)
             df_disp.loc[mask_npo, 'Treatment Status'] = "Not Put On"
-            df_disp.loc[mask_npo, 'On Treatment Days'] = "Not Put On"
+            df_disp.loc[mask_npo, 'On Treatment Days'] = "" # Kept blank as requested!
 
             # 🔴 RULE 2: Initial Defaulter (Diag Exists, Init Blank, AND OUTCOME MUST BE FILLED/NOT BLANK)
             mask_defaulter = has_notif_data & diag_dt.notna() & init_dt.isna() & has_outcome
