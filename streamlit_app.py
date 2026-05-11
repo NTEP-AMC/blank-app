@@ -2092,8 +2092,7 @@ with tab7:
 # 🟢 TAB 8: ADVERSE OUTCOMES (DELTA TRACKER)
 # ==========================================
 with tab8:
-    st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Weekly Delta)</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically compares This Week vs Previous Week to isolate newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #C0392B;'>🚨 New Adverse Outcomes (Delta Tracker)</h3>", unsafe_allow_html=True)
 
     @st.cache_data(ttl=3600, show_spinner=False)
     def load_adverse_outcomes():
@@ -2103,6 +2102,19 @@ with tab8:
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
         url_zone = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1891241473"
+        url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767" # 🎯 NEW: UPDATE DATE SHEET URL
+
+        # 🎯 FETCH COMPARISON DATES
+        try:
+            req_dates = urllib.request.Request(url_dates, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_dates, timeout=15) as response:
+                df_dates = pd.read_csv(io.BytesIO(response.read()))
+            # Extracts dates from the first data row under headers 'PREVIOUS' and 'THIS'
+            prev_date_str = str(df_dates.iloc[0, 0]).strip()
+            this_date_str = str(df_dates.iloc[0, 1]).strip()
+        except Exception as e:
+            prev_date_str = "Previous Data"
+            this_date_str = "Current Data"
         
         def parse_sheet(url):
             try:
@@ -2128,14 +2140,13 @@ with tab8:
                 
                 c_map = {}
                 
-                # 🎯 STRICT COLUMN INDEX MAPPING (Ignores confusing Header Texts)
+                # STRICT COLUMN INDEX MAPPING
                 if len(df.columns) > 64:
-                    c_map[df.columns[2]] = 'TB Unit'          # Column C (Index 2)
-                    c_map[df.columns[3]] = 'Facility Type'    # Column D (Index 3)
-                    c_map[df.columns[4]] = 'PHI'              # Column E (Index 4)
-                    c_map[df.columns[64]] = 'Initiation Date' # Column BM (Index 64)
+                    c_map[df.columns[2]] = 'TB Unit'
+                    c_map[df.columns[3]] = 'Facility Type'
+                    c_map[df.columns[4]] = 'PHI'
+                    c_map[df.columns[64]] = 'Initiation Date'
                 
-                # 🎯 Map the rest dynamically
                 for c in df.columns:
                     if c in c_map: continue 
                     cu = str(c).upper()
@@ -2147,7 +2158,6 @@ with tab8:
                     elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
                     elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
                 
-                # Fallback for Treatment Outcome if it wasn't caught
                 for c in df.columns:
                     if c not in c_map:
                         cu = str(c).upper()
@@ -2179,10 +2189,15 @@ with tab8:
         except:
             df_z_map = pd.DataFrame()
                 
-        return parse_sheet(url_this), parse_sheet(url_prev), df_z_map
+        # Return the dates alongside the dataframes
+        return parse_sheet(url_this), parse_sheet(url_prev), df_z_map, prev_date_str, this_date_str
 
     with st.spinner("Analyzing Massive Weekly Outcome Deltas (This might take 30-45 seconds)..."):
-        df_this_week, df_prev_week, df_z_local = load_adverse_outcomes()
+        # Catch the two new date variables here
+        df_this_week, df_prev_week, df_z_local, date_prev, date_this = load_adverse_outcomes()
+
+    # 🎯 DISPLAY THE DYNAMIC COMPARISON DATES IN THE UI
+    st.markdown(f"<div style='font-size: 14px; background-color: #fdf2e9; padding: 12px; border-radius: 5px; color: #c0392b; margin-bottom: 15px; border: 1px solid #fadbd8;'><b>📅 Comparing:</b> {date_prev} <b>vs</b> {date_this}<br><i>Isolates newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
 
     if df_this_week.empty:
         st.error("⚠️ Connection Timeout or No Data found. Google Sheets may be blocked. Please refresh the page.")
