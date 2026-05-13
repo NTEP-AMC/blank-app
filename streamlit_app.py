@@ -1570,7 +1570,7 @@ with tab6:
             {"name": "MO-MEDICAL COLLEGE", "gid": "1072071070", "name_col": "NAME", "zone_col": None, "tu_col": "TU"},
             {"name": "STS", "gid": "1743236661", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
             {"name": "STLS", "gid": "450506055", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TB UNIT"},
-            {"name": "TBHV", "gid": "1273132313", "name_col": "TBHV", "zone_col": "ZONE", "tu_col": "TU"},
+            {"name": "TBHV", "gid": "1273132313", "name_col": "TBHV", "zone_col": "ZONE", "tu_col": "TU"}, # 🎯 FIXED: TBHV zone_col updated to "ZONE"
             {"name": "LT", "gid": "755154964", "name_col": "NAME", "zone_col": "ZONE", "tu_col": "TU"},
         ]
         
@@ -1613,17 +1613,14 @@ with tab6:
                 contact_col = next((c for c in df_s.columns if "CONTACT" in c or "CONTECT" in c or "MOBILE" in c), None)
                 df_clean['CONTACT NO'] = df_s[contact_col] if contact_col else "N/A"
                 
-                # STRICT PHI & DOT CENTER EXTRACTION
                 phi_col = next((c for c in df_s.columns if any(k in c for k in ["PHI", "UHC", "CHC", "FACIL", "INST", "DOT CENTER", "DMC"]) and "EMAIL" not in c), None)
                 df_clean['PHI/UHC/CHC'] = df_s[phi_col] if phi_col else "N/A"
                 df_clean['PHI/UHC/CHC'] = df_clean['PHI/UHC/CHC'].apply(lambda x: "N/A" if "@" in str(x) else x)
 
-                # CATCHES ADDRESS OR RESIDENCIAL ADDRESS
-                addr_col = next((c for c in df_s.columns if any(k in c for k in ["ADDRESS", "RESIDENCE", "RESIDENCIAL"])), None)
+                addr_col = next((c for c in df_s.columns if any(k in c for k in ["ADDRESS", "RESIDENCE", "RESIDENCIAL"]) and "EMAIL" not in c), None)
                 df_clean['RESIDENCE ADDRESS'] = df_s[addr_col] if addr_col else "N/A"
                 df_clean['RESIDENCE ADDRESS'] = df_clean['RESIDENCE ADDRESS'].apply(lambda x: "N/A" if "@" in str(x) else x)
                 
-                # 🎯 WORKING DAYS EXTRACTION
                 days_col = next((c for c in df_s.columns if any(k in c for k in ["DAY", "JOB LOCATION"]) and "EMAIL" not in c), None)
                 df_clean['WORKING_DAYS'] = df_s[days_col] if days_col else "N/A"
 
@@ -1633,7 +1630,6 @@ with tab6:
                 dob_col = next((c for c in df_s.columns if "DOB" in c), None)
                 df_clean['DOB'] = df_s[dob_col] if dob_col else "N/A"
 
-                # 🎯 ON TREATMENT PATIENT EXTRACTION
                 pat_col = next((c for c in df_s.columns if "ON TREATMENT" in c and "PUBLIC" in c), None)
                 df_clean['ON_TREATMENT'] = df_s[pat_col] if pat_col else "N/A"
 
@@ -1646,25 +1642,23 @@ with tab6:
             final_df = pd.concat(all_staff, ignore_index=True)
             final_df = final_df.dropna(subset=['NAME'])
             
-            # 🎯 SMART SPLITTER ENGINE (Separates 2 names if entered in one cell via Alt+Enter)
             final_df['NAME'] = final_df['NAME'].astype(str).str.replace('\r', '\n')
             final_df['NAME'] = final_df['NAME'].str.split('\n')
             final_df = final_df.explode('NAME')
             
-            # 🎯 AGGRESSIVE STRING CLEANING FOR FLAWLESS MERGING
+            # Aggressively clean spaces to ensure matching names fuse perfectly
             final_df['NAME'] = final_df['NAME'].astype(str).str.upper().str.strip()
             final_df['NAME'] = final_df['NAME'].str.replace(r'\s+', ' ', regex=True)
             final_df = final_df[final_df['NAME'] != ""]
             final_df = final_df[~final_df['NAME'].isin(["NAN", "NONE", "N/A"])]
             
-            # 🎯 CLEAN CONTACT NUMBER (Removes spaces and decimals to guarantee perfect grouping)
             final_df['CONTACT NO'] = final_df['CONTACT NO'].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'[^\d]', '', regex=True)
             final_df['CONTACT NO'] = final_df['CONTACT NO'].replace("", "N/A")
 
-            # 🎯 FIXED: STRICT ZONE MAPPING (Respects Raw Sheet Data First!)
+            # 🎯 FLAWLESS ZONE LOGIC: Trust the Excel Sheet FIRST!
             def assign_strict_zone(row):
-                # 1. Trust Explicit Zone from Excel Sheet FIRST
                 raw_z = str(row['RAW_ZONE']).upper().replace("ZONE", "").strip()
+                # 1. If a zone is typed in the sheet, strictly map it.
                 if raw_z not in ["", "NAN", "NONE", "N/A"]:
                     if "SOUTH WEST" in raw_z: return "South West"
                     if "NORTH WEST" in raw_z: return "North West"
@@ -1673,9 +1667,9 @@ with tab6:
                     if "CENTRAL" in raw_z: return "Central"
                     if "EAST" in raw_z: return "East"
                     if "NORTH" in raw_z: return "North"
-                    return raw_z.title() # If it says something else, just use it.
+                    return raw_z.title()
                 
-                # 2. ONLY fallback to TB Unit guessing if the Excel Sheet Zone column is Blank
+                # 2. ONLY fallback to guessing if the Excel Sheet column is completely blank
                 tu = str(row['TB_UNIT']).upper().strip()
                 if any(x in tu for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "South West"
                 if any(x in tu for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA"]): return "North West"
@@ -1720,14 +1714,6 @@ with tab6:
             falguni_mask = final_df['NAME'].str.contains("FALGUNI")
             final_df.loc[falguni_mask, 'ZONE'] = "HEAD OFFICE"
             final_df.loc[falguni_mask, 'TB_UNIT'] = "Arogya Bhavan"
-            
-            mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
-            zone_heads = {}
-            for _, r in mo_sups.iterrows():
-                z = r['ZONE']
-                n = str(r['NAME']).title()
-                if z not in zone_heads: zone_heads[z] = n
-                elif n not in zone_heads[z]: zone_heads[z] += f" & {n}"
 
             def assign_hierarchy(sheet_name):
                 if sheet_name == "MO-SUPERVISOR": return 1
@@ -1738,20 +1724,7 @@ with tab6:
                 if sheet_name == "LT": return 6
                 return 99
 
-            def assign_reporting(row):
-                sheet = row['SOURCE_SHEET']
-                z = row['ZONE']
-                name = str(row['NAME'])
-                z_head = zone_heads.get(z, "Zonal MO-Supervisor")
-                
-                if "FALGUNI" in name: return "City TB Officer & MO-DTC"
-                if sheet == "MO-SUPERVISOR": return "City TB Officer (Dr. S. K. Patel)"
-                elif sheet == "MO-MEDICAL COLLEGE": return f"City TB Officer & {z_head}"
-                else: return z_head
-
             final_df['HIERARCHY'] = final_df['SOURCE_SHEET'].apply(assign_hierarchy)
-            final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
-            final_df = final_df.fillna("N/A")
             
             def construct_job_location(row):
                 sheet = row['SOURCE_SHEET']
@@ -1774,45 +1747,78 @@ with tab6:
 
             final_df['JOB_LOC_AND_DAYS'] = final_df.apply(construct_job_location, axis=1)
             
+            # 🎯 SMART AGGREGATION FUNCTIONS
             def merge_locations(loc_series):
-                locs = set()
+                locs = []
                 for loc_val in loc_series:
                     val = str(loc_val).strip()
-                    if val.upper() not in ["N/A", "NAN", "NONE", ""]:
-                        locs.add(val)
-                return " & ".join(sorted(locs)) if locs else "N/A"
-                
-            def sum_on_treatment(series):
-                total = 0
-                has_val = False
-                for val in series:
-                    try:
-                        num = float(str(val).strip())
-                        if not pd.isna(num):
-                            total += num
-                            has_val = True
-                    except: pass
-                return str(int(total)) if has_val else "-"
+                    if val.upper() not in ["N/A", "NAN", "NONE", ""] and val not in locs:
+                        locs.append(val)
+                return " & ".join(locs) if locs else "N/A"
                 
             def get_first_valid(series):
                 for val in series:
                     if str(val).upper() not in ["N/A", "NAN", "NONE", ""]: return val
                 return "N/A"
+
+            def sum_on_treatment(series):
+                total = 0
+                has_val = False
+                for val in series:
+                    try:
+                        clean_v = re.sub(r'[^\d.]', '', str(val))
+                        if clean_v:
+                            total += float(clean_v)
+                            has_val = True
+                    except: pass
+                return str(int(total)) if has_val else "-"
             
-            # 🎯 AGGRESSIVE GROUPBY: Fuses rows if NAME and CONTACT NO match!
-            final_df = final_df.groupby(['NAME', 'CONTACT NO', 'DESIGNATION', 'FILTER_DESIG', 'SOURCE_SHEET', 'HIERARCHY', 'REPORTS_TO']).agg({
+            # 🎯 THE MASTER FUSER: Groups by Name & Contact to ensure accurate headcounts
+            final_df = final_df.groupby(['NAME', 'CONTACT NO', 'DESIGNATION', 'FILTER_DESIG', 'SOURCE_SHEET', 'HIERARCHY']).agg({
                 'ZONE': lambda x: ' & '.join(sorted(set([z for z in x if z != "N/A"]))),
                 'TB_UNIT': lambda x: ' & '.join(sorted(set([t.title() for t in x if str(t).upper() not in ["N/A", "NAN", "NONE"]]))),
                 'PHI/UHC/CHC': lambda x: ' & '.join(sorted(set([p.title() for p in x if str(p).upper() not in ["N/A", "NAN", "NONE"]]))),
-                'JOB_LOC_AND_DAYS': merge_locations, # Fuses UHC Vasna & UHC Paldi
+                'JOB_LOC_AND_DAYS': merge_locations,
                 'ON_TREATMENT': sum_on_treatment,
                 'TYPE_OF_POSTING': get_first_valid,
                 'DOB': get_first_valid,
-                'RESIDENCE ADDRESS': get_first_valid # Smartly picks real address if one row is blank
+                'RESIDENCE ADDRESS': get_first_valid
             }).reset_index()
             
             final_df = final_df.sort_values(by=['HIERARCHY', 'ZONE', 'NAME']).reset_index(drop=True)
             
+            # 🎯 DYNAMIC REPORTS_TO CALCULATION (Runs AFTER grouping to handle merged zones)
+            mo_sups = final_df[final_df['SOURCE_SHEET'] == "MO-SUPERVISOR"]
+            zone_heads = {}
+            for _, r in mo_sups.iterrows():
+                zones = str(r['ZONE']).split(' & ')
+                n = str(r['NAME']).title()
+                for z in zones:
+                    z = z.strip()
+                    if z not in zone_heads: zone_heads[z] = n
+                    elif n not in zone_heads[z]: zone_heads[z] += f" & {n}"
+
+            def assign_reporting(row):
+                sheet = row['SOURCE_SHEET']
+                zones = str(row['ZONE']).split(' & ')
+                name = str(row['NAME']).upper()
+                
+                if "FALGUNI" in name: return "City TB Officer & MO-DTC"
+                if sheet == "MO-SUPERVISOR": return "City TB Officer (Dr. S. K. Patel)"
+                
+                heads = []
+                for z in zones:
+                    head = zone_heads.get(z.strip(), "Zonal MO-Supervisor")
+                    if head not in heads: heads.append(head)
+                combo_heads = " & ".join(heads)
+                
+                if sheet == "MO-MEDICAL COLLEGE": return f"City TB Officer & {combo_heads}"
+                return combo_heads
+
+            final_df['REPORTS_TO'] = final_df.apply(assign_reporting, axis=1)
+            final_df = final_df.fillna("N/A")
+
+            # Final touchups
             mo_mask = final_df['SOURCE_SHEET'] == 'MO-SUPERVISOR'
             final_df.loc[mo_mask, 'TB_UNIT'] = final_df.loc[mo_mask, 'ZONE'].apply(lambda z: f"All TB Units of {z.title()} Zone" if str(z) not in ["N/A", ""] else "All TB Units")
             final_df.loc[mo_mask, 'PHI/UHC/CHC'] = final_df.loc[mo_mask, 'ZONE'].apply(lambda z: f"All UHC/CHC/Medical College of {z.title()} Zone" if str(z) not in ["N/A", ""] else "All UHC/CHC/Medical College")
