@@ -2097,29 +2097,38 @@ with tab8:
     def load_adverse_outcomes():
         import urllib.request
         import io
+        import re
         
+        # ⚠️ VERIFY THESE GIDs IN YOUR GOOGLE SHEET URL BAR ⚠️
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
         url_zone = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1891241473"
-        url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767" # 🎯 NEW: UPDATE DATE SHEET URL
+        url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767"
+
+        error_log = []
 
         # 🎯 FETCH COMPARISON DATES
         try:
             req_dates = urllib.request.Request(url_dates, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req_dates, timeout=15) as response:
                 df_dates = pd.read_csv(io.BytesIO(response.read()))
-            # Extracts dates from the first data row under headers 'PREVIOUS' and 'THIS'
             prev_date_str = str(df_dates.iloc[0, 0]).strip()
             this_date_str = str(df_dates.iloc[0, 1]).strip()
         except Exception as e:
             prev_date_str = "Previous Data"
             this_date_str = "Current Data"
+            error_log.append(f"❌ Dates Sheet Error: {str(e)}")
         
-        def parse_sheet(url):
+        def parse_sheet(url, sheet_name):
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=60) as response:
                     csv_data = response.read()
+                    
+                # If the GID is wrong, Google returns an HTML login/error page instead of CSV
+                if b"<html" in csv_data[:20].lower():
+                    error_log.append(f"❌ {sheet_name} Error: GID is invalid or sheet is deleted.")
+                    return pd.DataFrame()
                     
                 df_raw = pd.read_csv(io.BytesIO(csv_data), header=None, low_memory=False, dtype=str)
                 
@@ -2129,7 +2138,9 @@ with tab8:
                     if "EPISODE" in row_str and "NAME" in row_str:
                         h_idx = i; break
                         
-                if h_idx == -1: return pd.DataFrame()
+                if h_idx == -1: 
+                    error_log.append(f"❌ {sheet_name} Error: Could not find 'EPISODE' and 'NAME' headers.")
+                    return pd.DataFrame()
                 
                 df_raw.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
                 df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
@@ -2176,6 +2187,7 @@ with tab8:
                     
                 return df
             except Exception as e:
+                error_log.append(f"❌ {sheet_name} Network Error: {str(e)}")
                 return pd.DataFrame()
 
         try:
@@ -2188,18 +2200,23 @@ with tab8:
         except:
             df_z_map = pd.DataFrame()
                 
-        # Return the dates alongside the dataframes
-        return parse_sheet(url_this), parse_sheet(url_prev), df_z_map, prev_date_str, this_date_str
+        df_this = parse_sheet(url_this, "THIS WEEK")
+        df_prev = parse_sheet(url_prev, "PREVIOUS WEEK")
+        
+        return df_this, df_prev, df_z_map, prev_date_str, this_date_str, error_log
 
     with st.spinner("Analyzing Massive Weekly Outcome Deltas (This might take 30-45 seconds)..."):
-        # Catch the two new date variables here
-        df_this_week, df_prev_week, df_z_local, date_prev, date_this = load_adverse_outcomes()
+        df_this_week, df_prev_week, df_z_local, date_prev, date_this, error_log = load_adverse_outcomes()
 
-    # 🎯 DISPLAY THE DYNAMIC COMPARISON DATES IN THE UI
     st.markdown(f"<div style='font-size: 14px; background-color: #fdf2e9; padding: 12px; border-radius: 5px; color: #c0392b; margin-bottom: 15px; border: 1px solid #fadbd8;'><b>📅 Comparing:</b> {date_prev} <b>vs</b> {date_this}<br><i>Isolates newly recorded Adverse Outcomes (excluding Cured, Completed, and Regimen Changed).</i></div>", unsafe_allow_html=True)
 
+    # 🚨 DISPLAY DIAGNOSTIC ERRORS IF ANY OCCURRED
+    if error_log:
+        for err in error_log:
+            st.error(err)
+
     if df_this_week.empty:
-        st.error("⚠️ Connection Timeout or No Data found. Google Sheets may be blocked. Please refresh the page.")
+        st.warning("⚠️ Data missing. Please check the error logs above. Confirm your GIDs match the current URLs in your Google Sheet.")
     else:
         if df_prev_week.empty or 'Treatment Outcome' not in df_prev_week.columns:
             df_prev_week = pd.DataFrame(columns=['Episode ID', 'Treatment Outcome'])
