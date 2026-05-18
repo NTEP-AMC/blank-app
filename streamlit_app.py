@@ -2088,295 +2088,117 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (DELTA TRACKER) - MNC EDITION
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER TRACKER)
 # ==========================================
 with tab8:
-    st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Adverse Outcomes Delta Tracker</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
 
-    @st.cache_data(ttl=3600, show_spinner=False)
-    def load_adverse_outcomes():
+    @st.cache_data(ttl=600, show_spinner=False)
+    def load_master_adverse():
         import urllib.request
         import io
         import re
         
-        # ⚠️ VERIFY THESE GIDs IN YOUR GOOGLE SHEET URL BAR ⚠️
-        url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
-        url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
-        url_zone = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1891241473"
+        # 🎯 GIDs for Master Tab & Date/Count Tab
+        url_master = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1027512112"
         url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767"
 
-        error_log = []
-
-        # 🎯 FETCH COMPARISON DATES & MANUAL COUNTS
+        # 1. FETCH DATES & COUNTS
         try:
             req_dates = urllib.request.Request(url_dates, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req_dates, timeout=15) as response:
                 df_dates = pd.read_csv(io.BytesIO(response.read()))
-            
             prev_date_str = str(df_dates.iloc[0, 0]).strip()
             this_date_str = str(df_dates.iloc[0, 1]).strip()
-            
-            try: prev_manual_count = float(df_dates.iloc[0, 2]) if pd.notna(df_dates.iloc[0, 2]) else 0.0
-            except: prev_manual_count = 0.0
-                
-            try: this_manual_count = float(df_dates.iloc[0, 3]) if pd.notna(df_dates.iloc[0, 3]) else 0.0
-            except: this_manual_count = 0.0
-
-        except Exception as e:
-            prev_date_str = "Previous Data"
-            this_date_str = "Current Data"
-            prev_manual_count = 0.0
-            this_manual_count = 0.0
-            error_log.append(f"❌ Dates Sheet Error: {str(e)}")
-        
-        def parse_sheet(url, sheet_name):
-            try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=60) as response:
-                    csv_data = response.read()
-                    
-                if b"<html" in csv_data[:20].lower():
-                    error_log.append(f"❌ {sheet_name} Error: GID is invalid or sheet is deleted.")
-                    return pd.DataFrame()
-                    
-                df_raw = pd.read_csv(io.BytesIO(csv_data), header=None, low_memory=False, dtype=str)
-                
-                h_idx = -1
-                for i in range(min(15, len(df_raw))):
-                    row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper())
-                    if "EPISODE" in row_str and "NAME" in row_str:
-                        h_idx = i; break
-                        
-                if h_idx == -1: 
-                    error_log.append(f"❌ {sheet_name} Error: Could not find 'EPISODE' and 'NAME' headers.")
-                    return pd.DataFrame()
-                
-                df_raw.columns = df_raw.iloc[h_idx].fillna("").astype(str).str.strip().str.upper()
-                df = df_raw.iloc[h_idx+1:].reset_index(drop=True)
-                
-                del df_raw
-                df = df.loc[:, ~df.columns.duplicated()]
-                
-                c_map = {}
-                if len(df.columns) > 64:
-                    c_map[df.columns[2]] = 'TB Unit'
-                    c_map[df.columns[3]] = 'Facility Type'
-                    c_map[df.columns[4]] = 'PHI'
-                    c_map[df.columns[64]] = 'Initiation Date'
-                
-                for c in df.columns:
-                    if c in c_map: continue 
-                    cu = str(c).upper()
-                    if "EPISODE" in cu and "ID" in cu: c_map[c] = 'Episode ID'
-                    elif "PATIENT" in cu and "NAME" in cu: c_map[c] = 'Patient Name'
-                    elif "TYPE" in cu and "CASE" in cu: c_map[c] = 'Type of Case'
-                    elif "REGIMEN" in cu: c_map[c] = 'TB_regimen'
-                    elif "DIAGNOSIS" in cu and "DATE" in cu: c_map[c] = 'Diagnosis Date'
-                    elif "OUTCOME" in cu and "DATE" in cu: c_map[c] = 'Outcome Date'
-                    elif "TREATMENT" in cu and "OUTCOME" in cu: c_map[c] = 'Treatment Outcome'
-                
-                for c in df.columns:
-                    if c not in c_map:
-                        cu = str(c).upper()
-                        if "OUTCOME" in cu and "DATE" not in cu and "TREATMENT" not in cu:
-                            if 'Treatment Outcome' not in c_map.values():
-                                c_map[c] = 'Treatment Outcome'
-                
-                df = df.rename(columns=c_map)
-                df = df.loc[:, ~df.columns.duplicated()] 
-                
-                req_cols = ['Episode ID', 'Patient Name', 'TB Unit', 'PHI', 'Facility Type', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
-                available_cols = [c for c in req_cols if c in df.columns]
-                df = df[available_cols].copy()
-                
-                for rc in req_cols:
-                    if rc not in df.columns: df[rc] = "N/A"
-                    
-                return df
-            except Exception as e:
-                error_log.append(f"❌ {sheet_name} Network Error: {str(e)}")
-                return pd.DataFrame()
-
-        try:
-            df_z_map = pd.read_csv(url_zone, header=None, skiprows=1, usecols=[0,1], dtype=str)
-            df_z_map.columns = ['PHI_Map', 'Zone_Map']
-            df_z_map['PHI_Map'] = df_z_map['PHI_Map'].astype(str).str.strip().str.upper()
-            df_z_map['Zone_Map'] = df_z_map['Zone_Map'].astype(str).str.strip().str.upper()
-            df_z_map['Join_Key'] = df_z_map['PHI_Map'].apply(lambda x: re.sub(r'[^A-Z0-9]', '', str(x)))
-            df_z_map = df_z_map.drop_duplicates(subset=['Join_Key'], keep='first')
+            count_prev = float(df_dates.iloc[0, 2])
+            count_this = float(df_dates.iloc[0, 3])
         except:
-            df_z_map = pd.DataFrame()
-                
-        df_this = parse_sheet(url_this, "THIS WEEK")
-        df_prev = parse_sheet(url_prev, "PREVIOUS WEEK")
-        
-        return df_this, df_prev, df_z_map, prev_date_str, this_date_str, prev_manual_count, this_manual_count, error_log
+            prev_date_str, this_date_str, count_prev, count_this = "N/A", "N/A", 0, 0
 
-    with st.spinner("Analyzing Massive Weekly Outcome Deltas (This might take 30-45 seconds)..."):
-        df_this_week, df_prev_week, df_z_local, date_prev, date_this, count_prev, count_this, error_log = load_adverse_outcomes()
+        # 2. FETCH MASTER DATA
+        try:
+            req_m = urllib.request.Request(url_master, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_m, timeout=60) as response:
+                df = pd.read_csv(io.BytesIO(response.read()))
+            
+            # Clean Headers
+            df.columns = df.columns.astype(str).str.strip()
+            # Rename for consistency
+            df = df.rename(columns={'ADVERSE DATE': 'Report Period', 'Treatment Outcome': 'Treatment Outcome'})
+            df['Treatment Outcome'] = df['Treatment Outcome'].astype(str).str.upper()
+            
+            return df, prev_date_str, this_date_str, count_prev, count_this
+        except Exception as e:
+            st.error(f"Error loading Master Tab: {e}")
+            return pd.DataFrame(), "N/A", "N/A", 0, 0
 
-    st.markdown(f"""
-    <div style='background-color: #f8fafc; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 24px;'>
-        <p style='margin: 0; font-size: 14px; color: #475569;'>
-            <strong style='color: #1e293b;'>📅 System Sync:</strong> Comparing <b>{date_prev}</b> vs <b>{date_this}</b><br>
-            <span style='font-size: 13px;'>Isolating newly recorded adverse outcomes (excluding Cured, Completed, and Regimen Changed).</span>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if error_log:
-        for err in error_log: st.error(err)
+    df_master, date_prev, date_this, count_prev, count_this = load_master_adverse()
 
     # ==========================================
-    # 🌟 MNC GRADE EXECUTIVE DELTA UI
+    # 🌟 MNC EXECUTIVE SUMMARY CARD
     # ==========================================
     try:
         diff = count_this - count_prev
         pct = (diff / count_prev * 100) if count_prev > 0 else 0
-        
         diff_str = f"+{int(diff)}" if diff > 0 else f"{int(diff)}"
         pct_str = f"{pct:+.1f}%"
-        
-        # Modern SaaS Color Palette
-        if diff <= 0:
-            badge_bg = "#dcfce7"
-            badge_color = "#15803d"
-            arrow = "📉"
-        else:
-            badge_bg = "#fee2e2"
-            badge_color = "#b91c1c"
-            arrow = "📈"
+        color = "#27ae60" if diff <= 0 else "#e74c3c"
+        bg_color = "#eafaf1" if diff <= 0 else "#fdf2e9"
+        arrow = "📉" if diff < 0 else "📈" if diff > 0 else "➖"
             
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
             <div>
-                <p style="margin: 0; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Current Week Total ({date_this})</p>
-                <h1 style="margin: 5px 0 0 0; font-size: 48px; font-weight: 800; color: #0f172a; line-height: 1;">{int(count_this)}</h1>
+                <p style="margin: 0; font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Master Cases ({date_this})</p>
+                <h1 style="margin: 2px 0 0 0; font-size: 40px; font-weight: 800; color: #0f172a;">{int(count_this)}</h1>
             </div>
             <div style="text-align: right;">
-                <p style="margin: 0 0 8px 0; font-size: 14px; color: #64748b; font-weight: 500;">Previous Week ({date_prev}): <span style="color: #334155; font-weight: 700;">{int(count_prev)}</span></p>
-                <div style="display: inline-block; background-color: {badge_bg}; color: {badge_color}; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 500;">Prev Week ({date_prev}): {int(count_prev)}</p>
+                <div style="background-color: {bg_color}; color: {color}; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 14px; margin-top: 5px;">
                     {arrow} {diff_str} ({pct_str})
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
-    except:
-        pass
+    except: pass
 
-    if df_this_week.empty:
-        st.warning("⚠️ Line List Data missing. Please check the error logs above.")
-    else:
-        if df_prev_week.empty or 'Treatment Outcome' not in df_prev_week.columns:
-            df_prev_week = pd.DataFrame(columns=['Episode ID', 'Treatment Outcome'])
-            
-        df_this_week['Treatment Outcome'] = df_this_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
-        df_prev_week['Treatment Outcome'] = df_prev_week['Treatment Outcome'].fillna("").astype(str).str.upper().str.strip()
+    if not df_master.empty:
+        # ZONE-WISE GRID
+        st.markdown("<h5 style='color: #1e293b; margin-bottom: 12px;'>📍 Zone-wise Breakdown</h5>", unsafe_allow_html=True)
+        zone_counts = df_master['ZONE'].value_counts().to_dict()
+        z_cols = st.columns(len(zone_counts) if len(zone_counts) > 0 else 1)
+        for i, (z_name, z_count) in enumerate(zone_counts.items()):
+            z_cols[i].markdown(f"""
+            <div style='background: #fff; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; text-align: center;'>
+                <div style='font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;'>{z_name}</div>
+                <div style='font-size: 20px; font-weight: 800; color: #0f172a;'>{z_count}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        good_outcomes = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
-        blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
+        st.write("---")
+
+        # FILTER ENGINE
+        unique_outcomes = sorted([x for x in df_master['Treatment Outcome'].unique().tolist() if str(x).lower() not in ["nan", "n/a", "none", ""]])
+        sel_out = st.multiselect("🎯 Filter by Treatment Outcome:", unique_outcomes, default=unique_outcomes)
         
-        is_adverse = ~df_this_week['Treatment Outcome'].str.contains('|'.join(good_outcomes), na=False) 
-        has_outcome = ~df_this_week['Treatment Outcome'].isin(blank_variants)
-        df_this_adv = df_this_week[is_adverse & has_outcome].copy()
+        df_f = df_master[df_master['Treatment Outcome'].isin(sel_out)].copy()
+        
+        # ADVANCED FILTERS
+        with st.expander("🔽 Advanced Filters & Dates"):
+            c1, c2 = st.columns(2)
+            with c1:
+                z_list = st.multiselect("Zone", sorted(df_f['ZONE'].unique().tolist()))
+                if z_list: df_f = df_f[df_f['ZONE'].isin(z_list)]
+            with c2:
+                p_list = st.multiselect("Report Period", sorted(df_f['Report Period'].unique().tolist()))
+                if p_list: df_f = df_f[df_f['Report Period'].isin(p_list)]
 
-        prev_outcomes_dict = dict(zip(df_prev_week['Episode ID'].astype(str).str.strip(), df_prev_week['Treatment Outcome']))
-        def is_new_adverse(row):
-            eid = str(row['Episode ID']).strip()
-            curr_out = row['Treatment Outcome']
-            if eid not in prev_outcomes_dict: return True 
-            prev_out = prev_outcomes_dict[eid]
-            if prev_out in blank_variants: return True 
-            if curr_out != prev_out: return True 
-            return False
-
-        df_new_adv = df_this_adv[df_this_adv.apply(is_new_adverse, axis=1)].copy()
-
-        df_new_adv['PHI_Clean'] = df_new_adv['PHI'].astype(str).str.strip().str.upper()
-        df_new_adv['PHI_Join_Key'] = df_new_adv['PHI_Clean'].apply(lambda x: re.sub(r'[^A-Z0-9]', '', str(x)))
-        if not df_z_local.empty:
-            df_new_adv = df_new_adv.merge(df_z_local[['Join_Key', 'Zone_Map']], left_on='PHI_Join_Key', right_on='Join_Key', how='left')
-            df_new_adv['ZONE'] = df_new_adv['Zone_Map'].fillna("N/A")
-            df_new_adv = df_new_adv.drop(columns=['PHI_Clean', 'PHI_Join_Key', 'Join_Key', 'Zone_Map'], errors='ignore')
-        else:
-            df_new_adv['ZONE'] = "N/A"
-            
-        df_new_adv['ZONE'] = df_new_adv['ZONE'].replace(["", "NAN", "NAT", "NONE", "NULL", "<NA>"], "N/A").fillna("N/A")
-        df_new_adv = filter_by_role(df_new_adv, st.session_state.role, st.session_state.target)
-
-        # ==========================================
-        # 🌟 ZONE-WISE SAAS METRIC CARDS
-        # ==========================================
-        st.markdown("<h5 style='color: #334155; font-weight: 700; margin-top: 10px; margin-bottom: 16px; font-size: 16px;'>📍 Zone-wise Breakdown</h5>", unsafe_allow_html=True)
-        if not df_new_adv.empty:
-            zone_counts = df_new_adv['ZONE'].value_counts().to_dict()
-            z_cols = st.columns(min(len(zone_counts), 7) or 1)
-            for i, (z_name, z_count) in enumerate(zone_counts.items()):
-                with z_cols[i % 7]:
-                    st.markdown(f"""
-                    <div style='background-color: #ffffff; border: 1px solid #e2e8f0; padding: 16px 12px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 16px;'>
-                        <span style='font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;'>{z_name}</span>
-                        <span style='font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1;'>{z_count}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("👍 No new adverse cases to display across zones.")
-
-        # 6. DYNAMIC UI OUTCOME SELECTOR
-        if not df_new_adv.empty:
-            unique_outcomes = sorted([x for x in df_new_adv['Treatment Outcome'].unique().tolist() if str(x).strip() not in blank_variants])
-            outcome_options = ["ALL NEW ADVERSE OUTCOMES"] + unique_outcomes
-            
-            st.markdown("<div style='background-color:#f1f5f9; padding:16px; border-radius:10px; border: 1px solid #cbd5e1; margin-bottom:20px;'>", unsafe_allow_html=True)
-            sel_adv_outcome = st.radio("🎯 Filter Line List by Specific Outcome:", outcome_options, horizontal=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            df_filtered = df_new_adv.copy()
-            if sel_adv_outcome != "ALL NEW ADVERSE OUTCOMES":
-                df_filtered = df_filtered[df_filtered['Treatment Outcome'] == sel_adv_outcome]
-
-            # 7. FILTERS & DATES
-            with st.expander("🔽 Advanced Filters & Dates", expanded=False):
-                ac1, ac2, ac3 = st.columns(3)
-                with ac1:
-                    if st.session_state.role == "ADMIN":
-                        a_z = clean_selection(st.multiselect("Zone", get_options_with_counts(df_filtered, 'ZONE', 'tab8'), key='az8'))
-                        if a_z: df_filtered = df_filtered[df_filtered['ZONE'].isin(a_z)]
-                    
-                    a_tu = clean_selection(st.multiselect("TB Unit", get_options_with_counts(df_filtered, 'TB Unit', 'tab8'), key='atu8'))
-                    if a_tu: df_filtered = df_filtered[df_filtered['TB Unit'].isin(a_tu)]
-                    
-                    a_phi = clean_selection(st.multiselect("PHI", get_options_with_counts(df_filtered, 'PHI', 'tab8'), key='aphi8'))
-                    if a_phi: df_filtered = df_filtered[df_filtered['PHI'].isin(a_phi)]
-
-                with ac2:
-                    a_fac = clean_selection(st.multiselect("Facility Type", get_options_with_counts(df_filtered, 'Facility Type', 'tab8'), key='afac8'))
-                    if a_fac: df_filtered = df_filtered[df_filtered['Facility Type'].isin(a_fac)]
-                    
-                    a_case = clean_selection(st.multiselect("Type of Case", get_options_with_counts(df_filtered, 'Type of Case', 'tab8'), key='acase8'))
-                    if a_case: df_filtered = df_filtered[df_filtered['Type of Case'].isin(a_case)]
-                    
-                    a_reg = clean_selection(st.multiselect("TB Regimen", get_options_with_counts(df_filtered, 'TB_regimen', 'tab8'), key='areg8'))
-                    if a_reg: df_filtered = df_filtered[df_filtered['TB_regimen'].isin(a_reg)]
-
-                with ac3:
-                    a_diag_dt = st.date_input("Diagnosis Date Range", value=[], key="ad1_8")
-                    a_init_dt = st.date_input("Initiation Date Range", value=[], key="ad2_8")
-                    a_out_dt = st.date_input("Outcome Date Range", value=[], key="ad3_8")
-                    
-            if len(a_diag_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Diagnosis Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Diagnosis Date'), errors='coerce').dt.date.between(a_diag_dt[0], a_diag_dt[1])]
-            if len(a_init_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Initiation Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Initiation Date'), errors='coerce').dt.date.between(a_init_dt[0], a_init_dt[1])]
-            if len(a_out_dt) == 2: df_filtered = df_filtered[pd.to_datetime(df_filtered.get('Outcome Date'), errors='coerce').notna() & pd.to_datetime(df_filtered.get('Outcome Date'), errors='coerce').dt.date.between(a_out_dt[0], a_out_dt[1])]
-
-            st.markdown(f"<div style='color: #334155; margin-bottom: 12px; font-size: 15px; font-weight: 700;'>Showing {len(df_filtered)} Line List Record(s)</div>", unsafe_allow_html=True)
-            
-            if not df_filtered.empty:
-                final_display_cols = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
-                st.dataframe(df_filtered[final_display_cols], use_container_width=True, hide_index=True)
-                
-                st.download_button(f"📥 Download Secure Report", convert_df_to_excel(df_filtered[final_display_cols], "Adverse_Outcomes"), f"New_Adverse_Outcomes.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_adv_out')
-            else:
-                st.info("👍 No patients match the selected filters.")
+        st.markdown(f"<p style='font-weight:600; color:#1e293b;'>Showing {len(df_f)} Master Records</p>", unsafe_allow_html=True)
+        st.dataframe(df_f, use_container_width=True, hide_index=True)
+        
+        st.download_button("📥 Download Master Report", convert_df_to_excel(df_f, "Master_Adverse_Outcomes"), "Master_Adverse_Outcomes.xlsx")
+    else:
+        st.info("No master data found.")
 
 # ==========================================
 # 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
