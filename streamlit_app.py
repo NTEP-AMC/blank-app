@@ -2088,7 +2088,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER TRACKER) - MNC EDITION
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
@@ -2099,23 +2099,9 @@ with tab8:
         import io
         import re
         
-        # ⚠️ VERIFY GID 1027512112 IS YOUR MASTER TAB
+        # MASTER SHEET GID
         url_master = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1027512112"
-        url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767"
 
-        # 1. FETCH DATES & COUNTS
-        try:
-            req_dates = urllib.request.Request(url_dates, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_dates, timeout=15) as response:
-                df_dates = pd.read_csv(io.BytesIO(response.read()))
-            prev_date_str = str(df_dates.iloc[0, 0]).strip()
-            this_date_str = str(df_dates.iloc[0, 1]).strip()
-            count_prev = float(df_dates.iloc[0, 2])
-            count_this = float(df_dates.iloc[0, 3])
-        except:
-            prev_date_str, this_date_str, count_prev, count_this = "N/A", "N/A", 0, 0
-
-        # 2. FETCH MASTER DATA
         try:
             req_m = urllib.request.Request(url_master, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req_m, timeout=60) as response:
@@ -2124,91 +2110,85 @@ with tab8:
             df.columns = df.columns.astype(str).str.strip()
             df = df.rename(columns={'ADVERSE DATE': 'Report Period'})
             
-            # Ensure proper types
-            df['Treatment Outcome'] = df['Treatment Outcome'].astype(str).str.upper()
+            # Type Conversion
+            df['Treatment Outcome'] = df['Treatment Outcome'].astype(str).str.upper().replace(["NAN", "NONE", "N/A"], "PENDING")
             df['Initiation Date'] = pd.to_datetime(df['Initiation Date'], errors='coerce')
             df['Outcome Date'] = pd.to_datetime(df['Outcome Date'], errors='coerce')
+            df['Diagnosis Date'] = pd.to_datetime(df['Diagnosis Date'], errors='coerce')
             
-            return df, prev_date_str, this_date_str, count_prev, count_this
+            return df
         except Exception as e:
             st.error(f"Error loading Master Tab: {e}")
-            return pd.DataFrame(), "N/A", "N/A", 0, 0
+            return pd.DataFrame()
 
-    df_master, date_prev, date_this, count_prev, count_this = load_master_adverse()
+    df_master = load_master_adverse()
 
     # ==========================================
     # 🌟 MNC EXECUTIVE SUMMARY
     # ==========================================
-    try:
-        diff = count_this - count_prev
-        color = "#15803d" if diff <= 0 else "#b91c1c"
-        bg_color = "#dcfce7" if diff <= 0 else "#fee2e2"
-        arrow = "📉" if diff < 0 else "📈" if diff > 0 else "➖"
-            
-        st.markdown(f"""
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <div>
-                <p style="margin: 0; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Master Cases ({date_this})</p>
-                <h1 style="margin: 2px 0 0 0; font-size: 42px; font-weight: 800; color: #0f172a;">{int(count_this)}</h1>
-            </div>
-            <div style="text-align: right;">
-                <p style="margin: 0; font-size: 11px; color: #64748b; font-weight: 700;">Previous ({date_prev}): {int(count_prev)}</p>
-                <div style="background-color: {bg_color}; color: {color}; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-top: 5px; display: inline-block;">
-                    {arrow} {int(diff):+}
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    except: pass
-
     if not df_master.empty:
-        # ZONE METRIC GRID
-        zone_counts = df_master['ZONE'].value_counts()
-        cols = st.columns(min(len(zone_counts), 7) or 1)
-        for i, (zone, total) in enumerate(zone_counts.items()):
-            cols[i % 7].markdown(f"""
-            <div style='background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 20px;'>
-                <div style='font-size: 10px; font-weight: 800; color: #2563eb; text-transform: uppercase;'>{zone}</div>
-                <div style='font-size: 24px; font-weight: 800; color: #0f172a;'>{total}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.write("---")
-
-        # 🎯 CALCULATE ON TREATMENT DAYS LOGIC
+        # Calculate On Treatment Days logic
         today = pd.Timestamp.today().normalize()
         def calc_days(row):
             init = row['Initiation Date']
             out = row['Outcome Date']
             outcome = str(row['Treatment Outcome']).upper()
-            
             if pd.isna(init): return ""
             # If outcome is present, calc to outcome date
-            if pd.notna(out) and outcome not in ["", "NAN", "N/A", "NONE"]:
+            if pd.notna(out) and outcome not in ["PENDING", ""]:
                 return f"{(out - init).days} Days"
             # If outcome is blank, calc to today
             return f"{(today - init).days} Days"
 
         df_master['On Treatment Days'] = df_master.apply(calc_days, axis=1)
 
-        # FILTER ENGINE
-        c1, c2, c3 = st.columns([2, 1, 1])
-        unique_outcomes = sorted([x for x in df_master['Treatment Outcome'].unique().tolist() if str(x).lower() not in ["nan", "none", ""]])
-        with c1:
-            sel_out = st.multiselect("Filter by Treatment Outcome", unique_outcomes, default=unique_outcomes)
-            df_f = df_master[df_master['Treatment Outcome'].isin(sel_out)].copy()
-        with c2:
-            z_list = st.multiselect("Zone", sorted(df_f['ZONE'].unique().tolist()))
-            if z_list: df_f = df_f[df_f['ZONE'].isin(z_list)]
-        with c3:
-            p_list = st.multiselect("Period", sorted(df_f['Report Period'].unique().tolist()))
-            if p_list: df_f = df_f[df_f['Report Period'].isin(p_list)]
+        # 🎯 DYNAMIC FILTERS
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            sel_out = st.multiselect("Filter by Outcome", sorted(df_master['Treatment Outcome'].unique()), default=sorted(df_master['Treatment Outcome'].unique()))
+        with col2:
+            sel_zone = st.multiselect("Filter Zone", sorted(df_master['ZONE'].unique()))
+        with col3:
+            sel_period = st.multiselect("Filter Period", sorted(df_master['Report Period'].unique()))
 
-        st.markdown(f"<p style='font-size: 13px; font-weight:600; color:#475569;'>Total Records: {len(df_f)}</p>", unsafe_allow_html=True)
+        df_f = df_master.copy()
+        if sel_out: df_f = df_f[df_f['Treatment Outcome'].isin(sel_out)]
+        if sel_zone: df_f = df_f[df_f['ZONE'].isin(sel_zone)]
+        if sel_period: df_f = df_f[df_f['Report Period'].isin(sel_period)]
+
+        # METRIC CARD
+        st.markdown(f"""
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <p style="margin: 0; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Master Adverse Cases</p>
+            <h1 style="margin: 2px 0 0 0; font-size: 42px; font-weight: 800; color: #0f172a;">{len(df_f)}</h1>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ZONE DRILL-DOWN GRID
+        st.markdown("<h5 style='color: #475569; font-weight: 700; margin-bottom: 16px;'>📍 Zone-wise Analytics</h5>", unsafe_allow_html=True)
         
-        # Display Columns
-        cols_to_show = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
-        st.dataframe(df_f[cols_to_show], use_container_width=True, hide_index=True)
+        zone_list = sorted(df_f['ZONE'].unique())
+        cols = st.columns(min(len(zone_list), 4) or 1)
+        
+        for i, zone in enumerate(zone_list):
+            df_z = df_f[df_f['ZONE'] == zone]
+            total_z = len(df_z)
+            breakdown = df_z['Treatment Outcome'].value_counts()
+            
+            breakdown_html = ""
+            for status, count in breakdown.items():
+                breakdown_html += f"<div style='display:flex; justify-content:space-between; font-size:10px; color:#475569; padding: 2px 0;'><span>{status.title()}</span> <b>{count}</b></div>"
+            
+            cols[i % 4].markdown(f"""
+            <div style='background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 20px;'>
+                <div style='font-size: 10px; font-weight: 800; color: #2563eb; text-transform: uppercase;'>{zone}</div>
+                <div style='font-size: 24px; font-weight: 800; color: #0f172a;'>{total_z}</div>
+                <div style='border-top: 1px solid #f1f5f9; padding-top: 8px;'>{breakdown_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # MASTER TABLE
+        st.dataframe(df_f, use_container_width=True, hide_index=True)
         
         st.download_button("📥 Export Master Adverse Data", convert_df_to_excel(df_f, "Master_Adverse_Outcomes"), "Master_Adverse_Outcomes.xlsx")
     else:
