@@ -2099,7 +2099,6 @@ with tab8:
         import io
         import re
         
-        # 🎯 GIDs for Master Tab & Date/Count Tab
         url_master = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1027512112"
         url_dates = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=2093682767"
 
@@ -2120,42 +2119,32 @@ with tab8:
             req_m = urllib.request.Request(url_master, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req_m, timeout=60) as response:
                 df = pd.read_csv(io.BytesIO(response.read()))
-            
-            # Clean Headers
             df.columns = df.columns.astype(str).str.strip()
-            # Rename for consistency
-            df = df.rename(columns={'ADVERSE DATE': 'Report Period', 'Treatment Outcome': 'Treatment Outcome'})
+            df = df.rename(columns={'ADVERSE DATE': 'Report Period'})
             df['Treatment Outcome'] = df['Treatment Outcome'].astype(str).str.upper()
-            
             return df, prev_date_str, this_date_str, count_prev, count_this
-        except Exception as e:
-            st.error(f"Error loading Master Tab: {e}")
+        except:
             return pd.DataFrame(), "N/A", "N/A", 0, 0
 
     df_master, date_prev, date_this, count_prev, count_this = load_master_adverse()
 
-    # ==========================================
-    # 🌟 MNC EXECUTIVE SUMMARY CARD
-    # ==========================================
+    # Executive Delta Header
     try:
         diff = count_this - count_prev
-        pct = (diff / count_prev * 100) if count_prev > 0 else 0
-        diff_str = f"+{int(diff)}" if diff > 0 else f"{int(diff)}"
-        pct_str = f"{pct:+.1f}%"
-        color = "#27ae60" if diff <= 0 else "#e74c3c"
-        bg_color = "#eafaf1" if diff <= 0 else "#fdf2e9"
+        color = "#15803d" if diff <= 0 else "#b91c1c"
+        bg_color = "#dcfce7" if diff <= 0 else "#fee2e2"
         arrow = "📉" if diff < 0 else "📈" if diff > 0 else "➖"
             
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
             <div>
-                <p style="margin: 0; font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Master Cases ({date_this})</p>
-                <h1 style="margin: 2px 0 0 0; font-size: 40px; font-weight: 800; color: #0f172a;">{int(count_this)}</h1>
+                <p style="margin: 0; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Current Master Count ({date_this})</p>
+                <h1 style="margin: 2px 0 0 0; font-size: 42px; font-weight: 800; color: #0f172a;">{int(count_this)}</h1>
             </div>
             <div style="text-align: right;">
-                <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 500;">Prev Week ({date_prev}): {int(count_prev)}</p>
-                <div style="background-color: {bg_color}; color: {color}; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 14px; margin-top: 5px;">
-                    {arrow} {diff_str} ({pct_str})
+                <p style="margin: 0; font-size: 11px; color: #64748b; font-weight: 700;">Previous ({date_prev}): {int(count_prev)}</p>
+                <div style="background-color: {bg_color}; color: {color}; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-top: 5px; display: inline-block;">
+                    {arrow} {int(diff):+}
                 </div>
             </div>
         </div>
@@ -2163,40 +2152,57 @@ with tab8:
     except: pass
 
     if not df_master.empty:
-        # ZONE-WISE GRID
-        st.markdown("<h5 style='color: #1e293b; margin-bottom: 12px;'>📍 Zone-wise Breakdown</h5>", unsafe_allow_html=True)
-        zone_counts = df_master['ZONE'].value_counts().to_dict()
-        z_cols = st.columns(len(zone_counts) if len(zone_counts) > 0 else 1)
-        for i, (z_name, z_count) in enumerate(zone_counts.items()):
-            z_cols[i].markdown(f"""
-            <div style='background: #fff; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; text-align: center;'>
-                <div style='font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase;'>{z_name}</div>
-                <div style='font-size: 20px; font-weight: 800; color: #0f172a;'>{z_count}</div>
+        # FILTER ENGINE
+        df_f = df_master.copy()
+        
+        # ZONE BREAKDOWN CARDS
+        st.markdown("<h5 style='color: #475569; font-weight: 700; margin-bottom: 16px;'>📍 Zone-wise Performance Analytics</h5>", unsafe_allow_html=True)
+        
+        zones = sorted(df_f['ZONE'].unique().tolist())
+        cols = st.columns(min(len(zones), 4)) # Wrap if more than 4
+        
+        for i, zone in enumerate(zones):
+            df_z = df_f[df_f['ZONE'] == zone]
+            total_z = len(df_z)
+            breakdown = df_z['Treatment Outcome'].value_counts()
+            
+            # Create sub-list for breakdown
+            breakdown_html = ""
+            for status, count in breakdown.items():
+                if str(status).lower() not in ["nan", "none"]:
+                    breakdown_html += f"<div style='display:flex; justify-content: space-between; font-size: 11px; color: #64748b; padding: 2px 0;'><span>{status.title()}</span> <b>{count}</b></div>"
+            
+            cols[i % 4].markdown(f"""
+            <div style='background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>
+                <div style='font-size: 10px; font-weight: 800; color: #3b82f6; text-transform: uppercase;'>{zone} ZONE</div>
+                <div style='font-size: 28px; font-weight: 800; color: #0f172a; margin: 5px 0;'>{total_z}</div>
+                <div style='border-top: 1px solid #f1f5f9; padding-top: 8px;'>{breakdown_html}</div>
             </div>
             """, unsafe_allow_html=True)
 
         st.write("---")
+        
+        # INTERACTIVE FILTER BAR
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            unique_outcomes = sorted([x for x in df_f['Treatment Outcome'].unique().tolist() if str(x).lower() not in ["nan", "none", ""]])
+            sel_out = st.multiselect("Filter by Treatment Outcome", unique_outcomes, default=unique_outcomes)
+            df_f = df_f[df_f['Treatment Outcome'].isin(sel_out)]
+        with c2:
+            z_list = st.multiselect("Filter Zone", sorted(df_f['ZONE'].unique().tolist()))
+            if z_list: df_f = df_f[df_f['ZONE'].isin(z_list)]
+        with c3:
+            p_list = st.multiselect("Period", sorted(df_f['Report Period'].unique().tolist()))
+            if p_list: df_f = df_f[df_f['Report Period'].isin(p_list)]
 
-        # FILTER ENGINE
-        unique_outcomes = sorted([x for x in df_master['Treatment Outcome'].unique().tolist() if str(x).lower() not in ["nan", "n/a", "none", ""]])
-        sel_out = st.multiselect("🎯 Filter by Treatment Outcome:", unique_outcomes, default=unique_outcomes)
+        # RESULTS TABLE
+        st.markdown(f"<p style='font-size: 13px; font-weight:600; color:#475569;'>Total Records Found: {len(df_f)}</p>", unsafe_allow_html=True)
         
-        df_f = df_master[df_master['Treatment Outcome'].isin(sel_out)].copy()
+        # Reorder columns for professional look
+        cols_to_show = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome']
+        st.dataframe(df_f[cols_to_show], use_container_width=True, hide_index=True)
         
-        # ADVANCED FILTERS
-        with st.expander("🔽 Advanced Filters & Dates"):
-            c1, c2 = st.columns(2)
-            with c1:
-                z_list = st.multiselect("Zone", sorted(df_f['ZONE'].unique().tolist()))
-                if z_list: df_f = df_f[df_f['ZONE'].isin(z_list)]
-            with c2:
-                p_list = st.multiselect("Report Period", sorted(df_f['Report Period'].unique().tolist()))
-                if p_list: df_f = df_f[df_f['Report Period'].isin(p_list)]
-
-        st.markdown(f"<p style='font-weight:600; color:#1e293b;'>Showing {len(df_f)} Master Records</p>", unsafe_allow_html=True)
-        st.dataframe(df_f, use_container_width=True, hide_index=True)
-        
-        st.download_button("📥 Download Master Report", convert_df_to_excel(df_f, "Master_Adverse_Outcomes"), "Master_Adverse_Outcomes.xlsx")
+        st.download_button("📥 Export Master Adverse Data", convert_df_to_excel(df_f, "Master_Adverse_Outcomes"), "Master_Adverse_Outcomes.xlsx")
     else:
         st.info("No master data found.")
 
