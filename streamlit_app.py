@@ -2143,13 +2143,12 @@ with tab8:
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=30) as response:
-                    df = pd.read_csv(io.BytesIO(response.read()))
+                    df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
                 df.columns = df.columns.astype(str).str.strip()
                 return df
             except: return pd.DataFrame()
 
         df_m = get_sheet(url_master)
-        # 🎯 BUG FIX: એરર સોલ્વ કરવા માટે સીધું જ કોલમ નામ બદલો
         if not df_m.empty and 'ADVERSE DATE' in df_m.columns:
             df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
 
@@ -2165,7 +2164,7 @@ with tab8:
             out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
             out_str = str(row.get('Treatment Outcome', '')).upper()
             if pd.isna(init): return ""
-            return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', ''] else (today - init).days} Days"
+            return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', '', 'NAN', 'N/A'] else (today - init).days} Days"
 
         df_master['On Treatment Days'] = df_master.apply(calc_days, axis=1)
 
@@ -2197,12 +2196,30 @@ with tab8:
         df_prev.columns = df_prev.columns.str.upper()
         
         if 'EPISODE ID' in df_this.columns and 'EPISODE ID' in df_prev.columns and 'TREATMENT OUTCOME' in df_this.columns:
-            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS", "TREATMENT COMPLETED"]
             
-            df_this_adv = df_this[~df_this['TREATMENT OUTCOME'].astype(str).str.upper().str.contains('|'.join(good))].copy()
-            df_prev_adv = df_prev[~df_prev['TREATMENT OUTCOME'].astype(str).str.upper().str.contains('|'.join(good))].copy()
+            # STRICT CLEANING: Remove spaces and handle NaN
+            df_this['EPISODE ID'] = df_this['EPISODE ID'].fillna("").astype(str).str.strip()
+            df_prev['EPISODE ID'] = df_prev['EPISODE ID'].fillna("").astype(str).str.strip()
             
-            df_new = df_this_adv[~df_this_adv['EPISODE ID'].astype(str).isin(df_prev_adv['EPISODE ID'].astype(str))].copy()
+            df_this['TREATMENT OUTCOME'] = df_this['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
+            df_prev['TREATMENT OUTCOME'] = df_prev['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
+            
+            # THE FIX: Defining what is "Good" and what is "Blank"
+            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
+            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
+            
+            # Filter THIS week: Must NOT be good AND Must NOT be blank
+            is_adv_this = ~df_this['TREATMENT OUTCOME'].str.contains('|'.join(good), na=False)
+            has_out_this = ~df_this['TREATMENT OUTCOME'].isin(blank_variants)
+            df_this_adv = df_this[is_adv_this & has_out_this].copy()
+            
+            # Filter PREVIOUS week: Must NOT be good AND Must NOT be blank
+            is_adv_prev = ~df_prev['TREATMENT OUTCOME'].str.contains('|'.join(good), na=False)
+            has_out_prev = ~df_prev['TREATMENT OUTCOME'].isin(blank_variants)
+            df_prev_adv = df_prev[is_adv_prev & has_out_prev].copy()
+            
+            # Compare purely adverse vs purely adverse
+            df_new = df_this_adv[~df_this_adv['EPISODE ID'].isin(df_prev_adv['EPISODE ID'])].copy()
             
             today = pd.Timestamp.today().normalize()
             def calc_new_days(row):
@@ -2210,11 +2227,12 @@ with tab8:
                 out = pd.to_datetime(row.get('OUTCOME DATE'), errors='coerce')
                 out_str = str(row.get('TREATMENT OUTCOME', '')).upper()
                 if pd.isna(init): return ""
-                return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', ''] else (today - init).days} Days"
+                return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
             
             if 'INITIATION DATE' in df_new.columns:
                 df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
             
+            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
             st.dataframe(df_new, use_container_width=True, hide_index=True)
             st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
         else:
