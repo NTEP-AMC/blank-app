@@ -453,21 +453,20 @@ with tab1:
         st.download_button("📥 Download Master Excel", convert_df_to_excel(df_disp, "Master_Report"), "Master_Report.xlsx", key='dl1')                
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON & PENDENCY TRACKER
+# 🟢 TAB 2: DAILY COMPARISON (NO DATES DISPLAYED)
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters & Dates", expanded=True):
         c1, c2, c3 = st.columns(3)
         df_c = df_comp.copy()
-        
         with c1: 
             if st.session_state.role == "ADMIN":
                 s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
                 if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
+            # 🎯 DEPENDENT FILTER
             s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
             if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
-            
         with c2: 
             if 'Facility Type' in df_c.columns:
                 available_facs2 = df_c['Facility Type'].astype(str).str.upper().unique()
@@ -477,9 +476,9 @@ with tab2:
                     if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
                     elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+            # 🎯 DEPENDENT FILTER
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
-            
         with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
@@ -512,23 +511,25 @@ with tab2:
     with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
     
-    # Main Matrix Table
+    # 🎯 FIX: Removing dates from Tab 2 UI display
     df_c_display = df_c.drop(columns=['Diagnosis Date', 'Initiation Date', 'Outcome Date'], errors='ignore')
     st.dataframe(df_c_display, use_container_width=True, hide_index=True)
     if not df_c_display.empty:
         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_c_display, "Comparison_Matrix"), "Comparison.xlsx", key='dl2')
 
     # ==========================================
-    # 📊 DYNAMIC ZONE-WISE PENDENCY TRACKER 
+    # 📊 DYNAMIC ZONE-WISE PENDENCY TRACKER (ADDED AT THE BOTTOM)
     # ==========================================
     st.write("---")
     st.markdown("<h4 style='color: #1e293b; font-weight: 700;'>📊 Zone-wise Pendency Tracker</h4>", unsafe_allow_html=True)
     
-    if not df_c.empty and ind_cols_in_df:
+    if not df_c.empty and ind_cols_in_df and 'ZONE' in df_c.columns:
         zone_data = []
-        for z in sorted(df_c['ZONE'].astype(str).unique()):
+        # ERROR FIX: pd.notna(z) ખરાબ ડેટા કે ખાલી ખાના ને લીધે આવતી TypeError ને રોકે છે.
+        valid_zones = [z for z in df_c['ZONE'].unique() if pd.notna(z)]
+        
+        for z in sorted(valid_zones):
             df_z = df_c[df_c['ZONE'] == z]
-            # Calculate counts for this specific zone
             n_val = (df_z[ind_cols_in_df] == "🔴 NEW").sum().sum()
             p_val = (df_z[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
             r_val = (df_z[ind_cols_in_df] == "🟢 RESOLVED").sum().sum()
@@ -543,11 +544,8 @@ with tab2:
         
         df_pendency = pd.DataFrame(zone_data)
         
-        # Sort by highest pendency first for better UX
-        df_pendency = df_pendency.sort_values(by='TOTAL PENDACY (NEW+PERSISTENT)', ascending=False)
-        
         if not df_pendency.empty:
-            # Apply Excel-style Red Background Gradient
+            # Excel જેવો કલર સ્કેલ (વધારે પેન્ડન્સી = ઘાટો લાલ કલર)
             styled_df = df_pendency.style.background_gradient(
                 subset=['TOTAL PENDACY (NEW+PERSISTENT)'], 
                 cmap='Reds' 
