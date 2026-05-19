@@ -2088,111 +2088,79 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER TRACKER) - MNC EDITION
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
 
     @st.cache_data(ttl=600, show_spinner=False)
-    def load_master_adverse():
+    def load_all_data():
         import urllib.request
         import io
-        import re
         
-        # MASTER SHEET GID
+        # URLs
         url_master = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1027512112"
+        url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
+        url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
 
-        try:
-            req_m = urllib.request.Request(url_master, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_m, timeout=60) as response:
-                df = pd.read_csv(io.BytesIO(response.read()))
-            
-            df.columns = df.columns.astype(str).str.strip()
-            df = df.rename(columns={'ADVERSE DATE': 'Report Period'})
-            
-            # Type Conversion
-            df['Treatment Outcome'] = df['Treatment Outcome'].astype(str).str.upper().replace(["NAN", "NONE", "N/A"], "PENDING")
-            df['Initiation Date'] = pd.to_datetime(df['Initiation Date'], errors='coerce')
-            df['Outcome Date'] = pd.to_datetime(df['Outcome Date'], errors='coerce')
-            df['Diagnosis Date'] = pd.to_datetime(df['Diagnosis Date'], errors='coerce')
-            
-            return df
-        except Exception as e:
-            st.error(f"Error loading Master Tab: {e}")
-            return pd.DataFrame()
+        def get_sheet(url):
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    df = pd.read_csv(io.BytesIO(response.read()))
+                df.columns = df.columns.astype(str).str.strip()
+                return df
+            except: return pd.DataFrame()
 
-    df_master = load_master_adverse()
+        return get_sheet(url_master), get_sheet(url_this), get_sheet(url_prev)
 
-    # ==========================================
-    # 🌟 MNC EXECUTIVE SUMMARY
-    # ==========================================
+    df_master, df_this, df_prev = load_all_data()
+
+    # --- 1. Master Logic & UI ---
     if not df_master.empty:
-        # Calculate On Treatment Days logic
+        # Treatment Days Logic for Master
         today = pd.Timestamp.today().normalize()
         def calc_days(row):
-            init = row['Initiation Date']
-            out = row['Outcome Date']
-            outcome = str(row['Treatment Outcome']).upper()
+            init = pd.to_datetime(row['Initiation Date'], errors='coerce')
+            out = pd.to_datetime(row['Outcome Date'], errors='coerce')
+            out_str = str(row['Treatment Outcome']).upper()
             if pd.isna(init): return ""
-            # If outcome is present, calc to outcome date
-            if pd.notna(out) and outcome not in ["PENDING", ""]:
-                return f"{(out - init).days} Days"
-            # If outcome is blank, calc to today
-            return f"{(today - init).days} Days"
+            return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', ''] else (today - init).days} Days"
 
         df_master['On Treatment Days'] = df_master.apply(calc_days, axis=1)
 
-        # 🎯 DYNAMIC FILTERS
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            sel_out = st.multiselect("Filter by Outcome", sorted(df_master['Treatment Outcome'].unique()), default=sorted(df_master['Treatment Outcome'].unique()))
-        with col2:
-            sel_zone = st.multiselect("Filter Zone", sorted(df_master['ZONE'].unique()))
-        with col3:
-            sel_period = st.multiselect("Filter Period", sorted(df_master['Report Period'].unique()))
+        # Filters for Master
+        c1, c2, c3 = st.columns(3)
+        with c1: sel_out = st.multiselect("Filter Master by Outcome", sorted(df_master['Treatment Outcome'].unique()), default=sorted(df_master['Treatment Outcome'].unique()))
+        with c2: sel_zone = st.multiselect("Filter Master by Zone", sorted(df_master['ZONE'].unique()))
+        with c3: sel_period = st.multiselect("Filter Master by Period", sorted(df_master['Report Period'].unique()))
 
-        df_f = df_master.copy()
-        if sel_out: df_f = df_f[df_f['Treatment Outcome'].isin(sel_out)]
-        if sel_zone: df_f = df_f[df_f['ZONE'].isin(sel_zone)]
-        if sel_period: df_f = df_f[df_f['Report Period'].isin(sel_period)]
-
-        # METRIC CARD
-        st.markdown(f"""
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-            <p style="margin: 0; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Master Adverse Cases</p>
-            <h1 style="margin: 2px 0 0 0; font-size: 42px; font-weight: 800; color: #0f172a;">{len(df_f)}</h1>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ZONE DRILL-DOWN GRID
-        st.markdown("<h5 style='color: #475569; font-weight: 700; margin-bottom: 16px;'>📍 Zone-wise Analytics</h5>", unsafe_allow_html=True)
+        df_f = df_master[df_master['Treatment Outcome'].isin(sel_out) & df_master['ZONE'].isin(sel_zone) & df_master['Report Period'].isin(sel_period)]
         
-        zone_list = sorted(df_f['ZONE'].unique())
-        cols = st.columns(min(len(zone_list), 4) or 1)
-        
-        for i, zone in enumerate(zone_list):
-            df_z = df_f[df_f['ZONE'] == zone]
-            total_z = len(df_z)
-            breakdown = df_z['Treatment Outcome'].value_counts()
-            
-            breakdown_html = ""
-            for status, count in breakdown.items():
-                breakdown_html += f"<div style='display:flex; justify-content:space-between; font-size:10px; color:#475569; padding: 2px 0;'><span>{status.title()}</span> <b>{count}</b></div>"
-            
-            cols[i % 4].markdown(f"""
-            <div style='background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 20px;'>
-                <div style='font-size: 10px; font-weight: 800; color: #2563eb; text-transform: uppercase;'>{zone}</div>
-                <div style='font-size: 24px; font-weight: 800; color: #0f172a;'>{total_z}</div>
-                <div style='border-top: 1px solid #f1f5f9; padding-top: 8px;'>{breakdown_html}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # MASTER TABLE
+        # Summary
+        st.markdown(f"<div style='background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px; box-shadow:0 2px 4px #eee;'>Total Master Cases: <b>{len(df_f)}</b></div>", unsafe_allow_html=True)
         st.dataframe(df_f, use_container_width=True, hide_index=True)
+
+    # --- 2. Delta Logic (The New Table) ---
+    st.write("---")
+    st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
+    
+    if not df_this.empty and not df_prev.empty:
+        # Identify Adverse
+        good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
+        df_this_adv = df_this[~df_this['Treatment Outcome'].astype(str).str.upper().str.contains('|'.join(good))].copy()
+        df_prev_adv = df_prev[~df_prev['Treatment Outcome'].astype(str).str.upper().str.contains('|'.join(good))].copy()
         
-        st.download_button("📥 Export Master Adverse Data", convert_df_to_excel(df_f, "Master_Adverse_Outcomes"), "Master_Adverse_Outcomes.xlsx")
+        # Find NEW (not in prev)
+        df_new = df_this_adv[~df_this_adv['Episode ID'].astype(str).isin(df_prev_adv['Episode ID'].astype(str))].copy()
+        
+        # Treatment Days for New
+        df_new['On Treatment Days'] = df_new.apply(calc_days, axis=1)
+        
+        st.dataframe(df_new, use_container_width=True, hide_index=True)
+        st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
     else:
-        st.info("No master data found.")
+        st.info("Check This Week and Previous Week sheets.")
 
 # ==========================================
 # 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
