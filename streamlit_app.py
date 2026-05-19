@@ -453,20 +453,21 @@ with tab1:
         st.download_button("📥 Download Master Excel", convert_df_to_excel(df_disp, "Master_Report"), "Master_Report.xlsx", key='dl1')                
 
 # ==========================================
-# 🟢 TAB 2: DAILY COMPARISON (NO DATES DISPLAYED)
+# 🟢 TAB 2: DAILY COMPARISON & PENDENCY TRACKER
 # ==========================================
 with tab2:
     st.markdown("#### 🔄 Comparison Matrix")
     with st.expander("🔽 Filters & Dates", expanded=True):
         c1, c2, c3 = st.columns(3)
         df_c = df_comp.copy()
+        
         with c1: 
             if st.session_state.role == "ADMIN":
                 s2_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_c, 'ZONE', 'tab2'), key='z2'))
                 if s2_z: df_c = df_c[df_c['ZONE'].isin(s2_z)]
-            # 🎯 DEPENDENT FILTER
             s2_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_c, 'TB Unit', 'tab2'), key='tu2'))
             if s2_tu: df_c = df_c[df_c['TB Unit'].isin(s2_tu)]
+            
         with c2: 
             if 'Facility Type' in df_c.columns:
                 available_facs2 = df_c['Facility Type'].astype(str).str.upper().unique()
@@ -476,9 +477,9 @@ with tab2:
                     if "PUBLIC" in s2_ft_raw and "PRIVATE" in s2_ft_raw: pass
                     elif "PUBLIC" in s2_ft_raw: df_c = df_c[df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
                     elif "PRIVATE" in s2_ft_raw: df_c = df_c[~df_c['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 DEPENDENT FILTER
             s2_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_c, 'PHI', 'tab2'), key='phi2'))
             if s2_phi: df_c = df_c[df_c['PHI'].isin(s2_phi)]
+            
         with c3: 
             ignore_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Facility Type', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']
             s2_ind = st.multiselect("Filter by Report Type", [c for c in df_c.columns if c not in ignore_cols], key='ind2')
@@ -511,11 +512,48 @@ with tab2:
     with cc3: st.markdown(draw_card("🟡 PERSISTENT", per_c, "#F1C40F", "⏳"), unsafe_allow_html=True)
     with cc4: st.markdown(draw_card("🟢 RESOLVED", res_c, "#27AE60", "✅"), unsafe_allow_html=True)
     
-    # 🎯 FIX: Removing dates from Tab 2 UI display
+    # Main Matrix Table
     df_c_display = df_c.drop(columns=['Diagnosis Date', 'Initiation Date', 'Outcome Date'], errors='ignore')
     st.dataframe(df_c_display, use_container_width=True, hide_index=True)
     if not df_c_display.empty:
         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_c_display, "Comparison_Matrix"), "Comparison.xlsx", key='dl2')
+
+    # ==========================================
+    # 📊 DYNAMIC ZONE-WISE PENDENCY TRACKER 
+    # ==========================================
+    st.write("---")
+    st.markdown("<h4 style='color: #1e293b; font-weight: 700;'>📊 Zone-wise Pendency Tracker</h4>", unsafe_allow_html=True)
+    
+    if not df_c.empty and ind_cols_in_df:
+        zone_data = []
+        for z in sorted(df_c['ZONE'].astype(str).unique()):
+            df_z = df_c[df_c['ZONE'] == z]
+            # Calculate counts for this specific zone
+            n_val = (df_z[ind_cols_in_df] == "🔴 NEW").sum().sum()
+            p_val = (df_z[ind_cols_in_df] == "🟡 PERSISTENT").sum().sum()
+            r_val = (df_z[ind_cols_in_df] == "🟢 RESOLVED").sum().sum()
+            
+            zone_data.append({
+                'ZONE': z,
+                'TOTAL PENDACY (NEW+PERSISTENT)': n_val + p_val,
+                'PERSIST': p_val,
+                'NEW': n_val,
+                'RESOLVE': r_val
+            })
+        
+        df_pendency = pd.DataFrame(zone_data)
+        
+        # Sort by highest pendency first for better UX
+        df_pendency = df_pendency.sort_values(by='TOTAL PENDACY (NEW+PERSISTENT)', ascending=False)
+        
+        if not df_pendency.empty:
+            # Apply Excel-style Red Background Gradient
+            styled_df = df_pendency.style.background_gradient(
+                subset=['TOTAL PENDACY (NEW+PERSISTENT)'], 
+                cmap='Reds' 
+            ).format(precision=0)
+            
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 # ==========================================
 # 🟢 TAB 3: CURRENT PATIENTS
@@ -2112,32 +2150,46 @@ with tab8:
                 return df
             except: return pd.DataFrame()
 
-        return get_sheet(url_master), get_sheet(url_this), get_sheet(url_prev)
+        # 🎯 FIX: Explicitly rename ADVERSE DATE so the filter doesn't throw a KeyError
+        df_m = get_sheet(url_master)
+        if not df_m.empty and 'ADVERSE DATE' in df_m.columns:
+            df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
+            
+        return df_m, get_sheet(url_this), get_sheet(url_prev)
 
     df_master, df_this, df_prev = load_all_data()
 
     # --- 1. Master Logic & UI ---
     if not df_master.empty:
-        # Treatment Days Logic for Master
         today = pd.Timestamp.today().normalize()
         def calc_days(row):
-            init = pd.to_datetime(row['Initiation Date'], errors='coerce')
-            out = pd.to_datetime(row['Outcome Date'], errors='coerce')
-            out_str = str(row['Treatment Outcome']).upper()
+            init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
+            out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
+            out_str = str(row.get('Treatment Outcome', '')).upper()
             if pd.isna(init): return ""
             return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', ''] else (today - init).days} Days"
 
         df_master['On Treatment Days'] = df_master.apply(calc_days, axis=1)
 
-        # Filters for Master
         c1, c2, c3 = st.columns(3)
-        with c1: sel_out = st.multiselect("Filter Master by Outcome", sorted(df_master['Treatment Outcome'].unique()), default=sorted(df_master['Treatment Outcome'].unique()))
-        with c2: sel_zone = st.multiselect("Filter Master by Zone", sorted(df_master['ZONE'].unique()))
-        with c3: sel_period = st.multiselect("Filter Master by Period", sorted(df_master['Report Period'].unique()))
+        with c1: 
+            if 'Treatment Outcome' in df_master.columns:
+                sel_out = st.multiselect("Filter Master by Outcome", sorted(df_master['Treatment Outcome'].dropna().astype(str).unique()), default=sorted(df_master['Treatment Outcome'].dropna().astype(str).unique()))
+            else: sel_out = []
+        with c2: 
+            if 'ZONE' in df_master.columns:
+                sel_zone = st.multiselect("Filter Master by Zone", sorted(df_master['ZONE'].dropna().astype(str).unique()))
+            else: sel_zone = []
+        with c3: 
+            if 'Report Period' in df_master.columns:
+                sel_period = st.multiselect("Filter Master by Period", sorted(df_master['Report Period'].dropna().astype(str).unique()))
+            else: sel_period = []
 
-        df_f = df_master[df_master['Treatment Outcome'].isin(sel_out) & df_master['ZONE'].isin(sel_zone) & df_master['Report Period'].isin(sel_period)]
+        df_f = df_master.copy()
+        if sel_out and 'Treatment Outcome' in df_f.columns: df_f = df_f[df_f['Treatment Outcome'].astype(str).isin(sel_out)]
+        if sel_zone and 'ZONE' in df_f.columns: df_f = df_f[df_f['ZONE'].astype(str).isin(sel_zone)]
+        if sel_period and 'Report Period' in df_f.columns: df_f = df_f[df_f['Report Period'].astype(str).isin(sel_period)]
         
-        # Summary
         st.markdown(f"<div style='background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px; box-shadow:0 2px 4px #eee;'>Total Master Cases: <b>{len(df_f)}</b></div>", unsafe_allow_html=True)
         st.dataframe(df_f, use_container_width=True, hide_index=True)
 
@@ -2146,19 +2198,29 @@ with tab8:
     st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
     
     if not df_this.empty and not df_prev.empty:
-        # Identify Adverse
-        good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
-        df_this_adv = df_this[~df_this['Treatment Outcome'].astype(str).str.upper().str.contains('|'.join(good))].copy()
-        df_prev_adv = df_prev[~df_prev['Treatment Outcome'].astype(str).str.upper().str.contains('|'.join(good))].copy()
+        # Standardize Columns
+        df_this.columns = df_this.columns.str.upper()
+        df_prev.columns = df_prev.columns.str.upper()
         
-        # Find NEW (not in prev)
-        df_new = df_this_adv[~df_this_adv['Episode ID'].astype(str).isin(df_prev_adv['Episode ID'].astype(str))].copy()
-        
-        # Treatment Days for New
-        df_new['On Treatment Days'] = df_new.apply(calc_days, axis=1)
-        
-        st.dataframe(df_new, use_container_width=True, hide_index=True)
-        st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
+        # Ensure Episode ID exists
+        if 'EPISODE ID' in df_this.columns and 'EPISODE ID' in df_prev.columns:
+            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS", "TREATMENT COMPLETED"]
+            
+            # Use 'TREATMENT OUTCOME' based on upper case standardization
+            outcome_col = 'TREATMENT OUTCOME' if 'TREATMENT OUTCOME' in df_this.columns else None
+            
+            if outcome_col:
+                df_this_adv = df_this[~df_this[outcome_col].astype(str).str.upper().str.contains('|'.join(good))].copy()
+                df_prev_adv = df_prev[~df_prev[outcome_col].astype(str).str.upper().str.contains('|'.join(good))].copy()
+                
+                df_new = df_this_adv[~df_this_adv['EPISODE ID'].astype(str).isin(df_prev_adv['EPISODE ID'].astype(str))].copy()
+                
+                st.dataframe(df_new, use_container_width=True, hide_index=True)
+                st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
+            else:
+                st.warning("Could not find 'Treatment Outcome' column in current week sheet.")
+        else:
+            st.warning("Could not find 'Episode ID' column to compare records.")
     else:
         st.info("Check This Week and Previous Week sheets.")
 
