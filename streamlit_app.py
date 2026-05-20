@@ -2134,7 +2134,6 @@ with tab8:
         import urllib.request
         import io
         
-        # URLs
         url_master = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1027512112"
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
@@ -2197,29 +2196,26 @@ with tab8:
         
         if 'EPISODE ID' in df_this.columns and 'EPISODE ID' in df_prev.columns and 'TREATMENT OUTCOME' in df_this.columns:
             
-            # STRICT CLEANING: Remove spaces and handle NaN
             df_this['EPISODE ID'] = df_this['EPISODE ID'].fillna("").astype(str).str.strip()
             df_prev['EPISODE ID'] = df_prev['EPISODE ID'].fillna("").astype(str).str.strip()
             
             df_this['TREATMENT OUTCOME'] = df_this['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
             df_prev['TREATMENT OUTCOME'] = df_prev['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
             
-            # THE FIX: Defining what is "Good" and what is "Blank"
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
             blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
-            # Filter THIS week: Must NOT be good AND Must NOT be blank
+            # Filter Adverse for This Week
             is_adv_this = ~df_this['TREATMENT OUTCOME'].str.contains('|'.join(good), na=False)
             has_out_this = ~df_this['TREATMENT OUTCOME'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            # Filter PREVIOUS week: Must NOT be good AND Must NOT be blank
-            is_adv_prev = ~df_prev['TREATMENT OUTCOME'].str.contains('|'.join(good), na=False)
-            has_out_prev = ~df_prev['TREATMENT OUTCOME'].isin(blank_variants)
-            df_prev_adv = df_prev[is_adv_prev & has_out_prev].copy()
-            
-            # Compare purely adverse vs purely adverse
-            df_new = df_this_adv[~df_this_adv['EPISODE ID'].isin(df_prev_adv['EPISODE ID'])].copy()
+            # 🎯 THE 19 PATIENT FIX: Check ID AND Outcome combination. 
+            # If the outcome changed, or it's a completely new ID, it will be included!
+            merged = df_this_adv.merge(df_prev[['EPISODE ID', 'TREATMENT OUTCOME']], on='EPISODE ID', how='left', suffixes=('', '_PREV'))
+            # It's NEW if it wasn't in previous week, OR if the outcome is different than previous week
+            df_new = merged[(merged['TREATMENT OUTCOME_PREV'].isna()) | (merged['TREATMENT OUTCOME'] != merged['TREATMENT OUTCOME_PREV'])].copy()
+            df_new = df_new.drop(columns=['TREATMENT OUTCOME_PREV'], errors='ignore')
             
             today = pd.Timestamp.today().normalize()
             def calc_new_days(row):
@@ -2230,83 +2226,16 @@ with tab8:
                 return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
             
             if 'INITIATION DATE' in df_new.columns:
-                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
+                df_new['ON TREATMENT DAYS'] = df_new.apply(calc_new_days, axis=1)
+            
+            # 🎯 CLEAN COLUMNS FIX: Only show relevant columns!
+            display_cols = ['ZONE', 'TB UNIT', 'PHI', 'FACILITY TYPE', 'PATIENT NAME', 'EPISODE ID', 'DIAGNOSIS DATE', 'INITIATION DATE', 'OUTCOME DATE', 'TREATMENT OUTCOME', 'ON TREATMENT DAYS']
+            final_cols = [c for c in display_cols if c in df_new.columns]
             
             st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_new, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
+            st.dataframe(df_new[final_cols], use_container_width=True, hide_index=True)
+            st.download_button("📥 Download New List", convert_df_to_excel(df_new[final_cols], "New_Adverse"), "New_Records.xlsx")
         else:
             st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in current week sheet.")
     else:
         st.info("Check This Week and Previous Week sheets.")
-
-# ==========================================
-# 🟢 TAB 9: LIVE FIELD DATA (EPICOLLECT5)
-# ==========================================
-with tab9:
-    st.markdown("<h3 style='color: #0f172a; font-weight: 800;'>📱 PMDT Patient Visit (Live Field Data)</h3>", unsafe_allow_html=True)
-
-    @st.cache_data(ttl=300, show_spinner=False)
-    def load_epicollect_data():
-        import urllib.request
-        import io
-        
-        # ⚠️ અહી તમારી EPICOLLECT GOOGLE SHEET ની CSV લિંક નાખો
-        url_epicollect = "PASTE_YOUR_GOOGLE_SHEET_CSV_LINK_HERE" 
-        
-        if "PASTE_YOUR" in url_epicollect:
-            return pd.DataFrame()
-            
-        try:
-            req = urllib.request.Request(url_epicollect, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                df = pd.read_csv(io.BytesIO(response.read()), dtype=str)
-            df.columns = df.columns.astype(str).str.strip().str.upper()
-            return df
-        except:
-            return pd.DataFrame()
-
-    df_epi = load_epicollect_data()
-
-    if df_epi.empty:
-        st.info("🔗 Please add your Epicollect5 Google Sheet CSV link in the code to load live field data.")
-    else:
-        # 🎯 FILTERS FOR FIELD DATA
-        with st.expander("🔽 Filter Field Visits", expanded=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if 'ZONE' in df_epi.columns:
-                    sel_zone = st.multiselect("Filter by Zone", sorted(df_epi['ZONE'].dropna().unique()))
-                    if sel_zone: df_epi = df_epi[df_epi['ZONE'].isin(sel_zone)]
-            with c2:
-                if 'DPS NAME' in df_epi.columns:
-                    sel_dps = st.multiselect("Filter by DPS Name", sorted(df_epi['DPS NAME'].dropna().unique()))
-                    if sel_dps: df_epi = df_epi[df_epi['DPS NAME'].isin(sel_dps)]
-            with c3:
-                date_cols = [col for col in df_epi.columns if 'DATE' in col]
-                if date_cols:
-                    visit_date = date_cols[0] # Auto-detect date column
-                    df_epi[visit_date] = pd.to_datetime(df_epi[visit_date], errors='coerce')
-                    date_range = st.date_input("Visit Date Range", value=[], key="epi_dt")
-                    if len(date_range) == 2:
-                        df_epi = df_epi[df_epi[visit_date].dt.date.between(date_range[0], date_range[1])]
-
-        st.markdown(f"<p style='font-weight: 600; color: #1e293b;'>Total Field Visits: {len(df_epi)}</p>", unsafe_allow_html=True)
-
-        # ==========================================
-        # 🌟 MAGIC: RENDER PHOTOS & LOCATION LINKS IN TABLE
-        # ==========================================
-        col_config = {}
-        
-        # 1. Image Column: "VISIT PHOTO" નામની કોલમમાં જો ફોટાની લિંક હશે તો તે ટેબલમાં ફોટો બનીને દેખાશે.
-        photo_cols = [c for c in df_epi.columns if 'PHOTO' in c or 'IMAGE' in c]
-        for pc in photo_cols:
-            col_config[pc] = st.column_config.ImageColumn("📸 Visit Photo", help="Patient Visit Photo (Click to enlarge)")
-
-        # 2. Location Column: "LOCATION" નામની કોલમમાં લિંક હશે તો તે મેપ આઇકોન બની જશે.
-        loc_cols = [c for c in df_epi.columns if 'LOCATION' in c or 'MAP' in c or 'GPS' in c]
-        for lc in loc_cols:
-            col_config[lc] = st.column_config.LinkColumn("📍 View Location", display_text="Open Map")
-
-        # Display Dataframe with Special Config
-        st.dataframe(df_epi, use_container_width=True, hide_index=True, column_config=col_config)
