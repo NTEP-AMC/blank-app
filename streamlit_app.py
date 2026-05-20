@@ -2241,163 +2241,72 @@ with tab8:
         st.info("Check This Week and Previous Week sheets.")
 
 # ==========================================
-# 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
+# 🟢 TAB 9: LIVE FIELD DATA (EPICOLLECT5)
 # ==========================================
 with tab9:
-    st.markdown("<h3 style='color: #8E44AD;'>📱 Epicollect5 Live Data Sync</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Live syncing data directly from the Epicollect5 mobile applications.</i></div>", unsafe_allow_html=True)
-
-    # 🎯 Multi-Project Selector
-    projects = {
-        "🏠 Initial TB Patient Home Visit": "amc-ntep-initial-tb-patient-home-visit-form",
-        "🏥 Private Notification Facilities": "private-notification-facilities"
-    }
-    
-    sel_proj_name = st.selectbox("📌 Select Project to View:", list(projects.keys()))
-    sel_slug = projects[sel_proj_name]
+    st.markdown("<h3 style='color: #0f172a; font-weight: 800;'>📱 PMDT Patient Visit (Live Field Data)</h3>", unsafe_allow_html=True)
 
     @st.cache_data(ttl=300, show_spinner=False)
-    def load_epicollect_data(slug):
-        import requests
+    def load_epicollect_data():
+        import urllib.request
         import io
-        import time
         
-        all_dfs = []
-        page = 1
-        error_message = ""
+        # ⚠️ અહી તમારી EPICOLLECT GOOGLE SHEET ની CSV લિંક નાખો
+        url_epicollect = "PASTE_YOUR_GOOGLE_SHEET_CSV_LINK_HERE" 
         
-        # 🎯 Polite Pagination Engine (Bypasses the 250-entry Anti-Bot Firewall)
-        while True:
-            url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv&page={page}"
-            try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-                response = requests.get(url, headers=headers, timeout=30)
-                
-                # Handle API Blocks
-                if response.status_code == 429:
-                    time.sleep(2) # Rate limit hit! Wait 2 seconds and retry this page.
-                    continue
-                elif response.status_code == 400:
-                    if page == 1: error_message = "**HTTP 400:** Epicollect5 rejected the request."
-                    break # On later pages, a 400 just means we've exceeded the final page.
-                elif response.status_code in [401, 403]:
-                    error_message = f"**HTTP {response.status_code}:** Project '{slug}' is PRIVATE. Make it 'Public'."
-                    break
-                elif response.status_code == 404:
-                    error_message = f"**HTTP 404:** Project '{slug}' not found."
-                    break
-                elif response.status_code != 200:
-                    error_message = f"**HTTP {response.status_code}:** API Error."
-                    break
-                
-                # 🎯 Safe CSV Reading (Prevents Pandas crashes on empty final pages)
-                try:
-                    df = pd.read_csv(io.StringIO(response.text), dtype=str)
-                except pd.errors.EmptyDataError:
-                    break 
-                
-                if len(df) == 0: break
-                
-                cols_to_drop = ['ec5_uuid', 'ec5_parent_uuid', 'ec5_branch_uuid', 'ec5_is_branch', 'title']
-                df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
-                
-                all_dfs.append(df)
-                
-                if len(df) < 50: break # Epicollect's default is 50. If we get 49, it's the last page.
-                
-                page += 1
-                time.sleep(0.5) # ⏳ THE FIX: 0.5s pause to prevent IP ban/firewall drops!
-                
-            except Exception as e:
-                error_message = f"**Connection Error:** {str(e)}"
-                break
-                
-        if not all_dfs: return pd.DataFrame(), error_message
-        return pd.concat(all_dfs, ignore_index=True), error_message
+        if "PASTE_YOUR" in url_epicollect:
+            return pd.DataFrame()
+            
+        try:
+            req = urllib.request.Request(url_epicollect, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                df = pd.read_csv(io.BytesIO(response.read()), dtype=str)
+            df.columns = df.columns.astype(str).str.strip().str.upper()
+            return df
+        except:
+            return pd.DataFrame()
 
-    with st.spinner(f"Fetching ALL Live Entries for {sel_proj_name} (Pausing between pages to prevent firewall blocks)..."):
-        df_epi_raw, fetch_error = load_epicollect_data(sel_slug)
+    df_epi = load_epicollect_data()
 
-    if fetch_error and not df_epi_raw.empty:
-        st.toast(f"⚠️ Sync paused early: {fetch_error}")
-
-    if df_epi_raw.empty:
-        if fetch_error: st.error(fetch_error)
-        else: st.warning("⚠️ No data found for this project.")
+    if df_epi.empty:
+        st.info("🔗 Please add your Epicollect5 Google Sheet CSV link in the code to load live field data.")
     else:
-        df_epi = df_epi_raw.copy()
-        
+        # 🎯 FILTERS FOR FIELD DATA
+        with st.expander("🔽 Filter Field Visits", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if 'ZONE' in df_epi.columns:
+                    sel_zone = st.multiselect("Filter by Zone", sorted(df_epi['ZONE'].dropna().unique()))
+                    if sel_zone: df_epi = df_epi[df_epi['ZONE'].isin(sel_zone)]
+            with c2:
+                if 'DPS NAME' in df_epi.columns:
+                    sel_dps = st.multiselect("Filter by DPS Name", sorted(df_epi['DPS NAME'].dropna().unique()))
+                    if sel_dps: df_epi = df_epi[df_epi['DPS NAME'].isin(sel_dps)]
+            with c3:
+                date_cols = [col for col in df_epi.columns if 'DATE' in col]
+                if date_cols:
+                    visit_date = date_cols[0] # Auto-detect date column
+                    df_epi[visit_date] = pd.to_datetime(df_epi[visit_date], errors='coerce')
+                    date_range = st.date_input("Visit Date Range", value=[], key="epi_dt")
+                    if len(date_range) == 2:
+                        df_epi = df_epi[df_epi[visit_date].dt.date.between(date_range[0], date_range[1])]
+
+        st.markdown(f"<p style='font-weight: 600; color: #1e293b;'>Total Field Visits: {len(df_epi)}</p>", unsafe_allow_html=True)
+
+        # ==========================================
+        # 🌟 MAGIC: RENDER PHOTOS & LOCATION LINKS IN TABLE
+        # ==========================================
         col_config = {}
         
-        # 1. Clean messy Epicollect column names
-        import re
-        new_cols = {}
-        for c in df_epi.columns:
-            clean_name = re.sub(r'^\d+_?', '', c).replace('_', ' ').strip().title()
-            new_cols[c] = clean_name
-        df_epi = df_epi.rename(columns=new_cols)
-        
-        # 2. Location to Map Link Converter
-        lat_col = next((c for c in df_epi.columns if "Lat" in str(c)), None)
-        lon_col = next((c for c in df_epi.columns if "Long" in str(c) or "Lon" in str(c)), None)
-        
-        if lat_col and lon_col:
-            df_epi['📍 Google Map'] = df_epi.apply(
-                lambda r: f"https://www.google.com/maps?q={r[lat_col]},{r[lon_col]}" 
-                if pd.notna(r[lat_col]) and pd.notna(r[lon_col]) and str(r[lat_col]).strip() != "" else None, 
-                axis=1
-            )
-            col_config['📍 Google Map'] = st.column_config.LinkColumn("📍 Google Map", display_text="🗺️ Open Map")
-            df_epi = df_epi.drop(columns=[lat_col, lon_col])
+        # 1. Image Column: "VISIT PHOTO" નામની કોલમમાં જો ફોટાની લિંક હશે તો તે ટેબલમાં ફોટો બનીને દેખાશે.
+        photo_cols = [c for c in df_epi.columns if 'PHOTO' in c or 'IMAGE' in c]
+        for pc in photo_cols:
+            col_config[pc] = st.column_config.ImageColumn("📸 Visit Photo", help="Patient Visit Photo (Click to enlarge)")
 
-        # 3. Photo Links (Home Visits Only)
-        if "Home Visit" in sel_proj_name:
-            photo_cols = [c for c in df_epi.columns if "Photo" in str(c) or "Image" in str(c) or "Geotagged" in str(c)]
-            for p_col in photo_cols:
-                df_epi[p_col] = df_epi[p_col].apply(
-                    lambda x: f"https://five.epicollect.net/api/export/media/{sel_slug}?type=photo&format=entry_original&name={x}" 
-                    if pd.notna(x) and str(x).strip() != "" and not str(x).startswith('http') else x
-                )
-                col_config[p_col] = st.column_config.ImageColumn(p_col, help="Visit Photo")
+        # 2. Location Column: "LOCATION" નામની કોલમમાં લિંક હશે તો તે મેપ આઇકોન બની જશે.
+        loc_cols = [c for c in df_epi.columns if 'LOCATION' in c or 'MAP' in c or 'GPS' in c]
+        for lc in loc_cols:
+            col_config[lc] = st.column_config.LinkColumn("📍 View Location", display_text="Open Map")
 
-        # 4. Filters UI
-        st.markdown(f"<div style='background-color:#f4ecf7; padding:15px; border-radius:8px; border: 1px solid #d7bde2; margin-bottom:15px;'><b style='color:#6c3483; font-size:18px;'>Total Submissions: {len(df_epi)}</b></div>", unsafe_allow_html=True)
-        
-        fc1, fc2, fc3 = st.columns(3)
-        with fc1:
-            search_epi = st.text_input("🔍 Search Submissions (Name, ID, etc.)", "", key=f"search_epi_{sel_slug}")
-        with fc2:
-            zone_col = next((c for c in df_epi.columns if "Zone" in str(c)), None)
-            if zone_col:
-                zones = ["All Zones"] + sorted([str(z) for z in df_epi[zone_col].dropna().unique() if str(z).strip() != ""])
-                sel_epi_zone = st.selectbox("🏢 Filter Zone", zones, key=f"zone_{sel_slug}")
-            else:
-                sel_epi_zone = "All Zones"
-        with fc3:
-            epi_date_range = st.date_input("📅 Filter by Upload Date Range", value=[], key=f"date_{sel_slug}")
-
-        # 5. Apply Filters
-        if search_epi:
-            df_epi = df_epi[df_epi.apply(lambda row: row.astype(str).str.contains(search_epi, case=False, na=False).any(), axis=1)]
-            
-        if sel_epi_zone != "All Zones" and zone_col:
-            df_epi = df_epi[df_epi[zone_col].astype(str) == sel_epi_zone]
-            
-        if len(epi_date_range) == 2:
-            upload_col = next((c for c in df_epi.columns if "Upload" in str(c)), None)
-            if upload_col:
-                temp_dates = pd.to_datetime(df_epi[upload_col], errors='coerce').dt.date
-                df_epi = df_epi[(temp_dates >= epi_date_range[0]) & (temp_dates <= epi_date_range[1])]
-
-        st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_epi)} Entries</div>", unsafe_allow_html=True)
-        
-        # 6. Display Table
-        st.dataframe(df_epi, column_config=col_config, use_container_width=True, hide_index=True)
-        
-        st.download_button(
-            label=f"📥 Download {sel_proj_name} Data (Excel)",
-            data=convert_df_to_excel(df_epi, "Live_Data"),
-            file_name=f"{sel_slug}_Live_Data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key=f'dl_epi_{sel_slug}'
-        )
+        # Display Dataframe with Special Config
+        st.dataframe(df_epi, use_container_width=True, hide_index=True, column_config=col_config)
