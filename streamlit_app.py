@@ -2143,15 +2143,23 @@ with tab8:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=30) as response:
                     df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
-                df.columns = df.columns.astype(str).str.strip()
                 return df
             except: return pd.DataFrame()
 
         df_m = get_sheet(url_master)
-        if not df_m.empty and 'ADVERSE DATE' in df_m.columns:
-            df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
+        if not df_m.empty:
+            # Strip spaces from columns
+            df_m.columns = df_m.columns.astype(str).str.strip()
+            if 'ADVERSE DATE' in df_m.columns:
+                df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
 
-        return df_m, get_sheet(url_this), get_sheet(url_prev)
+        df_t = get_sheet(url_this)
+        if not df_t.empty: df_t.columns = df_t.columns.astype(str).str.strip()
+            
+        df_p = get_sheet(url_prev)
+        if not df_p.empty: df_p.columns = df_p.columns.astype(str).str.strip()
+
+        return df_m, df_t, df_p
 
     df_master, df_this, df_prev = load_all_data()
 
@@ -2190,52 +2198,145 @@ with tab8:
     st.write("---")
     st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
     
+    # Check if necessary columns exist (case-insensitive check)
+    def get_col(df, name):
+        for c in df.columns:
+            if str(c).upper() == name.upper(): return c
+        return None
+
     if not df_this.empty and not df_prev.empty:
-        df_this.columns = df_this.columns.str.upper()
-        df_prev.columns = df_prev.columns.str.upper()
+        id_col_this = get_col(df_this, 'EPISODE ID')
+        out_col_this = get_col(df_this, 'TREATMENT OUTCOME')
+        id_col_prev = get_col(df_prev, 'EPISODE ID')
+        out_col_prev = get_col(df_prev, 'TREATMENT OUTCOME')
         
-        if 'EPISODE ID' in df_this.columns and 'EPISODE ID' in df_prev.columns and 'TREATMENT OUTCOME' in df_this.columns:
+        if id_col_this and out_col_this and id_col_prev and out_col_prev:
             
-            df_this['EPISODE ID'] = df_this['EPISODE ID'].fillna("").astype(str).str.strip()
-            df_prev['EPISODE ID'] = df_prev['EPISODE ID'].fillna("").astype(str).str.strip()
+            # Temporary upper columns for logic
+            df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
+            df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
             
-            df_this['TREATMENT OUTCOME'] = df_this['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
-            df_prev['TREATMENT OUTCOME'] = df_prev['TREATMENT OUTCOME'].fillna("").astype(str).str.upper().str.strip()
+            df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.strip().str.upper()
+            df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
             blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
             # Filter Adverse for This Week
-            is_adv_this = ~df_this['TREATMENT OUTCOME'].str.contains('|'.join(good), na=False)
-            has_out_this = ~df_this['TREATMENT OUTCOME'].isin(blank_variants)
+            is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
+            has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            # 🎯 THE 19 PATIENT FIX: Check ID AND Outcome combination. 
-            # If the outcome changed, or it's a completely new ID, it will be included!
-            merged = df_this_adv.merge(df_prev[['EPISODE ID', 'TREATMENT OUTCOME']], on='EPISODE ID', how='left', suffixes=('', '_PREV'))
-            # It's NEW if it wasn't in previous week, OR if the outcome is different than previous week
-            df_new = merged[(merged['TREATMENT OUTCOME_PREV'].isna()) | (merged['TREATMENT OUTCOME'] != merged['TREATMENT OUTCOME_PREV'])].copy()
-            df_new = df_new.drop(columns=['TREATMENT OUTCOME_PREV'], errors='ignore')
+            # Create mapping of previous outcomes
+            prev_map = dict(zip(df_prev['_ID_UP'], df_prev['_OUT_UP']))
             
+            # Logic: It's NEW if the ID is not in prev_map, OR if the outcome is different
+            def is_new(row):
+                pid = row['_ID_UP']
+                pout = row['_OUT_UP']
+                if pid not in prev_map: return True
+                if prev_map[pid] != pout: return True
+                return False
+                
+            df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
+            
+            # Cleanup temporary columns
+            df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
+            
+            # Add On Treatment Days
             today = pd.Timestamp.today().normalize()
-            def calc_new_days(row):
-                init = pd.to_datetime(row.get('INITIATION DATE'), errors='coerce')
-                out = pd.to_datetime(row.get('OUTCOME DATE'), errors='coerce')
-                out_str = str(row.get('TREATMENT OUTCOME', '')).upper()
-                if pd.isna(init): return ""
-                return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+            init_col = get_col(df_new, 'INITIATION DATE')
+            outd_col = get_col(df_new, 'OUTCOME DATE')
             
-            if 'INITIATION DATE' in df_new.columns:
-                df_new['ON TREATMENT DAYS'] = df_new.apply(calc_new_days, axis=1)
+            if init_col:
+                def calc_new_days(row):
+                    init = pd.to_datetime(row.get(init_col), errors='coerce')
+                    out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
+                    out_str = str(row.get(out_col_this, '')).upper()
+                    if pd.isna(init): return ""
+                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+                
+                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
             
-            # 🎯 CLEAN COLUMNS FIX: Only show relevant columns!
-            display_cols = ['ZONE', 'TB UNIT', 'PHI', 'FACILITY TYPE', 'PATIENT NAME', 'EPISODE ID', 'DIAGNOSIS DATE', 'INITIATION DATE', 'OUTCOME DATE', 'TREATMENT OUTCOME', 'ON TREATMENT DAYS']
-            final_cols = [c for c in display_cols if c in df_new.columns]
-            
+            # 🎯 ALL ORIGINAL COLUMNS PRESERVED!
             st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_new[final_cols], use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_new[final_cols], "New_Adverse"), "New_Records.xlsx")
+            st.dataframe(df_new, use_container_width=True, hide_index=True)
+            st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
         else:
-            st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in current week sheet.")
+            st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
     else:
         st.info("Check This Week and Previous Week sheets.")
+
+# ==========================================
+# 🟢 TAB 9: LIVE FIELD DATA (EPICOLLECT5 API DIRECT)
+# ==========================================
+with tab9:
+    st.markdown("<h3 style='color: #0f172a; font-weight: 800;'>📱 PMDT Patient Visit (Live Field Data)</h3>", unsafe_allow_html=True)
+
+    @st.cache_data(ttl=60, show_spinner=False)
+    def load_epicollect_direct():
+        # 🎯 DIRECT API (No Google Sheet Needed)
+        api_url = "https://five.epicollect.net/api/export/entries/pmdt-patient-visit?format=csv"
+        try:
+            # Pandas can directly read from public URLs securely
+            df = pd.read_csv(api_url, dtype=str)
+            df.columns = df.columns.astype(str).str.strip().str.upper()
+            return df
+        except Exception as e:
+            return pd.DataFrame()
+
+    df_epi = load_epicollect_direct()
+
+    if not df_epi.empty:
+        # 1. CLEANUP & FORMATTING FOR IMAGES & MAPS
+        photo_base = "https://five.epicollect.net/api/export/media/pmdt-patient-visit?type=photo&format=entry_original&name="
+        col_config = {}
+        
+        for col in df_epi.columns:
+            # 📸 Photos
+            if 'PHOTO' in col or 'IMAGE' in col:
+                df_epi[col] = df_epi[col].apply(lambda x: f"{photo_base}{x}" if pd.notna(x) and len(str(x)) > 4 else None)
+                col_config[col] = st.column_config.ImageColumn("📸 Visit Photo", help="Click to view")
+            
+            # 📍 Location (Maps)
+            if 'LOCATION' in col or 'GPS' in col:
+                def make_map(val):
+                    if pd.isna(val) or len(str(val)) < 3: return None
+                    parts = str(val).split(',')
+                    if len(parts) >= 2:
+                        return f"https://www.google.com/maps?q={parts[0].strip()},{parts[1].strip()}"
+                    return val
+                df_epi[col] = df_epi[col].apply(make_map)
+                col_config[col] = st.column_config.LinkColumn("📍 View Map", display_text="Open Map")
+
+        # 2. FILTERS
+        with st.expander("🔽 Filter Field Visits", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if 'ZONE' in df_epi.columns:
+                    sel_zone = st.multiselect("Filter by Zone", sorted(df_epi['ZONE'].dropna().unique()))
+                    if sel_zone: df_epi = df_epi[df_epi['ZONE'].isin(sel_zone)]
+            with c2:
+                dps_cols = [c for c in df_epi.columns if 'DPS' in c]
+                if dps_cols:
+                    sel_dps = st.multiselect("Filter by DPS Name", sorted(df_epi[dps_cols[0]].dropna().unique()))
+                    if sel_dps: df_epi = df_epi[df_epi[dps_cols[0]].isin(sel_dps)]
+            with c3:
+                date_cols = [c for c in df_epi.columns if 'DATE' in c or 'CREATED_AT' in c]
+                if date_cols:
+                    v_date = date_cols[0]
+                    df_epi[v_date] = pd.to_datetime(df_epi[v_date], errors='coerce')
+                    date_range = st.date_input("Visit Date Range", value=[], key="epi_dt")
+                    if len(date_range) == 2:
+                        df_epi = df_epi[df_epi[v_date].dt.date.between(pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]))]
+
+        # 3. DISPLAY THE MAGIC TABLE
+        st.markdown(f"<p style='font-weight: 600; color: #1e293b;'>Total Field Visits: {len(df_epi)}</p>", unsafe_allow_html=True)
+        
+        # Hide unnecessary system columns
+        cols_to_drop = [c for c in df_epi.columns if c.startswith('EC5_') or c == 'UPLOADED_AT']
+        df_display = df_epi.drop(columns=cols_to_drop, errors='ignore')
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=col_config)
+    else:
+        st.error("⚠️ Connection Error: Unable to fetch data from Epicollect5. Please check the API status.")
