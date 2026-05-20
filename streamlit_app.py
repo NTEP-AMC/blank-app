@@ -2268,38 +2268,59 @@ with tab8:
         st.info("Check This Week and Previous Week sheets.")
 
 # ==========================================
-# 🟢 TAB 9: LIVE FIELD DATA (EPICOLLECT5 API DIRECT)
+# 🟢 TAB 9: LIVE FIELD DATA (EPICOLLECT5 API)
 # ==========================================
 with tab9:
-    st.markdown("<h3 style='color: #0f172a; font-weight: 800;'>📱 PMDT Patient Visit (Live Field Data)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #0f172a; font-weight: 800;'>📱 Epicollect5 Live Field Data</h3>", unsafe_allow_html=True)
+
+    # 1. 🎯 PROJECT SELECTOR (તમારા ત્રણેય પ્રોજેક્ટ્સ)
+    PROJECTS = {
+        "PMDT Patient Visit": "pmdt-patient-visit",
+        "Initial TB Patient Home Visit": "amc-ntep-initial-tb-patient-home-visit-form",
+        "Private Notification Facilities": "private-notification-facilities"
+    }
+    
+    st.markdown("<div style='background:#f8fafc; padding:15px; border-radius:10px; border: 1px solid #e2e8f0; margin-bottom: 20px;'>", unsafe_allow_html=True)
+    selected_project_name = st.selectbox("📌 Select Field Project to View:", list(PROJECTS.keys()))
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    project_slug = PROJECTS[selected_project_name]
 
     @st.cache_data(ttl=60, show_spinner=False)
-    def load_epicollect_direct():
-        # 🎯 DIRECT API (No Google Sheet Needed)
-        api_url = "https://five.epicollect.net/api/export/entries/pmdt-patient-visit?format=csv"
+    def load_epicollect_direct(slug):
+        # DIRECT API
+        api_url = f"https://five.epicollect.net/api/export/entries/{slug}?format=csv"
         try:
-            # Pandas can directly read from public URLs securely
             df = pd.read_csv(api_url, dtype=str)
             df.columns = df.columns.astype(str).str.strip().str.upper()
+            # Sort by newest first
+            if 'CREATED_AT' in df.columns:
+                df['CREATED_AT'] = pd.to_datetime(df['CREATED_AT'], errors='coerce')
+                df = df.sort_values(by='CREATED_AT', ascending=False)
             return df
         except Exception as e:
             return pd.DataFrame()
 
-    df_epi = load_epicollect_direct()
+    with st.spinner(f"Loading {selected_project_name} data..."):
+        df_epi = load_epicollect_direct(project_slug)
 
     if not df_epi.empty:
-        # 1. CLEANUP & FORMATTING FOR IMAGES & MAPS
-        photo_base = "https://five.epicollect.net/api/export/media/pmdt-patient-visit?type=photo&format=entry_original&name="
+        # 2. 🧹 CLEANUP & FORMATTING (View Map Bug Fix)
+        # Epicollect ની વધારાની (નકામી) કોલમ્સ હટાવી દો જેથી ટેબલ ક્લીન રહે
+        cols_to_drop = [c for c in df_epi.columns if c.startswith('EC5_') or c == 'UPLOADED_AT' or c.endswith('_LAT') or c.endswith('_LON') or c.endswith('_ACC') or c.endswith('_ALT')]
+        df_epi = df_epi.drop(columns=cols_to_drop, errors='ignore')
+
+        photo_base = f"https://five.epicollect.net/api/export/media/{project_slug}?type=photo&format=entry_original&name="
         col_config = {}
         
         for col in df_epi.columns:
             # 📸 Photos
             if 'PHOTO' in col or 'IMAGE' in col:
                 df_epi[col] = df_epi[col].apply(lambda x: f"{photo_base}{x}" if pd.notna(x) and len(str(x)) > 4 else None)
-                col_config[col] = st.column_config.ImageColumn("📸 Visit Photo", help="Click to view")
+                col_config[col] = st.column_config.ImageColumn("📸 Photo", help="Click to view")
             
-            # 📍 Location (Maps)
-            if 'LOCATION' in col or 'GPS' in col:
+            # 📍 Location (Maps) - હવે માત્ર સાચી કોલમ જ મેપ બનશે!
+            if ('LOCATION' in col or 'GPS' in col) and not col.endswith(('_LAT', '_LON', '_ACC', '_ALT')):
                 def make_map(val):
                     if pd.isna(val) or len(str(val)) < 3: return None
                     parts = str(val).split(',')
@@ -2308,35 +2329,40 @@ with tab9:
                     return val
                 df_epi[col] = df_epi[col].apply(make_map)
                 col_config[col] = st.column_config.LinkColumn("📍 View Map", display_text="Open Map")
+            
+            # તારીખોને યોગ્ય ફોર્મેટમાં બતાવવા
+            if 'DATE' in col or col == 'CREATED_AT':
+                col_config[col] = st.column_config.DatetimeColumn(col, format="DD/MM/YYYY")
 
-        # 2. FILTERS
-        with st.expander("🔽 Filter Field Visits", expanded=True):
-            c1, c2, c3 = st.columns(3)
+        # 3. 🎯 FILTERS (Zone & Uploaded Date)
+        with st.expander("🔽 Advanced Filters", expanded=True):
+            c1, c2 = st.columns(2)
             with c1:
-                if 'ZONE' in df_epi.columns:
-                    sel_zone = st.multiselect("Filter by Zone", sorted(df_epi['ZONE'].dropna().unique()))
-                    if sel_zone: df_epi = df_epi[df_epi['ZONE'].isin(sel_zone)]
+                # Dynamic Zone Finding (કારણ કે અલગ પ્રોજેક્ટમાં Zone કોલમનું નામ અલગ હોઈ શકે)
+                zone_cols = [c for c in df_epi.columns if 'ZONE' in c]
+                if zone_cols:
+                    z_col = zone_cols[0]
+                    sel_zone = st.multiselect(f"Filter by Zone", sorted(df_epi[z_col].dropna().unique()))
+                    if sel_zone: df_epi = df_epi[df_epi[z_col].isin(sel_zone)]
+                else:
+                    st.info("No Zone data available for this project.")
             with c2:
-                dps_cols = [c for c in df_epi.columns if 'DPS' in c]
-                if dps_cols:
-                    sel_dps = st.multiselect("Filter by DPS Name", sorted(df_epi[dps_cols[0]].dropna().unique()))
-                    if sel_dps: df_epi = df_epi[df_epi[dps_cols[0]].isin(sel_dps)]
-            with c3:
-                date_cols = [c for c in df_epi.columns if 'DATE' in c or 'CREATED_AT' in c]
-                if date_cols:
-                    v_date = date_cols[0]
-                    df_epi[v_date] = pd.to_datetime(df_epi[v_date], errors='coerce')
-                    date_range = st.date_input("Visit Date Range", value=[], key="epi_dt")
+                if 'CREATED_AT' in df_epi.columns:
+                    date_range = st.date_input("Filter by Entry Date (Uploaded On)", value=[], key="epi_dt")
                     if len(date_range) == 2:
-                        df_epi = df_epi[df_epi[v_date].dt.date.between(pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1]))]
+                        df_epi = df_epi[df_epi['CREATED_AT'].dt.date.between(pd.to_datetime(date_range[0]).date(), pd.to_datetime(date_range[1]).date())]
 
-        # 3. DISPLAY THE MAGIC TABLE
-        st.markdown(f"<p style='font-weight: 600; color: #1e293b;'>Total Field Visits: {len(df_epi)}</p>", unsafe_allow_html=True)
+        # 4. 🚀 DISPLAY & PERFORMANCE HANDLING
+        total_records = len(df_epi)
         
-        # Hide unnecessary system columns
-        cols_to_drop = [c for c in df_epi.columns if c.startswith('EC5_') or c == 'UPLOADED_AT']
-        df_display = df_epi.drop(columns=cols_to_drop, errors='ignore')
-        
+        # જો 500 થી વધુ એન્ટ્રી હોય, તો સ્પીડ જાળવી રાખવા માટે માત્ર લેટેસ્ટ 500 જ બતાવો
+        if total_records > 500:
+            st.warning(f"⚠️ Showing latest 500 entries out of {total_records} to maintain dashboard speed.")
+            df_display = df_epi.head(500)
+        else:
+            df_display = df_epi
+
+        st.markdown(f"<p style='font-weight: 600; color: #1e293b; font-size: 15px;'>Total Records Found: {total_records}</p>", unsafe_allow_html=True)
         st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=col_config)
     else:
-        st.error("⚠️ Connection Error: Unable to fetch data from Epicollect5. Please check the API status.")
+        st.error(f"⚠️ Unable to fetch data for '{selected_project_name}'. No entries found.")
