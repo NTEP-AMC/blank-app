@@ -2175,7 +2175,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + STRICT 12-COLUMN DELTA TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
@@ -2267,7 +2267,7 @@ with tab8:
             df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
-            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
+            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL", "nan", "None"]
             
             is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
             has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
@@ -2285,6 +2285,20 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
+            today = pd.Timestamp.today().normalize()
+            init_col = get_col(df_new, 'INITIATION DATE')
+            outd_col = get_col(df_new, 'OUTCOME DATE')
+            
+            if init_col:
+                def calc_new_days(row):
+                    init = pd.to_datetime(row.get(init_col), errors='coerce')
+                    out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
+                    out_str = str(row.get(out_col_this, '')).upper()
+                    if pd.isna(init): return ""
+                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+                
+                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
+
             # 🎯 STRICT MAPPING TO 12 COLUMNS ONLY
             master_cols = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
@@ -2297,20 +2311,6 @@ with tab8:
                 return None
             
             if not df_new.empty:
-                # Add calculated Days first
-                today = pd.Timestamp.today().normalize()
-                init_c = get_col_match(df_new, ['Initiation Date'])
-                out_c = get_col_match(df_new, ['Outcome Date'])
-                if init_c:
-                    def calc_new_days(row):
-                        init = pd.to_datetime(row.get(init_c), errors='coerce')
-                        out = pd.to_datetime(row.get(out_c) if out_c else None, errors='coerce')
-                        out_str = str(row.get(out_col_this, '')).upper()
-                        if pd.isna(init): return ""
-                        return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
-                    df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
-
-                # Exactly Map Columns
                 df_export['ZONE'] = df_new[get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District'])] if get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District']) else ""
                 df_export['TB Unit'] = df_new[get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU'])] if get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU']) else ""
                 df_export['PHI'] = df_new[get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility'])] if get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility']) else ""
@@ -2322,8 +2322,12 @@ with tab8:
                 df_export['Outcome Date'] = df_new[get_col_match(df_new, ['Outcome Date'])] if get_col_match(df_new, ['Outcome Date']) else ""
                 df_export['Treatment Outcome'] = df_new[get_col_match(df_new, ['Treatment Outcome'])] if get_col_match(df_new, ['Treatment Outcome']) else ""
                 df_export['On Treatment Days'] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
-                df_export['Report Period'] = "" # Blank for copy-paste
+                df_export['Report Period'] = "" 
                 
+            # 🎯 FINAL CLEANUP: Remove any "None", "nan", etc from visual output
+            df_export = df_export.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
+            df_export = df_export.fillna("")
+
             st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_export)} New Patient(s)</div>", unsafe_allow_html=True)
             st.dataframe(df_export, use_container_width=True, hide_index=True)
             st.download_button("📥 Download New List", convert_df_to_excel(df_export, "New_Adverse"), "New_Records_For_Master.xlsx")
