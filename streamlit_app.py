@@ -40,18 +40,19 @@ except:
     st.stop()
 
 # ==========================================
-# 🔐 NEW ENTERPRISE LOGIN PAGE DESIGN
+# 🔐 NEW ENTERPRISE LOGIN PAGE DESIGN (BUG FIXED)
 # ==========================================
 if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
     
     st.markdown("""
-<style>
-.left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
-.stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
-.stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
-.stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
-</style>
+    <style>
+    .left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
+    .right-panel { padding: 40px; background: white; border-radius: 0 15px 15px 0; border: 1px solid #e2e8f0; border-left: none; height: 100%; display: flex; flex-direction: column; justify-content: center;}
+    .stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
+    .stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
+    .stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
+    </style>
     """, unsafe_allow_html=True)
     
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -108,7 +109,7 @@ if not st.session_state.auth:
     st.stop()
 
 # ==========================================
-# 🟢 POST LOGIN DASHBOARD UI
+# 🟢 POST LOGIN DASHBOARD UI & DATA FETCHING (તમારો જૂનો ડેટા કોડ)
 # ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 st.markdown(f"<div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>👤 Logged in as: <span style='color: #0b2e13; font-size: 18px;'>{st.session_state.target} ({st.session_state.role})</span></div>", unsafe_allow_html=True)
@@ -143,6 +144,7 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
+# 🎯 તમારું EXCEL ડાઉનલોડ કરવાનું ફંક્શન
 def convert_df_to_excel(df, sheet_name="Data"):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -162,6 +164,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
+# 🎯 તમારું DATA FETCH કરવાનું ફંક્શન
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -183,19 +186,19 @@ def load_all_data():
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
+# 🎯 તમારું ગૂગલ શીટ માંથી LIVE DATA લાવવાનું ફંક્શન
 @st.cache_data(ttl=300) 
 def get_live_dc():
     def fetch_sheet(url):
         try:
             df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
             header_row = -1
-            # 🎯 Expanded search area to 20 rows in case headers were pushed down!
             for i in range(min(20, len(df))):
                 row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
                 if "EPISODE" in row_str and "NAME" in row_str:
                     header_row = i; break
             
-            if header_row == -1: return pd.DataFrame() # Fallback if headers are missing
+            if header_row == -1: return pd.DataFrame()
                 
             header_vals = df.iloc[header_row].fillna("").astype(str).str.upper()
             df = df.iloc[header_row+1:].reset_index(drop=True)
@@ -287,7 +290,7 @@ df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_ra
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 # ==========================================
-# 🎯 BULLETPROOF LOGIN FILTER
+# 🎯 BULLETPROOF LOGIN FILTER 
 # ==========================================
 def filter_by_role(df, role, target):
     if df.empty: return df
