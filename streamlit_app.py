@@ -2177,7 +2177,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + STRICT 12-COLUMN DELTA TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
@@ -2265,7 +2265,6 @@ with tab8:
             
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
             df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
-            
             df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.strip().str.upper()
             df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
@@ -2288,46 +2287,48 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            today = pd.Timestamp.today().normalize()
-            init_col = get_col(df_new, 'INITIATION DATE')
-            outd_col = get_col(df_new, 'OUTCOME DATE')
+            # 🎯 STRICT MAPPING TO 12 COLUMNS ONLY
+            master_cols = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
+            df_export = pd.DataFrame(columns=master_cols)
+
+            def get_col_match(df_to_search, possible_names):
+                for p in possible_names:
+                    for c in df_to_search.columns:
+                        if str(c).upper().strip().replace('_', ' ') == str(p).upper().strip().replace('_', ' '):
+                            return c
+                return None
             
-            if init_col:
-                def calc_new_days(row):
-                    init = pd.to_datetime(row.get(init_col), errors='coerce')
-                    out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
-                    out_str = str(row.get(out_col_this, '')).upper()
-                    if pd.isna(init): return ""
-                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+            if not df_new.empty:
+                # Add calculated Days first
+                today = pd.Timestamp.today().normalize()
+                init_c = get_col_match(df_new, ['Initiation Date'])
+                out_c = get_col_match(df_new, ['Outcome Date'])
+                if init_c:
+                    def calc_new_days(row):
+                        init = pd.to_datetime(row.get(init_c), errors='coerce')
+                        out = pd.to_datetime(row.get(out_c) if out_c else None, errors='coerce')
+                        out_str = str(row.get(out_col_this, '')).upper()
+                        if pd.isna(init): return ""
+                        return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+                    df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
+
+                # Exactly Map Columns
+                df_export['ZONE'] = df_new[get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District'])] if get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District']) else ""
+                df_export['TB Unit'] = df_new[get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU'])] if get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU']) else ""
+                df_export['PHI'] = df_new[get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility'])] if get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility']) else ""
+                df_export['Facility Type'] = df_new[get_col_match(df_new, ['Facility Type', 'Spectrum Current HF Type', 'Type'])] if get_col_match(df_new, ['Facility Type', 'Spectrum Current HF Type', 'Type']) else ""
+                df_export['Patient Name'] = df_new[get_col_match(df_new, ['Patient Name'])] if get_col_match(df_new, ['Patient Name']) else ""
+                df_export['Episode ID'] = df_new[get_col_match(df_new, ['Episode ID'])] if get_col_match(df_new, ['Episode ID']) else ""
+                df_export['Diagnosis Date'] = df_new[get_col_match(df_new, ['Diagnosis Date'])] if get_col_match(df_new, ['Diagnosis Date']) else ""
+                df_export['Initiation Date'] = df_new[get_col_match(df_new, ['Initiation Date'])] if get_col_match(df_new, ['Initiation Date']) else ""
+                df_export['Outcome Date'] = df_new[get_col_match(df_new, ['Outcome Date'])] if get_col_match(df_new, ['Outcome Date']) else ""
+                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, ['Treatment Outcome'])] if get_col_match(df_new, ['Treatment Outcome']) else ""
+                df_export['On Treatment Days'] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
+                df_export['Report Period'] = "" # Blank for copy-paste
                 
-                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
-
-            # 🎯 STRICT MAPPING: EXACTLY 12 MASTER COLUMNS ONLY
-            target_columns = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
-            
-            df_mapped = pd.DataFrame()
-            
-            for t_col in target_columns:
-                if t_col == 'Report Period':
-                    df_mapped[t_col] = [""] * len(df_new)
-                elif t_col == 'On Treatment Days':
-                    df_mapped[t_col] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
-                else:
-                    # Smart matching (handles spaces and underscores)
-                    matched_col = None
-                    for c in df_new.columns:
-                        if str(c).replace('_', ' ').strip().upper() == t_col.replace('_', ' ').strip().upper():
-                            matched_col = c
-                            break
-                    
-                    if matched_col:
-                        df_mapped[t_col] = df_new[matched_col]
-                    else:
-                        df_mapped[t_col] = ""
-
-            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_mapped)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_mapped, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_mapped, "New_Adverse"), "New_Records_For_Master.xlsx")
+            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_export)} New Patient(s)</div>", unsafe_allow_html=True)
+            st.dataframe(df_export, use_container_width=True, hide_index=True)
+            st.download_button("📥 Download New List", convert_df_to_excel(df_export, "New_Adverse"), "New_Records_For_Master.xlsx")
         else:
             st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
     else:
