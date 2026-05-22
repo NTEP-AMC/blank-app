@@ -46,13 +46,12 @@ if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
     
     st.markdown("""
-    <style>
-    .left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
-    .right-panel { padding: 40px; background: white; border-radius: 0 15px 15px 0; border: 1px solid #e2e8f0; border-left: none; height: 100%; display: flex; flex-direction: column; justify-content: center;}
-    .stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
-    .stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
-    .stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
-    </style>
+<style>
+.left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
+.stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
+.stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
+.stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
+</style>
     """, unsafe_allow_html=True)
     
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -63,30 +62,29 @@ if not st.session_state.auth:
         
         with l_col:
             st.markdown(f"""
-            <div class="left-panel">
-                <div style="background: #F0F6FF; width: 85px; height: 85px; border-radius: 50%; margin: 0 auto 20px auto; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.25);">
-                    <img src="data:image/png;base64,{b64_amc}" width="65">
-                </div>
-                <div style="display:inline-block; background:rgba(255,255,255,0.1); padding: 5px 13px; border-radius: 20px; font-size: 10px; letter-spacing: 1.8px; margin-bottom: 20px; border: 0.5px solid rgba(255,255,255,0.2);">
-                    <span style="color:#5DCAA5;">●</span> <span style="color:#9FC8F0; font-weight:600;">AMC · NTEP</span>
-                </div>
-                <h2 style="font-family: serif; margin-bottom: 12px; font-size: 24px; font-weight: 600;">National TB Elimination Programme</h2>
-                <p style="font-size: 13px; color: #85B7EB; line-height: 1.6; margin-bottom:30px;">Ahmedabad Municipal Corporation's centralised surveillance & management platform for TB programme monitoring.</p>
-                
-                <div style="border-top: 1px solid rgba(255,255,255,0.14); padding-top: 15px; display: flex; justify-content: space-around;">
-                    <div><b style="font-size: 18px;">7</b><br><span style="font-size: 10px; color: #85B7EB;">ZONES</span></div>
-                    <div><b style="font-size: 18px;">23</b><br><span style="font-size: 10px; color: #85B7EB;">TB UNITS</span></div>
-                    <div><b style="font-size: 18px;">Live</b><br><span style="font-size: 10px; color: #85B7EB;">REPORTING</span></div>
-                </div>
-            </div>
+<div class="left-panel">
+<div style="background: #F0F6FF; width: 85px; height: 85px; border-radius: 50%; margin: 0 auto 20px auto; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.25);">
+<img src="data:image/png;base64,{b64_amc}" width="65">
+</div>
+<div style="display:inline-block; background:rgba(255,255,255,0.1); padding: 5px 13px; border-radius: 20px; font-size: 10px; letter-spacing: 1.8px; margin-bottom: 20px; border: 0.5px solid rgba(255,255,255,0.2);">
+<span style="color:#5DCAA5;">●</span> <span style="color:#9FC8F0; font-weight:600;">AMC · NTEP</span>
+</div>
+<h2 style="font-family: serif; margin-bottom: 12px; font-size: 24px; font-weight: 600;">National TB Elimination Programme</h2>
+<p style="font-size: 13px; color: #85B7EB; line-height: 1.6; margin-bottom:30px;">Ahmedabad Municipal Corporation's centralised surveillance & management platform for TB programme monitoring.</p>
+<div style="border-top: 1px solid rgba(255,255,255,0.14); padding-top: 15px; display: flex; justify-content: space-around;">
+<div><b style="font-size: 18px;">7</b><br><span style="font-size: 10px; color: #85B7EB;">ZONES</span></div>
+<div><b style="font-size: 18px;">23</b><br><span style="font-size: 10px; color: #85B7EB;">TB UNITS</span></div>
+<div><b style="font-size: 18px;">Live</b><br><span style="font-size: 10px; color: #85B7EB;">REPORTING</span></div>
+</div>
+</div>
             """, unsafe_allow_html=True)
             
         with r_col:
             st.markdown("""
-            <div style="padding: 10px 10px 20px 10px;">
-                <h3 style="color: #1e293b; margin-bottom: 5px; font-weight: 600;">Sign in to your account</h3>
-                <p style="color: #64748b; font-size: 13px;">Access restricted to authorised Zone & TB Unit personnel only.</p>
-            </div>
+<div style="padding: 10px 10px 20px 10px;">
+<h3 style="color: #1e293b; margin-bottom: 5px; font-weight: 600;">Sign in to your account</h3>
+<p style="color: #64748b; font-size: 13px;">Access restricted to authorised Zone & TB Unit personnel only.</p>
+</div>
             """, unsafe_allow_html=True)
             
             uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
@@ -289,7 +287,7 @@ df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_ra
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 # ==========================================
-# 🎯 BULLETPROOF LOGIN FILTER (FIXED OVERLAP & MAPPING BUG)
+# 🎯 BULLETPROOF LOGIN FILTER
 # ==========================================
 def filter_by_role(df, role, target):
     if df.empty: return df
