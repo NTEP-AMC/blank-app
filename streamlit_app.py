@@ -2258,10 +2258,24 @@ with tab8:
                 
                 df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
             
-            # 🎯 ALL ORIGINAL COLUMNS PRESERVED!
-            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_new, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
+            # 🎯 STRICT COLUMN FILTERING FOR EASY COPY-PASTE
+            # આ તમારી Master Sheet ની કોલમ્સ છે 
+            target_columns = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
+            
+            final_columns_to_show = []
+            for t_col in target_columns:
+                # Get exact case-sensitive name from df_new
+                actual_col = get_col(df_new, t_col) 
+                if actual_col:
+                    final_columns_to_show.append(actual_col)
+                elif t_col == 'On Treatment Days' and 'On Treatment Days' in df_new.columns:
+                    final_columns_to_show.append('On Treatment Days')
+
+            df_new_clean = df_new[final_columns_to_show].copy()
+
+            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new_clean)} New Patient(s)</div>", unsafe_allow_html=True)
+            st.dataframe(df_new_clean, use_container_width=True, hide_index=True)
+            st.download_button("📥 Download New List", convert_df_to_excel(df_new_clean, "New_Adverse"), "New_Records_For_Master.xlsx")
         else:
             st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
     else:
