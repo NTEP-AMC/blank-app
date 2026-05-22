@@ -39,25 +39,79 @@ except:
     st.error("⚠️ User Database (users.csv) મળ્યું નથી!")
     st.stop()
 
+# ==========================================
+# 🔐 NEW ENTERPRISE LOGIN PAGE DESIGN
+# ==========================================
 if not st.session_state.auth:
-    st.markdown("<h2 style='text-align: center; color: #1f618d; margin-top: 10vh;'>AMC | NTEP Secure Login</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #555;'>Log in with your Zone or TB Unit ID</p>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        uname = st.text_input("Username").strip().upper()
-        pwd = st.text_input("Password", type="password").strip()
-        if st.button("Login", use_container_width=True):
-            user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
-            if not user_match.empty: 
-                st.session_state.auth = True
-                st.session_state.current_user = uname
-                st.session_state.role = user_match.iloc[0]['Role']
-                st.session_state.target = user_match.iloc[0]['Target']
-                log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged In")
-                st.rerun()
-            else: st.error("⚠️ Invalid Username or Password")
+    b64_amc = img_to_b64("images/amc.png")
+    
+    st.markdown("""
+    <style>
+    .left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
+    .right-panel { padding: 40px; background: white; border-radius: 0 15px 15px 0; border: 1px solid #e2e8f0; border-left: none; height: 100%; display: flex; flex-direction: column; justify-content: center;}
+    .stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
+    .stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
+    .stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    sp1, login_box, sp2 = st.columns([1, 6, 1])
+    
+    with login_box:
+        l_col, r_col = st.columns([4, 5], gap="small")
+        
+        with l_col:
+            st.markdown(f"""
+            <div class="left-panel">
+                <div style="background: #F0F6FF; width: 85px; height: 85px; border-radius: 50%; margin: 0 auto 20px auto; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.25);">
+                    <img src="data:image/png;base64,{b64_amc}" width="65">
+                </div>
+                <div style="display:inline-block; background:rgba(255,255,255,0.1); padding: 5px 13px; border-radius: 20px; font-size: 10px; letter-spacing: 1.8px; margin-bottom: 20px; border: 0.5px solid rgba(255,255,255,0.2);">
+                    <span style="color:#5DCAA5;">●</span> <span style="color:#9FC8F0; font-weight:600;">AMC · NTEP</span>
+                </div>
+                <h2 style="font-family: serif; margin-bottom: 12px; font-size: 24px; font-weight: 600;">National TB Elimination Programme</h2>
+                <p style="font-size: 13px; color: #85B7EB; line-height: 1.6; margin-bottom:30px;">Ahmedabad Municipal Corporation's centralised surveillance & management platform for TB programme monitoring.</p>
+                
+                <div style="border-top: 1px solid rgba(255,255,255,0.14); padding-top: 15px; display: flex; justify-content: space-around;">
+                    <div><b style="font-size: 18px;">7</b><br><span style="font-size: 10px; color: #85B7EB;">ZONES</span></div>
+                    <div><b style="font-size: 18px;">23</b><br><span style="font-size: 10px; color: #85B7EB;">TB UNITS</span></div>
+                    <div><b style="font-size: 18px;">Live</b><br><span style="font-size: 10px; color: #85B7EB;">REPORTING</span></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with r_col:
+            st.markdown("""
+            <div style="padding: 10px 10px 20px 10px;">
+                <h3 style="color: #1e293b; margin-bottom: 5px; font-weight: 600;">Sign in to your account</h3>
+                <p style="color: #64748b; font-size: 13px;">Access restricted to authorised Zone & TB Unit personnel only.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
+            pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
+            
+            if st.button("Sign In Securely", use_container_width=True):
+                user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
+                if not user_match.empty: 
+                    st.session_state.auth = True
+                    st.session_state.current_user = uname
+                    st.session_state.role = user_match.iloc[0]['Role']
+                    st.session_state.target = user_match.iloc[0]['Target']
+                    log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged In")
+                    st.rerun()
+                else: 
+                    st.error("⚠️ Invalid User ID or Password")
+                    
+            st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
+
+    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;'>© 2026 Ahmedabad Municipal Corporation · All rights reserved</p>", unsafe_allow_html=True)
     st.stop()
 
+# ==========================================
+# 🟢 POST LOGIN DASHBOARD UI
+# ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 st.markdown(f"<div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>👤 Logged in as: <span style='color: #0b2e13; font-size: 18px;'>{st.session_state.target} ({st.session_state.role})</span></div>", unsafe_allow_html=True)
 
@@ -296,7 +350,6 @@ if not df_time.empty:
     with st.expander("🕒 Register Last Sync Timestamps (IST)"):
         t_cols = st.columns(6)
         for i, row in df_time.iterrows():
-            # 🎯 If it's Differentiated Care, force the color to Green for "Live"
             color = "#27AE60" if "Live" in str(row['Last Updated']) else "#E67E22"
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
@@ -2148,7 +2201,6 @@ with tab8:
 
         df_m = get_sheet(url_master)
         if not df_m.empty:
-            # Strip spaces from columns
             df_m.columns = df_m.columns.astype(str).str.strip()
             if 'ADVERSE DATE' in df_m.columns:
                 df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
@@ -2198,7 +2250,6 @@ with tab8:
     st.write("---")
     st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
     
-    # Check if necessary columns exist (case-insensitive check)
     def get_col(df, name):
         for c in df.columns:
             if str(c).upper() == name.upper(): return c
@@ -2212,7 +2263,6 @@ with tab8:
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
             
-            # Temporary upper columns for logic
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
             df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
             
@@ -2222,15 +2272,12 @@ with tab8:
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
             blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
-            # Filter Adverse for This Week
             is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
             has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            # Create mapping of previous outcomes
             prev_map = dict(zip(df_prev['_ID_UP'], df_prev['_OUT_UP']))
             
-            # Logic: It's NEW if the ID is not in prev_map, OR if the outcome is different
             def is_new(row):
                 pid = row['_ID_UP']
                 pout = row['_OUT_UP']
@@ -2239,11 +2286,8 @@ with tab8:
                 return False
                 
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
-            
-            # Cleanup temporary columns
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # Add On Treatment Days
             today = pd.Timestamp.today().normalize()
             init_col = get_col(df_new, 'INITIATION DATE')
             outd_col = get_col(df_new, 'OUTCOME DATE')
@@ -2257,16 +2301,37 @@ with tab8:
                     return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
                 
                 df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
+
+            # 🎯 STRICT MAPPING: EXACTLY 12 MASTER COLUMNS ONLY
+            target_columns = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             
-            # 🎯 ALL ORIGINAL COLUMNS PRESERVED!
-            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_new, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_new, "New_Adverse"), "New_Records.xlsx")
+            df_mapped = pd.DataFrame()
+            
+            for t_col in target_columns:
+                if t_col == 'Report Period':
+                    df_mapped[t_col] = [""] * len(df_new)
+                elif t_col == 'On Treatment Days':
+                    df_mapped[t_col] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
+                else:
+                    # Smart matching (handles spaces and underscores)
+                    matched_col = None
+                    for c in df_new.columns:
+                        if str(c).replace('_', ' ').strip().upper() == t_col.replace('_', ' ').strip().upper():
+                            matched_col = c
+                            break
+                    
+                    if matched_col:
+                        df_mapped[t_col] = df_new[matched_col]
+                    else:
+                        df_mapped[t_col] = ""
+
+            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_mapped)} New Patient(s)</div>", unsafe_allow_html=True)
+            st.dataframe(df_mapped, use_container_width=True, hide_index=True)
+            st.download_button("📥 Download New List", convert_df_to_excel(df_mapped, "New_Adverse"), "New_Records_For_Master.xlsx")
         else:
             st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
     else:
         st.info("Check This Week and Previous Week sheets.")
-
 
 # ==========================================
 # 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
