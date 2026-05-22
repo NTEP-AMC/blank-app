@@ -2143,23 +2143,15 @@ with tab8:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=30) as response:
                     df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
+                df.columns = df.columns.astype(str).str.strip()
                 return df
             except: return pd.DataFrame()
 
         df_m = get_sheet(url_master)
-        if not df_m.empty:
-            # Strip spaces from columns
-            df_m.columns = df_m.columns.astype(str).str.strip()
-            if 'ADVERSE DATE' in df_m.columns:
-                df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
+        if not df_m.empty and 'ADVERSE DATE' in df_m.columns:
+            df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
 
-        df_t = get_sheet(url_this)
-        if not df_t.empty: df_t.columns = df_t.columns.astype(str).str.strip()
-            
-        df_p = get_sheet(url_prev)
-        if not df_p.empty: df_p.columns = df_p.columns.astype(str).str.strip()
-
-        return df_m, df_t, df_p
+        return df_m, get_sheet(url_this), get_sheet(url_prev)
 
     df_master, df_this, df_prev = load_all_data()
 
@@ -2194,90 +2186,45 @@ with tab8:
         st.markdown(f"<div style='background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px; box-shadow:0 2px 4px #eee;'>Total Master Cases: <b>{len(df_f)}</b></div>", unsafe_allow_html=True)
         st.dataframe(df_f, use_container_width=True, hide_index=True)
 
-    # --- 2. Delta Logic (The New Table) ---
+    # --- 2. Delta Logic (The New Table - EXACT MATCH TO MASTER) ---
     st.write("---")
     st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
     
-    # Check if necessary columns exist (case-insensitive check)
-    def get_col(df, name):
-        for c in df.columns:
-            if str(c).upper() == name.upper(): return c
-        return None
-
     if not df_this.empty and not df_prev.empty:
-        id_col_this = get_col(df_this, 'EPISODE ID')
-        out_col_this = get_col(df_this, 'TREATMENT OUTCOME')
-        id_col_prev = get_col(df_prev, 'EPISODE ID')
-        out_col_prev = get_col(df_prev, 'TREATMENT OUTCOME')
+        # Standardize ID column for comparison
+        id_col = 'EPISODE ID'
+        out_col = 'TREATMENT OUTCOME'
         
-        if id_col_this and out_col_this and id_col_prev and out_col_prev:
-            
-            # Temporary upper columns for logic
-            df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
-            df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
-            
-            df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.strip().str.upper()
-            df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
-            
-            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
-            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
-            
-            # Filter Adverse for This Week
-            is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
-            has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
-            df_this_adv = df_this[is_adv_this & has_out_this].copy()
-            
-            # Create mapping of previous outcomes
-            prev_map = dict(zip(df_prev['_ID_UP'], df_prev['_OUT_UP']))
-            
-            # Logic: It's NEW if the ID is not in prev_map, OR if the outcome is different
-            def is_new(row):
-                pid = row['_ID_UP']
-                pout = row['_OUT_UP']
-                if pid not in prev_map: return True
-                if prev_map[pid] != pout: return True
-                return False
-                
-            df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
-            
-            # Cleanup temporary columns
-            df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
-            
-            # Add On Treatment Days
-            today = pd.Timestamp.today().normalize()
-            init_col = get_col(df_new, 'INITIATION DATE')
-            outd_col = get_col(df_new, 'OUTCOME DATE')
-            
-            if init_col:
-                def calc_new_days(row):
-                    init = pd.to_datetime(row.get(init_col), errors='coerce')
-                    out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
-                    out_str = str(row.get(out_col_this, '')).upper()
-                    if pd.isna(init): return ""
-                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
-                
-                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
-            
-            # 🎯 STRICT COLUMN FILTERING FOR EASY COPY-PASTE
-            # આ તમારી Master Sheet ની કોલમ્સ છે 
-            target_columns = ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
-            
-            final_columns_to_show = []
-            for t_col in target_columns:
-                # Get exact case-sensitive name from df_new
-                actual_col = get_col(df_new, t_col) 
-                if actual_col:
-                    final_columns_to_show.append(actual_col)
-                elif t_col == 'On Treatment Days' and 'On Treatment Days' in df_new.columns:
-                    final_columns_to_show.append('On Treatment Days')
+        df_this_clean = df_this.copy()
+        df_prev_clean = df_prev.copy()
+        
+        # Cleanup
+        df_this_clean[id_col] = df_this_clean[id_col].astype(str).str.strip().str.upper()
+        df_prev_clean[id_col] = df_prev_clean[id_col].astype(str).str.strip().str.upper()
+        
+        # Logic: Filter Adverse
+        good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS", "TREATMENT COMPLETED"]
+        df_this_adv = df_this_clean[~df_this_clean[out_col].astype(str).str.upper().str.contains('|'.join(good))].copy()
+        df_prev_adv = df_prev_clean[~df_prev_clean[out_col].astype(str).str.upper().str.contains('|'.join(good))].copy()
+        
+        # Identify NEW or CHANGED outcomes
+        df_new = df_this_adv[~df_this_adv[id_col].isin(df_prev_adv[id_col])].copy()
+        
+        # 🎯 FORCE SAME COLUMNS AS MASTER
+        # We ensure all Master columns are present in df_new, filling missing ones with empty strings
+        for col in df_master.columns:
+            if col not in df_new.columns:
+                df_new[col] = ""
+        
+        # Reorder to match Master table perfectly
+        df_new = df_new[df_master.columns]
 
-            df_new_clean = df_new[final_columns_to_show].copy()
+        # Recalculate Days for the new table
+        df_new['On Treatment Days'] = df_new.apply(calc_days, axis=1)
 
-            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new_clean)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_new_clean, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_new_clean, "New_Adverse"), "New_Records_For_Master.xlsx")
-        else:
-            st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
+        st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_new)} New Patient(s)</div>", unsafe_allow_html=True)
+        st.dataframe(df_new, use_container_width=True, hide_index=True)
+        st.download_button("📥 Download New List (Master Format)", convert_df_to_excel(df_new, "New_Adverse"), "New_Records_For_Master.xlsx")
     else:
         st.info("Check This Week and Previous Week sheets.")
 
