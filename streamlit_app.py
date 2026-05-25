@@ -2581,6 +2581,7 @@ with tab10:
     def load_post_treatment_data():
         import urllib.request
         import io
+        import pandas as pd
         
         url = "https://docs.google.com/spreadsheets/d/1LbNWZaVh1ECq1Y4FvK4RBt_UB-USwLSv_SzOM0QxvYE/export?format=csv&gid=1888779383"
         try:
@@ -2588,7 +2589,8 @@ with tab10:
             with urllib.request.urlopen(req, timeout=30) as response:
                 df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
             return df
-        except: return pd.DataFrame()
+        except Exception as e: 
+            return pd.DataFrame()
 
     with st.spinner("Fetching Live Follow-up Register..."):
         df_pt_raw = load_post_treatment_data()
@@ -2596,7 +2598,6 @@ with tab10:
     if df_pt_raw.empty:
         st.error("⚠️ Follow up data could not be fetched. Check Google Sheet link.")
     else:
-        # 🎯 STRICT INDEX-BASED MAPPING TO BYPASS MESSY HEADERS
         def cx(col_letter):
             num = 0
             for c in col_letter.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
@@ -2605,9 +2606,12 @@ with tab10:
         def get_col_safe(df, letter):
             idx = cx(letter)
             if idx < len(df.columns): return df.iloc[:, idx].astype(str).str.strip().replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
-            return pd.Series([pd.NA] * len(df))
+            return pd.Series([pd.NA] * len(df), index=df.index)
 
         df_pt = pd.DataFrame()
+        
+        # 🎯 STRICT COLUMN MAPPING (INCLUDING CP FOR ZONE)
+        df_pt['ZONE'] = get_col_safe(df_pt_raw, 'CP') 
         df_pt['TB Unit'] = get_col_safe(df_pt_raw, 'C')
         df_pt['PHI'] = get_col_safe(df_pt_raw, 'E')
         df_pt['Episode ID'] = get_col_safe(df_pt_raw, 'M')
@@ -2625,6 +2629,10 @@ with tab10:
         df_pt['18 MONTH'] = get_col_safe(df_pt_raw, 'CG')
         df_pt['24 MONTH'] = get_col_safe(df_pt_raw, 'CH')
 
+        # 🛑 #N/A CONVERSION RULE
+        df_pt['ZONE'] = df_pt['ZONE'].replace(['#N/A', 'N/A', 'NAN', 'NONE', '<NA>'], 'MAPPING NOT DONE')
+        df_pt['ZONE'] = df_pt['ZONE'].fillna('MAPPING NOT DONE')
+
         # 🛑 FILTER 1: Pulmonary Only
         is_pulm = df_pt['Site_of_TBDisease'].astype(str).str.upper().str.contains("PULMONARY", na=False)
         is_extra = df_pt['Site_of_TBDisease'].astype(str).str.upper().str.contains("EXTRA", na=False)
@@ -2635,24 +2643,6 @@ with tab10:
         df_pt = df_pt[df_pt['Treatment Outcome'].astype(str).str.upper().isin(success_outcomes)]
 
         if not df_pt.empty:
-            # 🛡️ Fallback Logic to Derive Zone from TB Unit/PHI
-            def assign_fallback_zone(phi_name, tu_name):
-                val = str(phi_name).upper().strip()
-                if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
-                    val = str(tu_name).upper().strip()
-                    if val in ["", "NAN", "NONE", "N/A", "<NA>"]: return ""
-                    
-                if any(x in val for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "SOUTH WEST"
-                if any(x in val for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "TRAGAD", "KD MAIN", "KUSUM"]): return "NORTH WEST"
-                if any(x in val for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "RANIP", "CHANDKHEDA", "NHL"]): return "WEST"
-                if any(x in val for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "LAMBHA", "PIPLAJ", "NAROL", "INDRAPURI", "GHODASAR"]): return "SOUTH"
-                if any(x in val for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "MADHUPURA", "KHANDIA", "DUDHESHWAR", "KALUPUR"]): return "CENTRAL"
-                if any(x in val for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "RAMOL", "NIKOL", "ODHAV", "KHOKHARA"]): return "EAST"
-                if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
-                return "AMC"
-
-            df_pt['ZONE'] = df_pt.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']), axis=1)
-
             # ⏱️ CLEAN DATE FORMATS
             def clean_dt(dt_series): return pd.to_datetime(dt_series, errors='coerce').dt.strftime('%d-%b-%Y').replace('NaT', '')
             df_pt['Diagnosis Date'] = clean_dt(df_pt['Diagnosis Date'])
@@ -2660,6 +2650,7 @@ with tab10:
             df_pt['Outcome Date'] = clean_dt(df_pt['Outcome Date'])
 
             # 🧠 CORE ENGINE: CALCULATE NEAREST FOLLOW UP DATE & DAYS PENDING
+            import pandas as pd
             today_ts = pd.Timestamp.today().normalize()
             
             def calculate_nearest_followup(row):
