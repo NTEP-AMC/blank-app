@@ -2202,8 +2202,7 @@ with tab8:
             except: return pd.DataFrame()
 
         df_m = get_sheet(url_master)
-        if not df_m.empty:
-            df_m.columns = df_m.columns.astype(str).str.strip()
+        if not df_m.empty: df_m.columns = df_m.columns.astype(str).str.strip()
 
         df_t = get_sheet(url_this)
         if not df_t.empty: df_t.columns = df_t.columns.astype(str).str.strip()
@@ -2216,20 +2215,34 @@ with tab8:
     df_master_orig, df_this, df_prev = load_adverse_data()
 
     # ---------------------------------------------------------
-    # ⚙️ AUTO-MERGE DELTA ENGINE (Replaces Manual Copy-Pasting)
+    # ⚙️ AUTO-MERGE DELTA ENGINE 
     # ---------------------------------------------------------
     df_new_adverse = pd.DataFrame()
     
-    def get_col(df, name):
-        for c in df.columns:
-            if str(c).upper().strip() == name.upper().strip(): return c
+    def get_col_match(df_to_search, possible_names):
+        for p in possible_names:
+            for c in df_to_search.columns:
+                if str(c).upper().strip().replace('_', ' ') == str(p).upper().strip().replace('_', ' '):
+                    return c
         return None
 
     if not df_this.empty and not df_prev.empty:
-        id_col_this = get_col(df_this, 'EPISODE ID')
-        out_col_this = get_col(df_this, 'TREATMENT OUTCOME')
-        id_col_prev = get_col(df_prev, 'EPISODE ID')
-        out_col_prev = get_col(df_prev, 'TREATMENT OUTCOME')
+        # Broad alias expansion for raw NTEP headers
+        aliases_id = ['EPISODE ID', 'NTEP ID', 'ID', 'PATIENT ID']
+        aliases_out_val = ['TREATMENT OUTCOME', 'OUTCOME']
+        aliases_zone = ['ZONE', 'DISTRICT', 'CURRENT DISTRICT', 'CURRENT ZONE', 'SPECTRUM CURRENT ZONE']
+        aliases_tu = ['TB UNIT', 'TU', 'CURRENT TU', 'CURRENT TB UNIT', 'SPECTRUM CURRENT TBU']
+        aliases_phi = ['PHI', 'FACILITY', 'CURRENT PHI', 'CURRENT FACILITY', 'HEALTH FACILITY', 'SPECTRUM CURRENT HF']
+        aliases_type = ['FACILITY TYPE', 'TYPE', 'TYPE OF FACILITY', 'SPECTRUM CURRENT HF TYPE']
+        aliases_name = ['PATIENT NAME', 'NAME', 'NAME OF PATIENT']
+        aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS']
+        aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE', 'DATE OF TREATMENT INITIATION']
+        aliases_out = ['OUTCOME DATE', 'DATE OF OUTCOME']
+
+        id_col_this = get_col_match(df_this, aliases_id)
+        out_col_this = get_col_match(df_this, aliases_out_val)
+        id_col_prev = get_col_match(df_prev, aliases_id)
+        out_col_prev = get_col_match(df_prev, aliases_out_val)
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
@@ -2256,60 +2269,65 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            today_ts = pd.Timestamp.today().normalize()
-            init_col = get_col(df_new, 'INITIATION DATE')
-            outd_col = get_col(df_new, 'OUTCOME DATE')
-            
-            if init_col:
-                def calc_new_days(row):
-                    init = pd.to_datetime(row.get(init_col), errors='coerce')
-                    out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
-                    out_str = str(row.get(out_col_this, '')).upper()
-                    if pd.isna(init): return ""
-                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today_ts - init).days} Days"
-                
-                df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
-
             # 🎯 STRICT 12 COLUMNS DEFINITION
             master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
-
-            def get_col_match(df_to_search, possible_names):
-                for p in possible_names:
-                    for c in df_to_search.columns:
-                        if str(c).upper().strip().replace('_', ' ') == str(p).upper().strip().replace('_', ' '):
-                            return c
-                return None
             
             if not df_new.empty:
-                df_export['ZONE'] = df_new[get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District'])] if get_col_match(df_new, ['ZONE', 'Spectrum Current Zone', 'District']) else ""
-                df_export['TB Unit'] = df_new[get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU'])] if get_col_match(df_new, ['TB Unit', 'Spectrum Current TBU', 'TU']) else ""
-                df_export['PHI'] = df_new[get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility'])] if get_col_match(df_new, ['PHI', 'Spectrum Current HF', 'Facility']) else ""
-                df_export['Facility Type'] = df_new[get_col_match(df_new, ['Facility Type', 'Spectrum Current HF Type', 'Type'])] if get_col_match(df_new, ['Facility Type', 'Spectrum Current HF Type', 'Type']) else ""
-                df_export['Patient Name'] = df_new[get_col_match(df_new, ['Patient Name'])] if get_col_match(df_new, ['Patient Name']) else ""
-                df_export['Episode ID'] = df_new[get_col_match(df_new, ['Episode ID'])] if get_col_match(df_new, ['Episode ID']) else ""
-                df_export['Diagnosis Date'] = df_new[get_col_match(df_new, ['Diagnosis Date'])] if get_col_match(df_new, ['Diagnosis Date']) else ""
-                df_export['Initiation Date'] = df_new[get_col_match(df_new, ['Initiation Date'])] if get_col_match(df_new, ['Initiation Date']) else ""
-                df_export['Outcome Date'] = df_new[get_col_match(df_new, ['Outcome Date'])] if get_col_match(df_new, ['Outcome Date']) else ""
-                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, ['Treatment Outcome', 'TREATMENT OUTCOME'])] if get_col_match(df_new, ['Treatment Outcome', 'TREATMENT OUTCOME']) else ""
-                df_export['On Treatment Days'] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
+                df_export['ZONE'] = df_new[get_col_match(df_new, aliases_zone)] if get_col_match(df_new, aliases_zone) else ""
+                df_export['TB Unit'] = df_new[get_col_match(df_new, aliases_tu)] if get_col_match(df_new, aliases_tu) else ""
+                df_export['PHI'] = df_new[get_col_match(df_new, aliases_phi)] if get_col_match(df_new, aliases_phi) else ""
+                df_export['Facility Type'] = df_new[get_col_match(df_new, aliases_type)] if get_col_match(df_new, aliases_type) else ""
+                df_export['Patient Name'] = df_new[get_col_match(df_new, aliases_name)] if get_col_match(df_new, aliases_name) else ""
+                df_export['Episode ID'] = df_new[get_col_match(df_new, aliases_id)] if get_col_match(df_new, aliases_id) else ""
+                df_export['Diagnosis Date'] = df_new[get_col_match(df_new, aliases_diag)] if get_col_match(df_new, aliases_diag) else ""
+                df_export['Initiation Date'] = df_new[get_col_match(df_new, aliases_init)] if get_col_match(df_new, aliases_init) else ""
+                df_export['Outcome Date'] = df_new[get_col_match(df_new, aliases_out)] if get_col_match(df_new, aliases_out) else ""
+                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, aliases_out_val)] if get_col_match(df_new, aliases_out_val) else ""
+                
+                # 🛡️ Fallback Logic: If Zone is completely missing from the raw sheet, derive it from TB Unit
+                def assign_fallback_zone(tu_name):
+                    tu = str(tu_name).upper().strip()
+                    if tu in ["", "NAN", "NONE", "N/A"]: return ""
+                    if any(x in tu for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "SOUTH WEST"
+                    if any(x in tu for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "TRAGAD"]): return "NORTH WEST"
+                    if any(x in tu for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "RANIP", "CHANDKHEDA", "NHL"]): return "WEST"
+                    if any(x in tu for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "LAMBHA", "PIPLAJ", "NAROL", "INDRAPURI", "GHODASAR"]): return "SOUTH"
+                    if any(x in tu for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "MADHUPURA", "KHANDIA", "DUDHESHWAR", "KALUPUR"]): return "CENTRAL"
+                    if any(x in tu for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "RAMOL", "NIKOL", "ODHAV", "KHOKHARA"]): return "EAST"
+                    if any(x in tu for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
+                    return "AMC"
+
+                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['TB Unit']) if str(r['ZONE']).strip() == "" else r['ZONE'], axis=1)
+
+                # ⏱️ Accurately calculate On Treatment Days using the matched date columns
+                today_ts = pd.Timestamp.today().normalize()
+                def calc_new_days(row):
+                    init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
+                    out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
+                    out_str = str(row.get('Treatment Outcome', '')).upper()
+                    if pd.isna(init): return ""
+                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today_ts - init).days} Days"
+                
+                df_export['On Treatment Days'] = df_export.apply(calc_new_days, axis=1)
                 
                 # 🛑 ANTI-DUPLICATE SHIELD: Check if the Episode ID + Outcome already exists in the Master G-Sheet
                 if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
                     master_keys = df_master_orig['Episode ID'].astype(str).str.strip() + "_" + df_master_orig['Treatment Outcome'].astype(str).str.strip()
                     new_keys = df_export['Episode ID'].astype(str).str.strip() + "_" + df_export['Treatment Outcome'].astype(str).str.strip()
-                    # Only keep rows that do not exist in the master already
                     df_export = df_export[~new_keys.isin(master_keys)]
 
                 df_new_adverse = df_export.copy()
 
     # ---------------------------------------------------------
-    # 🎛️ UI: DYNAMIC TAGGING & MASTER MERGING
+    # 🎛️ UI: DYNAMIC TAGGING (AUTO DAILY DEFAULT) & MASTER MERGING
     # ---------------------------------------------------------
     col_new1, col_new2 = st.columns([1, 2])
     with col_new1:
         st.markdown("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #b91c1c;'>", unsafe_allow_html=True)
-        report_period_input = st.text_input("🏷️ Tag for New Outcomes:", value="18 MAY TO 25 MAY", help="This assigns the period tag to the 'ADVERSE DATE' column for any newly detected patients.")
+        # Automatically defaults to Today's Date for daily updates!
+        default_date_tag = datetime.now(india_tz).strftime('%d %b %Y').upper()
+        report_period_input = st.text_input("🏷️ Tag for New Outcomes:", value=default_date_tag, help="This assigns the period tag to the 'ADVERSE DATE' column. It defaults to Today for your daily updates!")
         if not df_new_adverse.empty:
             df_new_adverse['ADVERSE DATE'] = report_period_input
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2317,7 +2335,6 @@ with tab8:
     # Merge existing Master with dynamically calculated New records
     df_combined_master = df_master_orig.copy()
 
-    # Verify and calculate 'On Treatment Days' for older master data if missing
     if not df_combined_master.empty and 'Initiation Date' in df_combined_master.columns:
         today_ts_m = pd.Timestamp.today().normalize()
         def calc_master_days(row):
@@ -2331,12 +2348,11 @@ with tab8:
     if not df_new_adverse.empty:
         df_combined_master = pd.concat([df_combined_master, df_new_adverse], ignore_index=True)
         
-    # Final wipe of Excel-induced NaN artifacts
     df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
     df_combined_master = df_combined_master.fillna("")
 
     # ---------------------------------------------------------
-    # 📊 DASHBOARD FILTERS (Applied to Combined Master)
+    # 📊 DASHBOARD FILTERS 
     # ---------------------------------------------------------
     st.write("---")
     c1, c2, c3 = st.columns(3)
@@ -2367,8 +2383,6 @@ with tab8:
         st.markdown(f"<div style='background:#eff6ff; border:1px solid #93c5fd; border-radius:10px; padding:15px; text-align:center;'><h4 style='color:#1d4ed8; margin:0;'>{len(df_f)}</h4><span style='font-size:12px; color:#1e3a8a;'>Total Displayed Records</span></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Render strict 12-column table
     st.dataframe(df_f, use_container_width=True, hide_index=True)
     
     if not df_combined_master.empty:
