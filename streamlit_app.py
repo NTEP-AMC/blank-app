@@ -2178,13 +2178,14 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (AUTO-MERGE MASTER TRACKER)
 # ==========================================
 with tab8:
-    st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Master Adverse Outcomes Tracker</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Auto-Synced Adverse Outcomes Master</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically detects new adverse outcomes from This Week vs Previous Week, dynamically prevents duplicates, and merges them directly into your Master List!</i></div>", unsafe_allow_html=True)
 
     @st.cache_data(ttl=600, show_spinner=False)
-    def load_all_data():
+    def load_adverse_data():
         import urllib.request
         import io
         
@@ -2203,8 +2204,6 @@ with tab8:
         df_m = get_sheet(url_master)
         if not df_m.empty:
             df_m.columns = df_m.columns.astype(str).str.strip()
-            if 'ADVERSE DATE' in df_m.columns:
-                df_m = df_m.rename(columns={'ADVERSE DATE': 'Report Period'})
 
         df_t = get_sheet(url_this)
         if not df_t.empty: df_t.columns = df_t.columns.astype(str).str.strip()
@@ -2214,46 +2213,16 @@ with tab8:
 
         return df_m, df_t, df_p
 
-    df_master, df_this, df_prev = load_all_data()
+    df_master_orig, df_this, df_prev = load_adverse_data()
 
-    # --- 1. Master Logic & UI ---
-    if not df_master.empty:
-        today = pd.Timestamp.today().normalize()
-        def calc_days(row):
-            init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
-            out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
-            out_str = str(row.get('Treatment Outcome', '')).upper()
-            if pd.isna(init): return ""
-            return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', '', 'NAN', 'N/A'] else (today - init).days} Days"
-
-        df_master['On Treatment Days'] = df_master.apply(calc_days, axis=1)
-
-        c1, c2, c3 = st.columns(3)
-        with c1: 
-            opts = sorted(df_master['Treatment Outcome'].dropna().astype(str).unique()) if 'Treatment Outcome' in df_master.columns else []
-            sel_out = st.multiselect("Filter Master by Outcome", opts, default=opts)
-        with c2: 
-            opts = sorted(df_master['ZONE'].dropna().astype(str).unique()) if 'ZONE' in df_master.columns else []
-            sel_zone = st.multiselect("Filter Master by Zone", opts)
-        with c3: 
-            opts = sorted(df_master['Report Period'].dropna().astype(str).unique()) if 'Report Period' in df_master.columns else []
-            sel_period = st.multiselect("Filter Master by Period", opts)
-
-        df_f = df_master.copy()
-        if sel_out and 'Treatment Outcome' in df_f.columns: df_f = df_f[df_f['Treatment Outcome'].isin(sel_out)]
-        if sel_zone and 'ZONE' in df_f.columns: df_f = df_f[df_f['ZONE'].isin(sel_zone)]
-        if sel_period and 'Report Period' in df_f.columns: df_f = df_f[df_f['Report Period'].isin(sel_period)]
-        
-        st.markdown(f"<div style='background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px; box-shadow:0 2px 4px #eee;'>Total Master Cases: <b>{len(df_f)}</b></div>", unsafe_allow_html=True)
-        st.dataframe(df_f, use_container_width=True, hide_index=True)
-
-    # --- 2. Delta Logic (The New Table) ---
-    st.write("---")
-    st.markdown("<h4 style='color: #b91c1c;'>⚠️ New Adverse Outcomes Detected (Paste these to Master)</h4>", unsafe_allow_html=True)
+    # ---------------------------------------------------------
+    # ⚙️ AUTO-MERGE DELTA ENGINE (Replaces Manual Copy-Pasting)
+    # ---------------------------------------------------------
+    df_new_adverse = pd.DataFrame()
     
     def get_col(df, name):
         for c in df.columns:
-            if str(c).upper() == name.upper(): return c
+            if str(c).upper().strip() == name.upper().strip(): return c
         return None
 
     if not df_this.empty and not df_prev.empty:
@@ -2263,7 +2232,6 @@ with tab8:
         out_col_prev = get_col(df_prev, 'TREATMENT OUTCOME')
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
-            
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
             df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
             df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.strip().str.upper()
@@ -2288,7 +2256,7 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            today = pd.Timestamp.today().normalize()
+            today_ts = pd.Timestamp.today().normalize()
             init_col = get_col(df_new, 'INITIATION DATE')
             outd_col = get_col(df_new, 'OUTCOME DATE')
             
@@ -2298,12 +2266,12 @@ with tab8:
                     out = pd.to_datetime(row.get(outd_col) if outd_col else None, errors='coerce')
                     out_str = str(row.get(out_col_this, '')).upper()
                     if pd.isna(init): return ""
-                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today - init).days} Days"
+                    return f"{(out - init).days if pd.notna(out) and out_str not in blank_variants else (today_ts - init).days} Days"
                 
                 df_new['On Treatment Days'] = df_new.apply(calc_new_days, axis=1)
 
-            # 🎯 STRICT MAPPING TO 12 COLUMNS ONLY
-            master_cols = ['Report Period', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
+            # 🎯 STRICT 12 COLUMNS DEFINITION
+            master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
 
             def get_col_match(df_to_search, possible_names):
@@ -2323,21 +2291,93 @@ with tab8:
                 df_export['Diagnosis Date'] = df_new[get_col_match(df_new, ['Diagnosis Date'])] if get_col_match(df_new, ['Diagnosis Date']) else ""
                 df_export['Initiation Date'] = df_new[get_col_match(df_new, ['Initiation Date'])] if get_col_match(df_new, ['Initiation Date']) else ""
                 df_export['Outcome Date'] = df_new[get_col_match(df_new, ['Outcome Date'])] if get_col_match(df_new, ['Outcome Date']) else ""
-                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, ['Treatment Outcome'])] if get_col_match(df_new, ['Treatment Outcome']) else ""
+                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, ['Treatment Outcome', 'TREATMENT OUTCOME'])] if get_col_match(df_new, ['Treatment Outcome', 'TREATMENT OUTCOME']) else ""
                 df_export['On Treatment Days'] = df_new['On Treatment Days'] if 'On Treatment Days' in df_new.columns else ""
-                df_export['Report Period'] = "" 
                 
-            # 🎯 FINAL CLEANUP: Remove any "None", "nan", etc from visual output
-            df_export = df_export.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
-            df_export = df_export.fillna("")
+                # 🛑 ANTI-DUPLICATE SHIELD: Check if the Episode ID + Outcome already exists in the Master G-Sheet
+                if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
+                    master_keys = df_master_orig['Episode ID'].astype(str).str.strip() + "_" + df_master_orig['Treatment Outcome'].astype(str).str.strip()
+                    new_keys = df_export['Episode ID'].astype(str).str.strip() + "_" + df_export['Treatment Outcome'].astype(str).str.strip()
+                    # Only keep rows that do not exist in the master already
+                    df_export = df_export[~new_keys.isin(master_keys)]
 
-            st.markdown(f"<div style='color: #27ae60; font-weight: bold;'>Found {len(df_export)} New Patient(s)</div>", unsafe_allow_html=True)
-            st.dataframe(df_export, use_container_width=True, hide_index=True)
-            st.download_button("📥 Download New List", convert_df_to_excel(df_export, "New_Adverse"), "New_Records_For_Master.xlsx")
-        else:
-            st.warning("Missing 'Episode ID' or 'Treatment Outcome' column in sheets.")
-    else:
-        st.info("Check This Week and Previous Week sheets.")
+                df_new_adverse = df_export.copy()
+
+    # ---------------------------------------------------------
+    # 🎛️ UI: DYNAMIC TAGGING & MASTER MERGING
+    # ---------------------------------------------------------
+    col_new1, col_new2 = st.columns([1, 2])
+    with col_new1:
+        st.markdown("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #b91c1c;'>", unsafe_allow_html=True)
+        report_period_input = st.text_input("🏷️ Tag for New Outcomes:", value="18 MAY TO 25 MAY", help="This assigns the period tag to the 'ADVERSE DATE' column for any newly detected patients.")
+        if not df_new_adverse.empty:
+            df_new_adverse['ADVERSE DATE'] = report_period_input
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Merge existing Master with dynamically calculated New records
+    df_combined_master = df_master_orig.copy()
+
+    # Verify and calculate 'On Treatment Days' for older master data if missing
+    if not df_combined_master.empty and 'Initiation Date' in df_combined_master.columns:
+        today_ts_m = pd.Timestamp.today().normalize()
+        def calc_master_days(row):
+            init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
+            out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
+            out_str = str(row.get('Treatment Outcome', '')).upper()
+            if pd.isna(init): return ""
+            return f"{(out - init).days if pd.notna(out) and out_str not in ['PENDING', '', 'NAN', 'N/A'] else (today_ts_m - init).days} Days"
+        df_combined_master['On Treatment Days'] = df_combined_master.apply(calc_master_days, axis=1)
+
+    if not df_new_adverse.empty:
+        df_combined_master = pd.concat([df_combined_master, df_new_adverse], ignore_index=True)
+        
+    # Final wipe of Excel-induced NaN artifacts
+    df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
+    df_combined_master = df_combined_master.fillna("")
+
+    # ---------------------------------------------------------
+    # 📊 DASHBOARD FILTERS (Applied to Combined Master)
+    # ---------------------------------------------------------
+    st.write("---")
+    c1, c2, c3 = st.columns(3)
+    with c1: 
+        opts_out = sorted([x for x in df_combined_master['Treatment Outcome'].unique() if str(x).strip() != ""]) if 'Treatment Outcome' in df_combined_master.columns else []
+        sel_out = st.multiselect("Filter by Outcome", opts_out, default=opts_out)
+    with c2: 
+        opts_zone = sorted([x for x in df_combined_master['ZONE'].unique() if str(x).strip() != ""]) if 'ZONE' in df_combined_master.columns else []
+        sel_zone = st.multiselect("Filter by Zone", opts_zone)
+    with c3: 
+        opts_per = sorted([x for x in df_combined_master['ADVERSE DATE'].unique() if str(x).strip() != ""]) if 'ADVERSE DATE' in df_combined_master.columns else []
+        sel_period = st.multiselect("Filter by Adverse Date", opts_per)
+
+    df_f = df_combined_master.copy()
+    if sel_out and 'Treatment Outcome' in df_f.columns: df_f = df_f[df_f['Treatment Outcome'].isin(sel_out)]
+    if sel_zone and 'ZONE' in df_f.columns: df_f = df_f[df_f['ZONE'].isin(sel_zone)]
+    if sel_period and 'ADVERSE DATE' in df_f.columns: df_f = df_f[df_f['ADVERSE DATE'].isin(sel_period)]
+    
+    # ---------------------------------------------------------
+    # 📈 METRICS DISPLAY
+    # ---------------------------------------------------------
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown(f"<div style='background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:15px; text-align:center;'><h4 style='color:#b91c1c; margin:0;'>{len(df_master_orig)}</h4><span style='font-size:12px; color:#7f1d1d;'>Old Master Records</span></div>", unsafe_allow_html=True)
+    with m2:
+        st.markdown(f"<div style='background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:15px; text-align:center;'><h4 style='color:#15803d; margin:0;'>+{len(df_new_adverse)}</h4><span style='font-size:12px; color:#14532d;'>New Auto-Merged Outcomes</span></div>", unsafe_allow_html=True)
+    with m3:
+        st.markdown(f"<div style='background:#eff6ff; border:1px solid #93c5fd; border-radius:10px; padding:15px; text-align:center;'><h4 style='color:#1d4ed8; margin:0;'>{len(df_f)}</h4><span style='font-size:12px; color:#1e3a8a;'>Total Displayed Records</span></div>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Render strict 12-column table
+    st.dataframe(df_f, use_container_width=True, hide_index=True)
+    
+    if not df_combined_master.empty:
+        st.download_button(
+            "📥 Download Auto-Updated Master Excel", 
+            convert_df_to_excel(df_combined_master, "Master_Adverse"), 
+            "Updated_Adverse_Outcomes_Master.xlsx",
+            help="Click to download the fully merged file. Simply upload this directly to your Google Drive to replace your old Master Sheet!"
+        )
 
 # ==========================================
 # 🟢 TAB 9: EPICOLLECT5 LIVE ENTRIES (FIELD DATA)
