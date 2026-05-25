@@ -2301,7 +2301,7 @@ with tab8:
                 df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['TB Unit']) if str(r['ZONE']).strip() == "" else r['ZONE'], axis=1)
 
                 # ⏱️ Accurately calculate On Treatment Days using the matched date columns
-                today_ts = pd.Timestamp.today().normalize()
+                today_ts = pd.Timestamp.today(tz='Asia/Kolkata').normalize()
                 def calc_new_days(row):
                     init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
                     out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
@@ -2325,8 +2325,8 @@ with tab8:
     col_new1, col_new2 = st.columns([1, 2])
     with col_new1:
         st.markdown("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #b91c1c;'>", unsafe_allow_html=True)
-        # Automatically defaults to Today's Date for daily updates!
-        default_date_tag = datetime.now(india_tz).strftime('%d %b %Y').upper()
+        # BUG FIX: Using pandas Timestamp instead of datetime to prevent namespace collision
+        default_date_tag = pd.Timestamp.today(tz='Asia/Kolkata').strftime('%d %b %Y').upper()
         report_period_input = st.text_input("🏷️ Tag for New Outcomes:", value=default_date_tag, help="This assigns the period tag to the 'ADVERSE DATE' column. It defaults to Today for your daily updates!")
         if not df_new_adverse.empty:
             df_new_adverse['ADVERSE DATE'] = report_period_input
@@ -2336,7 +2336,7 @@ with tab8:
     df_combined_master = df_master_orig.copy()
 
     if not df_combined_master.empty and 'Initiation Date' in df_combined_master.columns:
-        today_ts_m = pd.Timestamp.today().normalize()
+        today_ts_m = pd.Timestamp.today(tz='Asia/Kolkata').normalize()
         def calc_master_days(row):
             init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
             out = pd.to_datetime(row.get('Outcome Date'), errors='coerce')
