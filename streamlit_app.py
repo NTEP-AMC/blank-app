@@ -2222,21 +2222,24 @@ with tab8:
     def get_col_match(df_to_search, possible_names):
         for p in possible_names:
             for c in df_to_search.columns:
-                if str(c).upper().strip().replace('_', ' ') == str(p).upper().strip().replace('_', ' '):
+                # Strip spaces and underscores to catch exact matches like 'Diagnosis_Date' vs 'Diagnosis Date'
+                c_clean = str(c).upper().strip().replace('_', ' ')
+                p_clean = str(p).upper().strip().replace('_', ' ')
+                if c_clean == p_clean:
                     return c
         return None
 
     if not df_this.empty and not df_prev.empty:
-        # Broad alias expansion for raw NTEP headers
+        # Broad alias expansion for raw NTEP headers based on exact column names requested
         aliases_id = ['EPISODE ID', 'NTEP ID', 'ID', 'PATIENT ID']
         aliases_out_val = ['TREATMENT OUTCOME', 'OUTCOME']
         aliases_zone = ['ZONE', 'DISTRICT', 'CURRENT DISTRICT', 'CURRENT ZONE', 'SPECTRUM CURRENT ZONE']
         aliases_tu = ['TB UNIT', 'TU', 'CURRENT TU', 'CURRENT TB UNIT', 'SPECTRUM CURRENT TBU']
-        aliases_phi = ['PHI', 'FACILITY', 'CURRENT PHI', 'CURRENT FACILITY', 'HEALTH FACILITY', 'SPECTRUM CURRENT HF']
+        aliases_phi = ['SPECTRUM CURRENT HF', 'PHI', 'FACILITY', 'CURRENT PHI', 'HEALTH FACILITY']
         aliases_type = ['FACILITY TYPE', 'TYPE', 'TYPE OF FACILITY', 'SPECTRUM CURRENT HF TYPE']
         aliases_name = ['PATIENT NAME', 'NAME', 'NAME OF PATIENT']
         aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS']
-        aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE', 'DATE OF TREATMENT INITIATION']
+        aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE']
         aliases_out = ['OUTCOME DATE', 'DATE OF OUTCOME']
 
         id_col_this = get_col_match(df_this, aliases_id)
@@ -2285,22 +2288,33 @@ with tab8:
                 df_export['Outcome Date'] = df_new[get_col_match(df_new, aliases_out)] if get_col_match(df_new, aliases_out) else ""
                 df_export['Treatment Outcome'] = df_new[get_col_match(df_new, aliases_out_val)] if get_col_match(df_new, aliases_out_val) else ""
                 
-                # 🛡️ Fallback Logic: If Zone is completely missing from the raw sheet, derive it from TB Unit
-                def assign_fallback_zone(tu_name):
-                    tu = str(tu_name).upper().strip()
-                    if tu in ["", "NAN", "NONE", "N/A"]: return ""
-                    if any(x in tu for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "SOUTH WEST"
-                    if any(x in tu for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "TRAGAD"]): return "NORTH WEST"
-                    if any(x in tu for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "RANIP", "CHANDKHEDA", "NHL"]): return "WEST"
-                    if any(x in tu for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "LAMBHA", "PIPLAJ", "NAROL", "INDRAPURI", "GHODASAR"]): return "SOUTH"
-                    if any(x in tu for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "MADHUPURA", "KHANDIA", "DUDHESHWAR", "KALUPUR"]): return "CENTRAL"
-                    if any(x in tu for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "RAMOL", "NIKOL", "ODHAV", "KHOKHARA"]): return "EAST"
-                    if any(x in tu for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
+                # 🛡️ Fallback Logic: Derive Zone from Spectrum_Current_HF (PHI) first, then TB Unit
+                def assign_fallback_zone(phi_name, tu_name):
+                    val = str(phi_name).upper().strip()
+                    if val in ["", "NAN", "NONE", "N/A"]: 
+                        val = str(tu_name).upper().strip()
+                        if val in ["", "NAN", "NONE", "N/A"]: return ""
+                        
+                    if any(x in val for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "SOUTH WEST"
+                    if any(x in val for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "TRAGAD", "KD MAIN", "KUSUM"]): return "NORTH WEST"
+                    if any(x in val for x in ["VASNA", "PALDI", "SABARMATI", "NAVRANGPURA", "STADIUM", "VADAJ", "RANIP", "CHANDKHEDA", "NHL"]): return "WEST"
+                    if any(x in val for x in ["DANILIMDA", "VATVA", "MANINAGAR", "ISANPUR", "BEHRAMPURA", "LAMBHA", "PIPLAJ", "NAROL", "INDRAPURI", "GHODASAR"]): return "SOUTH"
+                    if any(x in val for x in ["ASARVA", "SHAHPUR", "JAMALPUR", "DARIYAPUR", "CIVIL", "MADHUPURA", "KHANDIA", "DUDHESHWAR", "KALUPUR"]): return "CENTRAL"
+                    if any(x in val for x in ["AMRAIWADI", "BHAIPURA", "VASTRAL", "GOMTIPUR", "VIRATNAGAR", "RAMOL", "NIKOL", "ODHAV", "KHOKHARA"]): return "EAST"
+                    if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
                     return "AMC"
 
-                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['TB Unit']) if str(r['ZONE']).strip() == "" else r['ZONE'], axis=1)
+                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip() == "" else r['ZONE'], axis=1)
 
-                # ⏱️ FIXED: Safely calculate days by making today_ts timezone-naive
+                # ⏱️ Clean Date Formats (Removes 0:00:00)
+                def clean_date_display(dt_series):
+                    return pd.to_datetime(dt_series, errors='coerce').dt.strftime('%d-%b-%Y').replace('NaT', '')
+                
+                df_export['Diagnosis Date'] = clean_date_display(df_export['Diagnosis Date'])
+                df_export['Initiation Date'] = clean_date_display(df_export['Initiation Date'])
+                df_export['Outcome Date'] = clean_date_display(df_export['Outcome Date'])
+
+                # ⏱️ Accurately calculate On Treatment Days using raw dates
                 today_ts = pd.Timestamp.today(tz='Asia/Kolkata').tz_localize(None).normalize()
                 def calc_new_days(row):
                     init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
@@ -2311,7 +2325,7 @@ with tab8:
                 
                 df_export['On Treatment Days'] = df_export.apply(calc_new_days, axis=1)
                 
-                # 🛑 ANTI-DUPLICATE SHIELD: Check if the Episode ID + Outcome already exists in the Master G-Sheet
+                # 🛑 ANTI-DUPLICATE SHIELD
                 if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
                     master_keys = df_master_orig['Episode ID'].astype(str).str.strip() + "_" + df_master_orig['Treatment Outcome'].astype(str).str.strip()
                     new_keys = df_export['Episode ID'].astype(str).str.strip() + "_" + df_export['Treatment Outcome'].astype(str).str.strip()
@@ -2336,7 +2350,6 @@ with tab8:
     df_combined_master = df_master_orig.copy()
 
     if not df_combined_master.empty and 'Initiation Date' in df_combined_master.columns:
-        # ⏱️ FIXED: Make master today_ts timezone-naive as well
         today_ts_m = pd.Timestamp.today(tz='Asia/Kolkata').tz_localize(None).normalize()
         def calc_master_days(row):
             init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
