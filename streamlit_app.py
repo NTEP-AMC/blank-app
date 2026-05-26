@@ -2219,16 +2219,30 @@ with tab8:
     # ---------------------------------------------------------
     df_new_adverse = pd.DataFrame()
     
-    # 🛡️ BULLETPROOF REGEX MATCHER (Ignores spaces, underscores, and hidden characters)
+    # 🛡️ BULLETPROOF MATCHER: Uses Text Alias first, then falls back to exact Excel Column Index!
     import re
-    def get_col_match(df_to_search, possible_names):
+    def cx(col_letter):
+        num = 0
+        for c in col_letter.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
+        return num - 1
+
+    def get_col_name_or_idx(df_to_search, possible_names, fallback_col_letter):
         for p in possible_names:
             p_clean = re.sub(r'[^A-Z0-9]', '', str(p).upper())
             for c in df_to_search.columns:
                 c_clean = re.sub(r'[^A-Z0-9]', '', str(c).upper())
                 if c_clean == p_clean:
                     return c
+        idx = cx(fallback_col_letter)
+        if idx < len(df_to_search.columns):
+            return df_to_search.columns[idx]
         return None
+
+    def safe_extract(df, aliases, col_letter):
+        col_name = get_col_name_or_idx(df, aliases, col_letter)
+        if col_name in df.columns:
+            return df[col_name]
+        return pd.Series([""] * len(df), index=df.index)
 
     if not df_this.empty and not df_prev.empty:
         aliases_id = ['EPISODE ID', 'NTEP ID', 'ID', 'PATIENT ID']
@@ -2238,17 +2252,14 @@ with tab8:
         aliases_phi = ['SPECTRUM CURRENT HF', 'PHI', 'FACILITY', 'CURRENT PHI', 'HEALTH FACILITY']
         aliases_type = ['FACILITY TYPE', 'TYPE', 'TYPE OF FACILITY', 'SPECTRUM CURRENT HF TYPE']
         aliases_name = ['PATIENT NAME', 'NAME', 'NAME OF PATIENT']
-        
-        # Expanded aliases for Diagnosis Date just in case!
         aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS', 'DATE OF TB DIAGNOSIS', 'DX DATE']
-        
         aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE']
         aliases_out = ['OUTCOME DATE', 'DATE OF OUTCOME']
 
-        id_col_this = get_col_match(df_this, aliases_id)
-        out_col_this = get_col_match(df_this, aliases_out_val)
-        id_col_prev = get_col_match(df_prev, aliases_id)
-        out_col_prev = get_col_match(df_prev, aliases_out_val)
+        id_col_this = get_col_name_or_idx(df_this, aliases_id, 'M')
+        out_col_this = get_col_name_or_idx(df_this, aliases_out_val, 'BK')
+        id_col_prev = get_col_name_or_idx(df_prev, aliases_id, 'M')
+        out_col_prev = get_col_name_or_idx(df_prev, aliases_out_val, 'BK')
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
@@ -2280,16 +2291,20 @@ with tab8:
             df_export = pd.DataFrame(columns=master_cols)
             
             if not df_new.empty:
-                df_export['ZONE'] = df_new[get_col_match(df_new, aliases_zone)] if get_col_match(df_new, aliases_zone) else ""
-                df_export['TB Unit'] = df_new[get_col_match(df_new, aliases_tu)] if get_col_match(df_new, aliases_tu) else ""
-                df_export['PHI'] = df_new[get_col_match(df_new, aliases_phi)] if get_col_match(df_new, aliases_phi) else ""
-                df_export['Facility Type'] = df_new[get_col_match(df_new, aliases_type)] if get_col_match(df_new, aliases_type) else ""
-                df_export['Patient Name'] = df_new[get_col_match(df_new, aliases_name)] if get_col_match(df_new, aliases_name) else ""
-                df_export['Episode ID'] = df_new[get_col_match(df_new, aliases_id)] if get_col_match(df_new, aliases_id) else ""
-                df_export['Diagnosis Date'] = df_new[get_col_match(df_new, aliases_diag)] if get_col_match(df_new, aliases_diag) else ""
-                df_export['Initiation Date'] = df_new[get_col_match(df_new, aliases_init)] if get_col_match(df_new, aliases_init) else ""
-                df_export['Outcome Date'] = df_new[get_col_match(df_new, aliases_out)] if get_col_match(df_new, aliases_out) else ""
-                df_export['Treatment Outcome'] = df_new[get_col_match(df_new, aliases_out_val)] if get_col_match(df_new, aliases_out_val) else ""
+                # 🎯 EXACT EXCEL COLUMN MAPPING ENFORCED
+                df_export['ZONE'] = safe_extract(df_new, aliases_zone, 'AR')
+                df_export['TB Unit'] = safe_extract(df_new, aliases_tu, 'C')
+                df_export['PHI'] = safe_extract(df_new, aliases_phi, 'E')
+                df_export['Facility Type'] = safe_extract(df_new, aliases_type, 'D')
+                df_export['Patient Name'] = safe_extract(df_new, aliases_name, 'N')
+                df_export['Episode ID'] = safe_extract(df_new, aliases_id, 'M')
+                
+                # 🔥 THESE WILL NEVER FAIL NOW: Uses S, BM, CB explicitly
+                df_export['Diagnosis Date'] = safe_extract(df_new, aliases_diag, 'S')
+                df_export['Initiation Date'] = safe_extract(df_new, aliases_init, 'BM')
+                df_export['Outcome Date'] = safe_extract(df_new, aliases_out, 'CB')
+                
+                df_export['Treatment Outcome'] = safe_extract(df_new, aliases_out_val, 'BK')
                 
                 # 🛡️ Fallback Logic: Derive Zone from Spectrum_Current_HF (PHI) first, then TB Unit
                 def assign_fallback_zone(phi_name, tu_name):
@@ -2309,17 +2324,12 @@ with tab8:
 
                 df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] else r['ZONE'], axis=1)
 
-                # ⏱️ FIXED: Ultra-Safe Date Parsing Engine
+                # ⏱️ Ultra-Safe Date Parsing Engine
                 def clean_date_display(dt_series):
-                    # Try parsing with dayfirst=True
                     parsed1 = pd.to_datetime(dt_series, errors='coerce', dayfirst=True)
-                    # Try standard parsing as fallback
                     parsed2 = pd.to_datetime(dt_series, errors='coerce')
-                    
                     valid_dates = parsed1.combine_first(parsed2)
                     formatted = valid_dates.dt.strftime('%d-%b-%Y')
-                    
-                    # If it completely fails to parse, DO NOT DELETE IT. Return the raw text!
                     return formatted.fillna(dt_series).replace(['NaT', 'nan', 'NaN', 'None', '<NA>'], '')
                 
                 df_export['Diagnosis Date'] = clean_date_display(df_export['Diagnosis Date'])
