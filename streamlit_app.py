@@ -2219,18 +2219,18 @@ with tab8:
     # ---------------------------------------------------------
     df_new_adverse = pd.DataFrame()
     
+    # 🛡️ BULLETPROOF REGEX MATCHER (Ignores spaces, underscores, and hidden characters)
+    import re
     def get_col_match(df_to_search, possible_names):
         for p in possible_names:
+            p_clean = re.sub(r'[^A-Z0-9]', '', str(p).upper())
             for c in df_to_search.columns:
-                # Strip spaces and underscores to catch exact matches like 'Diagnosis_Date' vs 'Diagnosis Date'
-                c_clean = str(c).upper().strip().replace('_', ' ')
-                p_clean = str(p).upper().strip().replace('_', ' ')
+                c_clean = re.sub(r'[^A-Z0-9]', '', str(c).upper())
                 if c_clean == p_clean:
                     return c
         return None
 
     if not df_this.empty and not df_prev.empty:
-        # Broad alias expansion for raw NTEP headers based on exact column names requested
         aliases_id = ['EPISODE ID', 'NTEP ID', 'ID', 'PATIENT ID']
         aliases_out_val = ['TREATMENT OUTCOME', 'OUTCOME']
         aliases_zone = ['ZONE', 'DISTRICT', 'CURRENT DISTRICT', 'CURRENT ZONE', 'SPECTRUM CURRENT ZONE']
@@ -2291,9 +2291,9 @@ with tab8:
                 # 🛡️ Fallback Logic: Derive Zone from Spectrum_Current_HF (PHI) first, then TB Unit
                 def assign_fallback_zone(phi_name, tu_name):
                     val = str(phi_name).upper().strip()
-                    if val in ["", "NAN", "NONE", "N/A"]: 
+                    if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
                         val = str(tu_name).upper().strip()
-                        if val in ["", "NAN", "NONE", "N/A"]: return ""
+                        if val in ["", "NAN", "NONE", "N/A", "<NA>"]: return ""
                         
                     if any(x in val for x in ["JODHPUR", "SARKHEJ", "VEJALPUR", "BOPAL", "MAKARBA"]): return "SOUTH WEST"
                     if any(x in val for x in ["SOLA", "GHATLODIA", "CHANDLODIYA", "THALTEJ", "BODAKDEV", "GOTA", "TRAGAD", "KD MAIN", "KUSUM"]): return "NORTH WEST"
@@ -2304,9 +2304,10 @@ with tab8:
                     if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
                     return "AMC"
 
-                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip() == "" else r['ZONE'], axis=1)
+                # FIXED: It now correctly detects "NaN" and triggers the fallback zone mapper!
+                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] else r['ZONE'], axis=1)
 
-                # ⏱️ Clean Date Formats (Removes 0:00:00)
+                # ⏱️ Clean Date Formats
                 def clean_date_display(dt_series):
                     return pd.to_datetime(dt_series, errors='coerce').dt.strftime('%d-%b-%Y').replace('NaT', '')
                 
@@ -2314,7 +2315,7 @@ with tab8:
                 df_export['Initiation Date'] = clean_date_display(df_export['Initiation Date'])
                 df_export['Outcome Date'] = clean_date_display(df_export['Outcome Date'])
 
-                # ⏱️ Accurately calculate On Treatment Days using raw dates
+                # ⏱️ Accurately calculate On Treatment Days
                 today_ts = pd.Timestamp.today(tz='Asia/Kolkata').tz_localize(None).normalize()
                 def calc_new_days(row):
                     init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
@@ -2339,7 +2340,6 @@ with tab8:
     col_new1, col_new2 = st.columns([1, 2])
     with col_new1:
         st.markdown("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #b91c1c;'>", unsafe_allow_html=True)
-        # Automatically defaults to Today's Date for daily updates!
         default_date_tag = pd.Timestamp.today(tz='Asia/Kolkata').strftime('%d %b %Y').upper()
         report_period_input = st.text_input("🏷️ Tag for New Outcomes:", value=default_date_tag, help="This assigns the period tag to the 'ADVERSE DATE' column. It defaults to Today for your daily updates!")
         if not df_new_adverse.empty:
