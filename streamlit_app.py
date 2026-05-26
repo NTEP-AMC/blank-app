@@ -2238,7 +2238,10 @@ with tab8:
         aliases_phi = ['SPECTRUM CURRENT HF', 'PHI', 'FACILITY', 'CURRENT PHI', 'HEALTH FACILITY']
         aliases_type = ['FACILITY TYPE', 'TYPE', 'TYPE OF FACILITY', 'SPECTRUM CURRENT HF TYPE']
         aliases_name = ['PATIENT NAME', 'NAME', 'NAME OF PATIENT']
-        aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS']
+        
+        # Expanded aliases for Diagnosis Date just in case!
+        aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS', 'DATE OF TB DIAGNOSIS', 'DX DATE']
+        
         aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE']
         aliases_out = ['OUTCOME DATE', 'DATE OF OUTCOME']
 
@@ -2304,12 +2307,20 @@ with tab8:
                     if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
                     return "AMC"
 
-                # FIXED: It now correctly detects "NaN" and triggers the fallback zone mapper!
                 df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] else r['ZONE'], axis=1)
 
-                # ⏱️ Clean Date Formats
+                # ⏱️ FIXED: Ultra-Safe Date Parsing Engine
                 def clean_date_display(dt_series):
-                    return pd.to_datetime(dt_series, errors='coerce').dt.strftime('%d-%b-%Y').replace('NaT', '')
+                    # Try parsing with dayfirst=True
+                    parsed1 = pd.to_datetime(dt_series, errors='coerce', dayfirst=True)
+                    # Try standard parsing as fallback
+                    parsed2 = pd.to_datetime(dt_series, errors='coerce')
+                    
+                    valid_dates = parsed1.combine_first(parsed2)
+                    formatted = valid_dates.dt.strftime('%d-%b-%Y')
+                    
+                    # If it completely fails to parse, DO NOT DELETE IT. Return the raw text!
+                    return formatted.fillna(dt_series).replace(['NaT', 'nan', 'NaN', 'None', '<NA>'], '')
                 
                 df_export['Diagnosis Date'] = clean_date_display(df_export['Diagnosis Date'])
                 df_export['Initiation Date'] = clean_date_display(df_export['Initiation Date'])
