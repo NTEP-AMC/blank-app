@@ -355,7 +355,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🏥 Current TB Patients", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data", "📅 Post-Treatment"])
+tab1, tab2, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -607,39 +607,6 @@ with tab2:
             
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-# ==========================================
-# 🟢 TAB 3: CURRENT PATIENTS
-# ==========================================
-with tab3:
-    st.markdown("#### 🏥 Current TB Patients")
-    with st.expander("🔽 Filters"):
-        c1, c2, c3 = st.columns(3)
-        df_t3 = df_curr_tb.copy()
-        with c1:
-            if st.session_state.role == "ADMIN":
-                s3_z = clean_selection(st.multiselect("Filter Zone", get_options_with_counts(df_t3, 'ZONE', 'tab3'), key='z3'))
-                if s3_z: df_t3 = df_t3[df_t3['ZONE'].isin(s3_z)]
-            # 🎯 DEPENDENT FILTER
-            s3_tu = clean_selection(st.multiselect("Filter TB Unit", get_options_with_counts(df_t3, 'TB Unit', 'tab3'), key='tu3'))
-            if s3_tu: df_t3 = df_t3[df_t3['TB Unit'].isin(s3_tu)]
-        with c2:
-            if 'Facility Type' in df_t3.columns:
-                available_facs3 = df_t3['Facility Type'].astype(str).str.upper().unique()
-                fac_opts3 = [f for f in ["PUBLIC", "PRIVATE"] if any(a in ["PUBLIC", "PHI"] if f=="PUBLIC" else a not in ["PUBLIC", "PHI", "N/A", "NAN", ""] for a in available_facs3)]
-                s3_ft_raw = st.multiselect("Facility Category", fac_opts3, key='fc3')
-                if s3_ft_raw:
-                    if "PUBLIC" in s3_ft_raw and "PRIVATE" in s3_ft_raw: pass
-                    elif "PUBLIC" in s3_ft_raw: df_t3 = df_t3[df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-                    elif "PRIVATE" in s3_ft_raw: df_t3 = df_t3[~df_t3['Facility Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-            # 🎯 DEPENDENT FILTER
-            s3_phi = clean_selection(st.multiselect("Filter PHI", get_options_with_counts(df_t3, 'PHI', 'tab3'), key='phi3'))
-            if s3_phi: df_t3 = df_t3[df_t3['PHI'].isin(s3_phi)]
-    st.markdown("##### 📈 Patient Overview")
-    st.markdown(draw_card("Total Active Patients", len(df_t3), "#16A085", "🏥"), unsafe_allow_html=True)
-    t3_final_cols = [c for c in ['ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Episode ID', 'Patient Name', 'Type of Case', 'TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date'] if c in df_t3.columns]
-    st.dataframe(df_t3[t3_final_cols], use_container_width=True, hide_index=True)
-    if not df_t3.empty:
-        st.download_button("📥 Download Excel", convert_df_to_excel(df_t3[t3_final_cols], "Current_Patients"), "Current_Patients.xlsx", key='dl3')
 
 # ==========================================
 # 🟢 TAB 4: PPT GENERATOR (SMART + CORPORATE + NAAT)
@@ -823,7 +790,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK
+    # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK (MAY & JUNE LINKS)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC/HOSPITAL)</h3>", unsafe_allow_html=True)
@@ -832,7 +799,7 @@ with tab4:
         tc1, tc2, tc3 = st.columns(3)
         with tc1:
             st.markdown("<div style='background-color:#fef9e7; padding:10px; border-radius:5px;'><b>🗓️ 1. Date Selection</b></div>", unsafe_allow_html=True)
-            target_dates = st.date_input("Select Dates to Sum (e.g., April 1 to April 5)", value=[], key="t_dates")
+            target_dates = st.date_input("Select Dates to Sum (e.g., May 1 to May 5)", value=[], key="t_dates")
         with tc2:
             st.markdown("<div style='background-color:#e8f8f5; padding:10px; border-radius:5px;'><b>🔢 2. Target Multiplier</b></div>", unsafe_allow_html=True)
             working_days = st.number_input("Enter Total Working Days", min_value=1, max_value=31, value=5, key="t_wdays")
@@ -895,14 +862,15 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
+            # 🎯 NEW GIDS LOADED HERE
             zone_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835", # May
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1784911612"  # April
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835", # JUNE ZONE
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"  # MAY ZONE
             ]
             
             fac_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # May
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2032153600" # April
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # JUNE FACILITY
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721" # MAY FACILITY
             ]
 
             # ----------------------------------------------------
@@ -1003,7 +971,6 @@ with tab4:
                 fac_data = []
                 for (zone_guj, fac_name, fac_type), achieved_total in fac_achievements.items():
                     
-                    # 🎯 UPDATED TARGET: Hospital daily target set strictly to 30
                     if fac_type == "UHC": target_daily = 4
                     elif fac_type == "CHC": target_daily = 16
                     elif fac_type == "HOSPITAL": target_daily = 30 
@@ -1056,7 +1023,7 @@ with tab4:
                                     cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(df_chc.iloc[orig_idx]["Achievement %"])
                                 elif row_idx_c % 2 != 0: cell.fill.solid(); cell.fill.fore_color.rgb = RGBColor(242, 243, 244)
                 
-                # --- 🏥 HOSPITAL SLIDES (NEW) ---
+                # --- 🏥 HOSPITAL SLIDES ---
                 if not df_fac_processed.empty:
                     df_hosp = df_fac_processed[df_fac_processed["Type"] == "HOSPITAL"].sort_values("Achievement %", ascending=False).drop(columns=["Type"]).reset_index(drop=True)
                     
@@ -2591,166 +2558,3 @@ with tab9:
             key=f'dl_epi_{sel_slug}'
         )
 
-# ==========================================
-# 🟢 TAB 10: POST-TREATMENT FOLLOW UP
-# ==========================================
-with tab10:
-    st.markdown("<h3 style='color: #0b5345; font-weight: 800;'>📅 Post-Treatment Follow Up (Pulmonary Cured/Completed)</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Automatically fetches data, filters for Pulmonary successes, and mathematically calculates the absolute nearest follow-up due date!</i></div>", unsafe_allow_html=True)
-
-    @st.cache_data(ttl=600, show_spinner=False)
-    def load_post_treatment_data():
-        import urllib.request
-        import io
-        import pandas as pd
-        
-        url = "https://docs.google.com/spreadsheets/d/1LbNWZaVh1ECq1Y4FvK4RBt_UB-USwLSv_SzOM0QxvYE/export?format=csv&gid=1888779383"
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
-            return df
-        except Exception as e: 
-            return pd.DataFrame()
-
-    with st.spinner("Fetching Live Follow-up Register..."):
-        df_pt_raw = load_post_treatment_data()
-
-    if df_pt_raw.empty:
-        st.error("⚠️ Follow up data could not be fetched. Check Google Sheet link.")
-    else:
-        def cx(col_letter):
-            num = 0
-            for c in col_letter.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
-            return num - 1
-
-        def get_col_safe(df, letter):
-            idx = cx(letter)
-            if idx < len(df.columns): return df.iloc[:, idx].astype(str).str.strip().replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
-            return pd.Series([pd.NA] * len(df), index=df.index)
-
-        df_pt = pd.DataFrame()
-        
-        # 🎯 STRICT COLUMN MAPPING (INCLUDING CP FOR ZONE)
-        df_pt['ZONE'] = get_col_safe(df_pt_raw, 'CP') 
-        df_pt['TB Unit'] = get_col_safe(df_pt_raw, 'C')
-        df_pt['PHI'] = get_col_safe(df_pt_raw, 'E')
-        df_pt['Episode ID'] = get_col_safe(df_pt_raw, 'M')
-        df_pt['Patient Name'] = get_col_safe(df_pt_raw, 'N')
-        df_pt['Diagnosis Date'] = get_col_safe(df_pt_raw, 'S')
-        df_pt['Site_of_TBDisease'] = get_col_safe(df_pt_raw, 'BG')
-        df_pt['Treatment Outcome'] = get_col_safe(df_pt_raw, 'BK')
-        df_pt['Initiation Date'] = get_col_safe(df_pt_raw, 'BM')
-        df_pt['Outcome Date'] = get_col_safe(df_pt_raw, 'CB')
-        
-        df_pt['3 MONTH'] = get_col_safe(df_pt_raw, 'CC')
-        df_pt['6 MONTH'] = get_col_safe(df_pt_raw, 'CD')
-        df_pt['9 MONTH'] = get_col_safe(df_pt_raw, 'CE')
-        df_pt['12 MONTH'] = get_col_safe(df_pt_raw, 'CF')
-        df_pt['18 MONTH'] = get_col_safe(df_pt_raw, 'CG')
-        df_pt['24 MONTH'] = get_col_safe(df_pt_raw, 'CH')
-
-        # 🛑 #N/A CONVERSION RULE
-        df_pt['ZONE'] = df_pt['ZONE'].replace(['#N/A', 'N/A', 'NAN', 'NONE', '<NA>'], 'MAPPING NOT DONE')
-        df_pt['ZONE'] = df_pt['ZONE'].fillna('MAPPING NOT DONE')
-
-        # 🛑 FILTER 1: Pulmonary Only
-        is_pulm = df_pt['Site_of_TBDisease'].astype(str).str.upper().str.contains("PULMONARY", na=False)
-        is_extra = df_pt['Site_of_TBDisease'].astype(str).str.upper().str.contains("EXTRA", na=False)
-        df_pt = df_pt[is_pulm & ~is_extra]
-
-        # 🛑 FILTER 2: Cured or Treatment Complete Only
-        success_outcomes = ["CURED", "TREATMENT_COMPLETE", "TREATMENT COMPLETE", "SUCCESS"]
-        df_pt = df_pt[df_pt['Treatment Outcome'].astype(str).str.upper().isin(success_outcomes)]
-
-        if not df_pt.empty:
-            # ⏱️ CLEAN DATE FORMATS
-            def clean_dt(dt_series): return pd.to_datetime(dt_series, errors='coerce').dt.strftime('%d-%b-%Y').replace('NaT', '')
-            df_pt['Diagnosis Date'] = clean_dt(df_pt['Diagnosis Date'])
-            df_pt['Initiation Date'] = clean_dt(df_pt['Initiation Date'])
-            df_pt['Outcome Date'] = clean_dt(df_pt['Outcome Date'])
-
-            # 🧠 CORE ENGINE: CALCULATE NEAREST FOLLOW UP DATE & DAYS PENDING
-            import pandas as pd
-            today_ts = pd.Timestamp.today().normalize()
-            
-            def calculate_nearest_followup(row):
-                dates = {
-                    "3 MONTH": pd.to_datetime(row['3 MONTH'], errors='coerce'),
-                    "6 MONTH": pd.to_datetime(row['6 MONTH'], errors='coerce'),
-                    "9 MONTH": pd.to_datetime(row['9 MONTH'], errors='coerce'),
-                    "12 MONTH": pd.to_datetime(row['12 MONTH'], errors='coerce'),
-                    "18 MONTH": pd.to_datetime(row['18 MONTH'], errors='coerce'),
-                    "24 MONTH": pd.to_datetime(row['24 MONTH'], errors='coerce')
-                }
-                
-                nearest_label = ""
-                min_diff = float('inf')
-                nearest_dt = pd.NaT
-                actual_diff_days = 0
-                
-                for label, dt in dates.items():
-                    if pd.notna(dt):
-                        diff = abs((dt - today_ts).days)
-                        if diff < min_diff:
-                            min_diff = diff
-                            nearest_label = label
-                            nearest_dt = dt
-                            actual_diff_days = (dt - today_ts).days
-                            
-                status_str = ""
-                if pd.notna(nearest_dt):
-                    if actual_diff_days < 0:
-                        status_str = f"Overdue by {abs(actual_diff_days)} Days 🔴"
-                    elif actual_diff_days == 0:
-                        status_str = "Due Today 🟡"
-                    else:
-                        status_str = f"Due in {actual_diff_days} Days 🟢"
-                        
-                date_str = nearest_dt.strftime('%d-%b-%Y') if pd.notna(nearest_dt) else ""
-                return pd.Series([nearest_label, date_str, status_str])
-
-            df_pt[['NEAREST DUE FOLLOW UP', 'Follow Up Date', 'Status']] = df_pt.apply(calculate_nearest_followup, axis=1)
-
-            # 📊 Reorder Columns for Final Display
-            final_cols = ['ZONE', 'TB Unit', 'PHI', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'NEAREST DUE FOLLOW UP', 'Follow Up Date', 'Status']
-            df_pt_display = df_pt[final_cols].copy()
-            df_pt_display = df_pt_display.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
-
-            # 🎛️ FILTERS
-            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                opts_zone = sorted([x for x in df_pt_display['ZONE'].unique() if str(x).strip() != ""])
-                sel_zone = st.multiselect("Filter Zone", opts_zone, key="pt_zone")
-            with c2:
-                opts_tu = sorted([x for x in df_pt_display['TB Unit'].unique() if str(x).strip() != ""])
-                sel_tu = st.multiselect("Filter TB Unit", opts_tu, key="pt_tu")
-            with c3:
-                opts_fu = sorted([x for x in df_pt_display['NEAREST DUE FOLLOW UP'].unique() if str(x).strip() != ""])
-                sel_fu = st.multiselect("Filter Nearest Follow Up", opts_fu, key="pt_fu")
-            with c4:
-                status_opts = ["Overdue 🔴", "Due Today 🟡", "Upcoming 🟢"]
-                sel_stat = st.multiselect("Filter Status", status_opts, key="pt_stat")
-
-            df_f = df_pt_display.copy()
-            if sel_zone: df_f = df_f[df_f['ZONE'].isin(sel_zone)]
-            if sel_tu: df_f = df_f[df_f['TB Unit'].isin(sel_tu)]
-            if sel_fu: df_f = df_f[df_f['NEAREST DUE FOLLOW UP'].isin(sel_fu)]
-            if sel_stat:
-                mask = pd.Series(False, index=df_f.index)
-                if "Overdue 🔴" in sel_stat: mask |= df_f['Status'].str.contains("Overdue", na=False)
-                if "Due Today 🟡" in sel_stat: mask |= df_f['Status'].str.contains("Due Today", na=False)
-                if "Upcoming 🟢" in sel_stat: mask |= df_f['Status'].str.contains("Due in", na=False)
-                df_f = df_f[mask]
-
-            # 📈 DISPLAY
-            st.markdown(f"<div style='background-color:#e8f8f5; padding:15px; border-radius:8px; border: 1px solid #a3e4d7; margin-bottom:15px;'><b style='color:#117a65; font-size:18px;'>Showing {len(df_f)} Post-Treatment Patients</b></div>", unsafe_allow_html=True)
-            
-            st.dataframe(df_f, use_container_width=True, hide_index=True)
-            
-            if not df_f.empty:
-                st.download_button("📥 Download Post-Treatment Line List", convert_df_to_excel(df_f, "Post_Treatment"), "Post_Treatment_Follow_Up.xlsx", key="dl_pt")
-                
-        else:
-            st.info("👍 No patients found matching the Pulmonary Cured/Completed criteria.")
