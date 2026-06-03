@@ -790,7 +790,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK (MAY & JUNE LINKS)
+    # 🎯 2. MNC CORPORATE TARGET ACHIEVEMENT DECK
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #2C3E50;'>📈 Corporate Performance Deck (Zone + UHC/CHC/HOSPITAL)</h3>", unsafe_allow_html=True)
@@ -799,7 +799,7 @@ with tab4:
         tc1, tc2, tc3 = st.columns(3)
         with tc1:
             st.markdown("<div style='background-color:#fef9e7; padding:10px; border-radius:5px;'><b>🗓️ 1. Date Selection</b></div>", unsafe_allow_html=True)
-            target_dates = st.date_input("Select Dates to Sum (e.g., May 1 to May 5)", value=[], key="t_dates")
+            target_dates = st.date_input("Select Dates to Sum (e.g., June 1 to June 5)", value=[], key="t_dates")
         with tc2:
             st.markdown("<div style='background-color:#e8f8f5; padding:10px; border-radius:5px;'><b>🔢 2. Target Multiplier</b></div>", unsafe_allow_html=True)
             working_days = st.number_input("Enter Total Working Days", min_value=1, max_value=31, value=5, key="t_wdays")
@@ -862,7 +862,6 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🎯 NEW GIDS LOADED HERE
             zone_urls = [
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835", # JUNE ZONE
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"  # MAY ZONE
@@ -1120,35 +1119,57 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            naat_url = "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"
-            df_naat = pd.read_csv(naat_url, header=None)
-            df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+            # 🎯 MULTI-SHEET ENGINE ENABLED (MAY & JUNE)
+            naat_urls = [
+                "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
+                "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
+            ]
             
-            date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
-            header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
+            site_totals = {}
+            found_any_date = False
+
+            for naat_url in naat_urls:
+                try:
+                    df_naat = pd.read_csv(naat_url, header=None)
+                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    
+                    date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
+                    header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
+                    
+                    sheet_tested_cols = []
+                    for d in date_list:
+                        # 🎯 Safe zero-padded month/day formatting
+                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
+                        match_indices = []
+                        for i, val in enumerate(date_row):
+                            val_clean = val.split(" ")[0].strip()
+                            if val_clean in fmts: match_indices.append(i)
+                        for idx in match_indices:
+                            if "TESTED" in header_row[idx]:
+                                sheet_tested_cols.append(idx); break
+                    
+                    if sheet_tested_cols:
+                        found_any_date = True
+                        df_valid = df_naat.iloc[2:].copy()
+                        mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
+                        df_valid = df_valid[~mask_tot]
+                        
+                        for _, row in df_valid.iterrows():
+                            site_name = str(row[0]).strip()
+                            if site_name not in ["", "nan", "NaN", "None"]:
+                                sum_val = 0
+                                for col in sheet_tested_cols:
+                                    raw_val = row[col]
+                                    if pd.notna(raw_val) and str(raw_val).strip() != "":
+                                        try: sum_val += float(raw_val)
+                                        except: pass
+                                if site_name in site_totals: site_totals[site_name] += sum_val
+                                else: site_totals[site_name] = sum_val
+                except: continue
+
+            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May or June sheets."
             
-            tested_cols = []
-            for d in date_list:
-                fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
-                match_indices = []
-                for i, val in enumerate(date_row):
-                    val_clean = val.split(" ")[0].strip()
-                    if val_clean in fmts: match_indices.append(i)
-                for idx in match_indices:
-                    if "TESTED" in header_row[idx]:
-                        tested_cols.append(idx); break
-                            
-            if not tested_cols: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates."
-                
-            df_valid = df_naat.iloc[2:].copy()
-            mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
-            df_valid = df_valid[~mask_tot]
-            
-            df_valid['Tested_Sum'] = 0
-            for col in tested_cols: df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
-            
-            grouped = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
-            grouped.columns = ['NAAT Site', 'Tested']
+            grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
             def format_avg(val): return int(val) if float(val).is_integer() else round(float(val), 1)
             grouped['Tested'] = grouped['Tested'].astype(int)
