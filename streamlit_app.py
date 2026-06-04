@@ -1398,7 +1398,7 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX
+        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX (WITH NEW FILTERS)
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
@@ -1407,12 +1407,19 @@ with tab5:
         st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients dynamically based on their specific diagnosis month relative to the review month.</i></div>", unsafe_allow_html=True)
         
-        cm1, cm2 = st.columns([1, 2])
+        # 🎯 CHANGED FROM 2 COLUMNS TO 4 COLUMNS TO ADD YOUR NEW FILTERS
+        cm1, cm2, cm3, cm4 = st.columns(4)
         with cm1:
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
             today_date = datetime.date.today()
             ref_date = st.date_input("📅 Select Current Review Month (e.g., April 2026)", value=today_date, key="mat_ref_dt")
+        with cm3:
+            case_opts = sorted([x for x in df_dc_new['Type_of_Case'].unique() if pd.notna(x) and x!=""])
+            mat_case = st.multiselect("Type of Case", case_opts, key="mat_case_mid")
+        with cm4:
+            site_opts = sorted([x for x in df_dc_new['Site_of_TBDisease'].unique() if pd.notna(x) and x!=""])
+            mat_site = st.multiselect("Site of TBDisease", site_opts, key="mat_site_mid")
 
         df_mat = df_dc_new.copy()
         
@@ -1420,6 +1427,12 @@ with tab5:
             df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
         elif mat_fac == "Private":
             df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
+
+        # 🎯 APPLY THE NEW FILTERS
+        if mat_case:
+            df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
+        if mat_site:
+            df_mat = df_mat[df_mat['Site_of_TBDisease'].isin(mat_site)]
 
         mat_periods = [
             ('Baseline', 'BASELINE', 'Elig_BASELINE', 1),
@@ -1631,7 +1644,7 @@ with tab5:
                         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
-                
+
 # ==========================================
 # 🟢 TAB 6: STAFF DIRECTORY (HR COMMAND CENTER - MNC ENTERPRISE EDITION)
 # ==========================================
