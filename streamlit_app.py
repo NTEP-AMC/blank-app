@@ -1398,7 +1398,7 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX (WITH NEW FILTERS)
+        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX (UPGRADED FILTERS + TOGGLE)
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
@@ -1407,17 +1407,19 @@ with tab5:
         st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients dynamically based on their specific diagnosis month relative to the review month.</i></div>", unsafe_allow_html=True)
         
-        # 🎯 CHANGED FROM 2 COLUMNS TO 4 COLUMNS TO ADD YOUR NEW FILTERS
-        cm1, cm2, cm3, cm4 = st.columns(4)
+        # 🎯 UPGRADED UI: Group By Toggle + All New Filters neatly arranged
+        cm1, cm2, cm3 = st.columns(3)
         with cm1:
+            mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit"], key="mat_view_mid", help="Switch between seeing rows by 7 Zones or all 23 TB Units")
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
             today_date = datetime.date.today()
-            ref_date = st.date_input("📅 Select Current Review Month (e.g., April 2026)", value=today_date, key="mat_ref_dt")
-        with cm3:
+            ref_date = st.date_input("📅 Select Current Review Month", value=today_date, key="mat_ref_dt")
             case_opts = sorted([x for x in df_dc_new['Type_of_Case'].unique() if pd.notna(x) and x!=""])
             mat_case = st.multiselect("Type of Case", case_opts, key="mat_case_mid")
-        with cm4:
+        with cm3:
+            tu_opts_mid = sorted([x for x in df_dc_new['TB Unit'].unique() if pd.notna(x) and x!=""])
+            mat_tu = st.multiselect("Filter TB Unit", tu_opts_mid, key="mat_tu_mid")
             site_opts = sorted([x for x in df_dc_new['Site_of_TBDisease'].unique() if pd.notna(x) and x!=""])
             mat_site = st.multiselect("Site of TBDisease", site_opts, key="mat_site_mid")
 
@@ -1428,7 +1430,9 @@ with tab5:
         elif mat_fac == "Private":
             df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
 
-        # 🎯 APPLY THE NEW FILTERS
+        # 🎯 APPLY THE NEW MULTISELECT FILTERS
+        if mat_tu:
+            df_mat = df_mat[df_mat['TB Unit'].isin(mat_tu)]
         if mat_case:
             df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
         if mat_site:
@@ -1444,37 +1448,44 @@ with tab5:
             ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
         ]
         
-        display_zones = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
-        
-        # 🎯 BUG FIX: Strict Priority Mapping so NW/SW don't get swallowed by N/S
-        def get_zone_mat(z):
-            raw_z = str(z).upper().replace("ZONE", "").strip()
-            if "SOUTH WEST" in raw_z: return "SOUTH WEST"
-            if "NORTH WEST" in raw_z: return "NORTH WEST"
-            if "WEST" in raw_z: return "WEST"
-            if "SOUTH" in raw_z: return "SOUTH"
-            if "CENTRAL" in raw_z: return "CENTRAL"
-            if "EAST" in raw_z: return "EAST"
-            if "NORTH" in raw_z: return "NORTH"
-            return "AMC"
-        
-        df_mat['Mat_Zone'] = df_mat['ZONE'].apply(get_zone_mat)
+        # 🎯 DYNAMIC ROW GROUPING (Zone vs TB Unit)
+        if mat_view == "Zone":
+            display_entities = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
+            entity_label = 'ZONE'
+            
+            def get_zone_mat(z):
+                raw_z = str(z).upper().replace("ZONE", "").strip()
+                if "SOUTH WEST" in raw_z: return "SOUTH WEST"
+                if "NORTH WEST" in raw_z: return "NORTH WEST"
+                if "WEST" in raw_z: return "WEST"
+                if "SOUTH" in raw_z: return "SOUTH"
+                if "CENTRAL" in raw_z: return "CENTRAL"
+                if "EAST" in raw_z: return "EAST"
+                if "NORTH" in raw_z: return "NORTH"
+                return "AMC"
+            
+            df_mat['Entity_Col'] = df_mat['ZONE'].apply(get_zone_mat)
+        else:
+            # Display all TB Units
+            display_entities = sorted([x for x in df_mat['TB Unit'].unique() if pd.notna(x) and str(x).strip() != ""])
+            entity_label = 'TB Unit'
+            df_mat['Entity_Col'] = df_mat['TB Unit'].astype(str).str.strip().str.upper()
         
         mat_rows = []
-        for z in display_zones:
-            z_df = df_mat[df_mat['Mat_Zone'] == z]
-            row = {'ZONE': z}
+        for entity in display_entities:
+            entity_df = df_mat[df_mat['Entity_Col'] == entity]
+            row = {entity_label: entity}
             
             for label, rx, elig_col, m_offset in mat_periods:
                 target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
                 target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
                 
-                z_cohort = z_df[pd.to_datetime(z_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
+                cohort = entity_df[pd.to_datetime(entity_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
                 
-                is_elig = z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~z_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+                is_elig = cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
                 elig_cnt = is_elig.sum()
                 
-                due = z_cohort['Due_Status'].fillna('').astype(str).str.upper()
+                due = cohort['Due_Status'].fillna('').astype(str).str.upper()
                 not_comp = ~due.str.contains("COMPLETED", na=False)
                 is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
                 pend_cnt = is_pending.sum()
@@ -1486,8 +1497,8 @@ with tab5:
                 row[f'% {label}'] = f"{pct}%"
             mat_rows.append(row)
             
-        # AMC Row
-        amc_row = {'ZONE': 'AMC'}
+        # AMC Row (Always displays at the bottom)
+        amc_row = {entity_label: 'AMC TOTAL'}
         for label, rx, elig_col, m_offset in mat_periods:
             target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
             target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
@@ -1519,7 +1530,7 @@ with tab5:
         
         def style_matrix(styler):
             styler.set_properties(**{'text-align': 'center'})
-            styler.set_properties(subset=['ZONE'], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
+            styler.set_properties(subset=[entity_label], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
             
             for label, _, _, _ in mat_periods:
                 col_name = f'% {label}'
