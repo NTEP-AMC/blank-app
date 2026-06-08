@@ -2220,7 +2220,6 @@ with tab8:
     # ---------------------------------------------------------
     df_new_adverse = pd.DataFrame()
     
-    # 🛡️ BULLETPROOF MATCHER: Uses Text Alias first, then falls back to exact Excel Column Index!
     import re
     def cx(col_letter):
         num = 0
@@ -2254,7 +2253,7 @@ with tab8:
         aliases_type = ['FACILITY TYPE', 'TYPE', 'TYPE OF FACILITY', 'SPECTRUM CURRENT HF TYPE']
         aliases_name = ['PATIENT NAME', 'NAME', 'NAME OF PATIENT']
         aliases_diag = ['DIAGNOSIS DATE', 'DATE OF DIAGNOSIS', 'DATE OF TB DIAGNOSIS', 'DX DATE']
-        aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE']
+        aliases_init = ['INITIATION DATE', 'TREATMENT INITIATION DATE', 'SPECTRUM TREATMENT INITIATION DATE']
         aliases_out = ['OUTCOME DATE', 'DATE OF OUTCOME']
 
         id_col_this = get_col_name_or_idx(df_this, aliases_id, 'M')
@@ -2292,22 +2291,18 @@ with tab8:
             df_export = pd.DataFrame(columns=master_cols)
             
             if not df_new.empty:
-                # 🎯 EXACT EXCEL COLUMN MAPPING ENFORCED
                 df_export['ZONE'] = safe_extract(df_new, aliases_zone, 'AR')
                 df_export['TB Unit'] = safe_extract(df_new, aliases_tu, 'C')
                 df_export['PHI'] = safe_extract(df_new, aliases_phi, 'E')
                 df_export['Facility Type'] = safe_extract(df_new, aliases_type, 'D')
                 df_export['Patient Name'] = safe_extract(df_new, aliases_name, 'N')
                 df_export['Episode ID'] = safe_extract(df_new, aliases_id, 'M')
-                
-                # 🔥 THESE WILL NEVER FAIL NOW: Uses S, BM, CB explicitly
                 df_export['Diagnosis Date'] = safe_extract(df_new, aliases_diag, 'S')
                 df_export['Initiation Date'] = safe_extract(df_new, aliases_init, 'BM')
                 df_export['Outcome Date'] = safe_extract(df_new, aliases_out, 'CB')
-                
                 df_export['Treatment Outcome'] = safe_extract(df_new, aliases_out_val, 'BK')
                 
-                # 🛡️ Fallback Logic: Derive Zone from Spectrum_Current_HF (PHI) first, then TB Unit
+                # 🛡️ Upgraded Fallback Logic: Rejects 1-letter anomalies like "D"
                 def assign_fallback_zone(phi_name, tu_name):
                     val = str(phi_name).upper().strip()
                     if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
@@ -2323,13 +2318,17 @@ with tab8:
                     if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
                     return "AMC"
 
-                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] else r['ZONE'], axis=1)
+                # Trigger fallback if Zone is blank, NaN, OR less than 3 characters (e.g. "D")
+                df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] or len(str(r['ZONE']).strip()) <= 2 else r['ZONE'], axis=1)
 
-                # ⏱️ Ultra-Safe Date Parsing Engine
+                # ⏱️ Multi-Stage Date Parsing Engine (Fixes the -5 Days bug)
                 def clean_date_display(dt_series):
-                    parsed1 = pd.to_datetime(dt_series, errors='coerce', dayfirst=True)
-                    parsed2 = pd.to_datetime(dt_series, errors='coerce')
-                    valid_dates = parsed1.combine_first(parsed2)
+                    s = dt_series.astype(str).str.split(' ').str[0].replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
+                    p1 = pd.to_datetime(s, format='%Y-%m-%d', errors='coerce')
+                    p2 = pd.to_datetime(s, format='%d-%m-%Y', errors='coerce')
+                    p3 = pd.to_datetime(s, dayfirst=True, errors='coerce')
+                    
+                    valid_dates = p1.combine_first(p2).combine_first(p3)
                     formatted = valid_dates.dt.strftime('%d-%b-%Y')
                     return formatted.fillna(dt_series).replace(['NaT', 'nan', 'NaN', 'None', '<NA>'], '')
                 
