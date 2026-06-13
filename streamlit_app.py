@@ -105,7 +105,7 @@ if not st.session_state.auth:
                     
             st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
 
-    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;'>© 2026 Ahmedabad Municipal Corporation · All rights reserved</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;, unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
