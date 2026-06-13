@@ -105,7 +105,7 @@ if not st.session_state.auth:
                     
             st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
 
-    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;, unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;'>© 2026 Ahmedabad Municipal Corporation · All rights reserved</p>", unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
@@ -356,6 +356,7 @@ if not df_time.empty:
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data"])
+
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
