@@ -2191,7 +2191,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (AUTO-MERGE MASTER TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Auto-Synced Adverse Outcomes Master</h3>", unsafe_allow_html=True)
@@ -2226,6 +2226,11 @@ with tab8:
         return df_m, df_t, df_p
 
     df_master_orig, df_this, df_prev = load_adverse_data()
+
+    # 🛡️ SAFETY CHECK: Force columns into Master if they don't exist yet!
+    if not df_master_orig.empty:
+        if 'Age' not in df_master_orig.columns: df_master_orig['Age'] = ""
+        if 'Type_of_TB_regimen' not in df_master_orig.columns: df_master_orig['Type_of_TB_regimen'] = ""
 
     # ---------------------------------------------------------
     # ⚙️ AUTO-MERGE DELTA ENGINE 
@@ -2298,7 +2303,7 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # 🎯 STRICT 14 COLUMNS DEFINITION (Added Age and Regimen)
+            # 🎯 STRICT 14 COLUMNS DEFINITION
             master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
             
@@ -2319,7 +2324,7 @@ with tab8:
                 df_export['Outcome Date'] = safe_extract(df_new, aliases_out, 'CB')
                 df_export['Treatment Outcome'] = safe_extract(df_new, aliases_out_val, 'BK')
                 
-                # 🛡️ Fallback Logic
+                # 🛡️ Upgraded Fallback Logic
                 def assign_fallback_zone(phi_name, tu_name):
                     val = str(phi_name).upper().strip()
                     if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
@@ -2434,12 +2439,15 @@ with tab8:
         st.markdown(f"<div style='background:#eff6ff; border:1px solid #93c5fd; border-radius:10px; padding:15px; text-align:center;'><h4 style='color:#1d4ed8; margin:0;'>{len(df_f)}</h4><span style='font-size:12px; color:#1e3a8a;'>Total Displayed Records</span></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.dataframe(df_f, use_container_width=True, hide_index=True)
+    
+    # 🎯 Ensures final display strictly maps exactly to your requested columns
+    display_cols = [c for c in master_cols if c in df_f.columns]
+    st.dataframe(df_f[display_cols], use_container_width=True, hide_index=True)
     
     if not df_combined_master.empty:
         st.download_button(
             "📥 Download Auto-Updated Master Excel", 
-            convert_df_to_excel(df_combined_master, "Master_Adverse"), 
+            convert_df_to_excel(df_combined_master[display_cols], "Master_Adverse"), 
             "Updated_Adverse_Outcomes_Master.xlsx",
             help="Click to download the fully merged file. Simply upload this directly to your Google Drive to replace your old Master Sheet!"
         )
