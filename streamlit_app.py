@@ -2191,7 +2191,7 @@ with tab7:
             st.info("👍 No Presumptive TB records found for the selected filters.")
 
 # ==========================================
-# 🟢 TAB 8: ADVERSE OUTCOMES (AUTO-MERGE MASTER TRACKER)
+# 🟢 TAB 8: ADVERSE OUTCOMES (MASTER + DELTA TRACKER)
 # ==========================================
 with tab8:
     st.markdown("<h3 style='color: #0f172a; font-weight: 800; letter-spacing: -0.5px;'>🚨 Auto-Synced Adverse Outcomes Master</h3>", unsafe_allow_html=True)
@@ -2298,8 +2298,8 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # 🎯 STRICT 12 COLUMNS DEFINITION
-            master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
+            # 🎯 STRICT 14 COLUMNS DEFINITION (Added Age and Regimen)
+            master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
             
             if not df_new.empty:
@@ -2309,12 +2309,17 @@ with tab8:
                 df_export['Facility Type'] = safe_extract(df_new, aliases_type, 'D')
                 df_export['Patient Name'] = safe_extract(df_new, aliases_name, 'N')
                 df_export['Episode ID'] = safe_extract(df_new, aliases_id, 'M')
+                
+                # 🎯 NEW COLUMNS ADDED HERE EXACTLY RIGHT OF EPISODE ID
+                df_export['Age'] = safe_extract(df_new, ['AGE', 'PATIENT AGE'], 'BA')
+                df_export['Type_of_TB_regimen'] = safe_extract(df_new, ['TYPE OF TB REGIMEN', 'TB REGIMEN', 'REGIMEN', 'TYPE_OF_TB_REGIMEN'], 'BJ')
+                
                 df_export['Diagnosis Date'] = safe_extract(df_new, aliases_diag, 'S')
                 df_export['Initiation Date'] = safe_extract(df_new, aliases_init, 'BM')
                 df_export['Outcome Date'] = safe_extract(df_new, aliases_out, 'CB')
                 df_export['Treatment Outcome'] = safe_extract(df_new, aliases_out_val, 'BK')
                 
-                # 🛡️ Upgraded Fallback Logic: Rejects 1-letter anomalies like "D"
+                # 🛡️ Fallback Logic
                 def assign_fallback_zone(phi_name, tu_name):
                     val = str(phi_name).upper().strip()
                     if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
@@ -2330,10 +2335,9 @@ with tab8:
                     if any(x in val for x in ["BAPUNAGAR", "SAIJPUR", "NARODA", "RAKHIAL", "INDIA COLONY", "NOBLENAGAR", "SARDARNAGAR", "MEGHANINAGAR"]): return "NORTH"
                     return "AMC"
 
-                # Trigger fallback if Zone is blank, NaN, OR less than 3 characters (e.g. "D")
                 df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] or len(str(r['ZONE']).strip()) <= 2 else r['ZONE'], axis=1)
 
-                # ⏱️ Multi-Stage Date Parsing Engine (Fixes the -5 Days bug)
+                # ⏱️ Multi-Stage Date Parsing Engine
                 def clean_date_display(dt_series):
                     s = dt_series.astype(str).str.split(' ').str[0].replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
                     p1 = pd.to_datetime(s, format='%Y-%m-%d', errors='coerce')
