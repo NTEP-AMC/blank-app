@@ -2227,8 +2227,17 @@ with tab8:
 
     df_master_orig, df_this, df_prev = load_adverse_data()
 
-    # 🛡️ SAFETY CHECK: Force columns into Master if they don't exist yet!
+    # 🛡️ ALIAS MAPPER FOR MASTER SHEET: Maps "REGIME" -> "Type_of_TB_regimen" perfectly
     if not df_master_orig.empty:
+        rename_map = {}
+        for col in df_master_orig.columns:
+            c_up = str(col).strip().upper()
+            if c_up == 'AGE': rename_map[col] = 'Age'
+            elif c_up in ['REGIME', 'REGIMEN', 'TYPE OF TB REGIMEN', 'TYPE_OF_TB_REGIMEN']: rename_map[col] = 'Type_of_TB_regimen'
+        
+        df_master_orig = df_master_orig.rename(columns=rename_map)
+
+        # Safety check: Force columns into Master if they are entirely missing
         if 'Age' not in df_master_orig.columns: df_master_orig['Age'] = ""
         if 'Type_of_TB_regimen' not in df_master_orig.columns: df_master_orig['Type_of_TB_regimen'] = ""
 
@@ -2303,7 +2312,7 @@ with tab8:
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # 🎯 STRICT 14 COLUMNS DEFINITION
+            # 🎯 STRICT 14 COLUMNS DEFINITION (Added Age and Regimen)
             master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
             
@@ -2315,9 +2324,9 @@ with tab8:
                 df_export['Patient Name'] = safe_extract(df_new, aliases_name, 'N')
                 df_export['Episode ID'] = safe_extract(df_new, aliases_id, 'M')
                 
-                # 🎯 NEW COLUMNS ADDED HERE EXACTLY RIGHT OF EPISODE ID
+                # 🎯 EXACT EXCEL EXTRACTION FOR NEW COLUMNS
                 df_export['Age'] = safe_extract(df_new, ['AGE', 'PATIENT AGE'], 'BA')
-                df_export['Type_of_TB_regimen'] = safe_extract(df_new, ['TYPE OF TB REGIMEN', 'TB REGIMEN', 'REGIMEN', 'TYPE_OF_TB_REGIMEN'], 'BJ')
+                df_export['Type_of_TB_regimen'] = safe_extract(df_new, ['TYPE OF TB REGIMEN', 'TB REGIMEN', 'REGIMEN', 'TYPE_OF_TB_REGIMEN', 'REGIME'], 'BJ')
                 
                 df_export['Diagnosis Date'] = safe_extract(df_new, aliases_diag, 'S')
                 df_export['Initiation Date'] = safe_extract(df_new, aliases_init, 'BM')
