@@ -1063,7 +1063,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK
+    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH INVINCIBLE DATE PARSER)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1120,7 +1120,6 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🎯 MULTI-SHEET ENGINE ENABLED (MAY & JUNE)
             naat_urls = [
                 "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
                 "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
@@ -1137,15 +1136,22 @@ with tab4:
                     date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
                     header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
                     
+                    # 🎯 UPGRADED: True Datetime Parsing Engine (Invincible to format changes)
+                    parsed_dates = pd.to_datetime(date_row, errors='coerce').dt.date
+                    
                     sheet_tested_cols = []
                     for d in date_list:
-                        # 🎯 Safe zero-padded month/day formatting
-                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
+                        # Fallback formats just in case Pandas needs help
+                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y"), d.strftime("%Y-%m-%d")]
                         match_indices = []
                         for i, val in enumerate(date_row):
                             val_clean = val.split(" ")[0].strip()
-                            if val_clean in fmts: match_indices.append(i)
+                            # 🎯 Check BOTH string formats AND true datetime objects
+                            if val_clean in fmts or parsed_dates[i] == d: 
+                                match_indices.append(i)
+                        
                         for idx in match_indices:
+                            # We explicitly ONLY pull the "TESTED" column, ignoring Stocks/Backlogs!
                             if "TESTED" in header_row[idx]:
                                 sheet_tested_cols.append(idx); break
                     
@@ -1240,7 +1246,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-
+    
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
