@@ -1140,7 +1140,7 @@ with tab4:
                 try:
                     df_naat = pd.read_csv(naat_urls[target_month], header=None)
                     
-                    # Find where the actual data starts (just in case they add blank rows at the top)
+                    # 🛡️ DYNAMIC ROW FINDER (Safely find where the data actually starts)
                     date_row_idx = 0
                     for i in range(min(5, len(df_naat))):
                         row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
@@ -1152,9 +1152,9 @@ with tab4:
                     df_valid = df_naat.iloc[date_row_idx + 2:].copy()
                     
                     for d in m_dates:
-                        found_any_date = True
+                        found_any_date = True 
                         
-                        # 🎯 THE EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
+                        # 🎯 THE CTO'S EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
                         col_idx = 6 + ((d.day - 1) * 4) 
                         
                         for _, row in df_valid.iterrows():
@@ -1170,7 +1170,7 @@ with tab4:
                                         except: pass
                 except: continue
 
-            if not found_any_date: return None, "⚠️ Could not process the dates for the selected months. Please check the date range."
+            if not found_any_date: return None, "⚠️ Could not process data for the selected dates. Ensure dates belong to May or June."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
