@@ -1062,7 +1062,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK (THE "G153" PURE MATH ENGINE)
+    # 🎯 3. NAAT UTILIZATION REPORT DECK
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1086,6 +1086,7 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
+            import re
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -1118,13 +1119,13 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🎯 EXPLICIT MONTH MAPPING
             naat_urls = {
                 6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
                 5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
             }
             
             site_totals = {}
+            found_any_date = False
 
             # Group the selected dates by their actual month
             dates_by_month = {}
@@ -1138,48 +1139,43 @@ with tab4:
                 try:
                     df_naat = pd.read_csv(naat_urls[target_month], header=None)
                     
-                    # 🛡️ THE FIX: Aggressively eliminate hidden spaces and ffill down the merged cells!
-                    df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    # 🎯 1. THIS IS YOUR EXACT LOGIC: Force ffill() down to populate "UCHC THALTEJ"
+                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
-                    # Find where data starts
-                    date_row_idx = 0
-                    for i in range(min(5, len(df_naat))):
-                        row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
-                        if "tested" in row_str or "sample sent" in row_str:
-                            date_row_idx = i - 1
-                            break
-                            
-                    df_valid = df_naat.iloc[date_row_idx + 2:].copy()
+                    date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
+                    header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
                     
-                    # 🎯 THE CTO'S EXACT MATH LOGIC: Group by Site, find TOTAL row, extract `6 + (Day - 1)*4`
-                    for site_name, group in df_valid.groupby(0):
-                        site_name_clean = str(site_name).strip()
-                        if site_name_clean in ["", "nan", "NaN", "None", "CBNAAT", "TRUNAAT"]: 
-                            continue
-                            
-                        # Find the "TOTAL" row (like row 153 for THALTEJ)
-                        tot_mask = group[1].astype(str).str.upper().str.contains("TOTAL", na=False) | \
-                                   group[2].astype(str).str.upper().str.contains("TOTAL", na=False)
+                    tested_cols = []
+                    for d in m_dates:
+                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
+                        match_indices = []
+                        for i, val in enumerate(date_row):
+                            val_clean = val.split(" ")[0].strip()
+                            if val_clean in fmts: match_indices.append(i)
+                        for idx in match_indices:
+                            if "TESTED" in header_row[idx]:
+                                tested_cols.append(idx); break
+                    
+                    if not tested_cols: continue
+                    found_any_date = True
+                    
+                    # 🎯 2. THIS IS YOUR EXACT LOGIC: Exclude the total row and sum sub-rows!
+                    df_valid = df_naat.iloc[2:].copy()
+                    mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
+                    df_valid = df_valid[~mask_tot]
+                    
+                    df_valid['Tested_Sum'] = 0
+                    for col in tested_cols:
+                        df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
                         
-                        if tot_mask.any():
-                            target_rows = group[tot_mask] # Has a total row (e.g. UCHC THALTEJ row 153)
-                        else:
-                            target_rows = group.head(1) # No total row (e.g. MC GMERS SOLA row 3)
-                            
-                        for _, row in target_rows.iterrows():
-                            for d in m_dates:
-                                # Day 1 = Col 6, Day 2 = Col 10, etc.
-                                col_idx = 6 + ((d.day - 1) * 4) 
-                                if col_idx < len(row):
-                                    raw_val = row[col_idx]
-                                    if pd.notna(raw_val) and str(raw_val).strip() != "":
-                                        try: 
-                                            sum_val = float(raw_val)
-                                            site_totals[site_name_clean] = site_totals.get(site_name_clean, 0) + sum_val
-                                        except: pass
+                    grouped_temp = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
+                    for _, row in grouped_temp.iterrows():
+                        s_name = str(row[0]).strip()
+                        site_totals[s_name] = site_totals.get(s_name, 0) + row['Tested_Sum']
+
                 except: continue
 
-            if not site_totals: return None, "⚠️ Could not extract data. Ensure the selected dates match the available Google Sheets."
+            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May or June sheets."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
@@ -1188,14 +1184,12 @@ with tab4:
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
             def clean_site(s):
-                import re
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
             grouped = grouped[grouped['NAAT Site'] != ""]
             
             zone_map_strict = {"MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North", "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North", "UCHC VATVA": "South", "UCHC SABARMATI": "West", "MC-NHL MEDICAL COLLEGE, AMC": "West", "UCHC THALTEJ": "North West", "NARENDRA MODI MC": "South", "FAISALNAGAR CHC": "South", "UCHC DANILIMDA": "South", "UCHC BEHERAMPURA": "South", "CHC VASTRAL": "East", "SDH ESIC MODEL HOSP.": "North", "UHC RANIP": "West", "MC-NARENDRA MODI MEDICAL COLLEGE": "South", "UCHC CHANDKHEDA": "West", "UCHC RAKHIAL": "North", "CHC SARKHEJ": "South West", "UCHC NARODA": "North", "UHC SAIJPUR": "North", "MC-DR. M K SHAH MEDICAL COLLEGE AND RESEARCH CENTER AMC": "West", "UHC SHAHPUR": "Central", "UHC STADIUM": "West", "UHC JAMALPUR": "Central", "UHC GHATLODIA": "North West", "UHC VIRATNAGAR": "East", "UCHC GOMTIPUR": "East", "UHC ISANPUR": "South", "UHC BHAIPURA": "East", "JODHPUR UHC": "South West", "UHC NAVRANGPURA": "West"}
-            import re
             clean_zone_map = {re.sub(r'[^A-Z0-9]', '', k.replace("CBNAAT","").replace("TRUNAAT","").upper()): v for k,v in zone_map_strict.items()}
 
             def get_zone(site):
@@ -1212,6 +1206,7 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
+            # 🎯 3. THIS IS YOUR EXACT LOGIC: Concat the TOTAL at the end so it matches your May output format!
             total_tested = int(grouped['Tested'].sum())
             total_avg = format_avg(total_tested / w_days)
             total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
