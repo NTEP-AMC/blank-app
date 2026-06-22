@@ -608,7 +608,6 @@ with tab2:
             
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-
 # ==========================================
 # 🟢 TAB 4: PPT GENERATOR (SMART + CORPORATE + NAAT)
 # ==========================================
@@ -1063,7 +1062,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH 100% BULLETPROOF DATE MATCHER)
+    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH 100% PURE COLUMN MATH)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1132,63 +1131,44 @@ with tab4:
                     df_naat = pd.read_csv(naat_url, header=None)
                     df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
-                    # 🛡️ DYNAMIC ROW FINDER
+                    # 🛡️ DYNAMIC ROW FINDER (Safely find where the data actually starts)
                     date_row_idx = 0
-                    header_row_idx = 1
                     for i in range(min(5, len(df_naat))):
                         row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
                         if "tested" in row_str or "sample sent" in row_str:
-                            header_row_idx = i
                             date_row_idx = i - 1
                             break
                             
-                    date_row = df_naat.iloc[date_row_idx].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
-                    header_row = df_naat.iloc[header_row_idx].fillna("").astype(str).str.upper().str.strip()
+                    date_row = df_naat.iloc[date_row_idx].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.lower()
                     
-                    # 🛡️ THE FIX: Convert to pure Python Date object to avoid Timestamp conflicts!
-                    parsed_dates = pd.to_datetime(date_row, errors='coerce').dt.date
+                    # Data always starts 2 rows below the date row
+                    df_valid = df_naat.iloc[date_row_idx + 2:].copy()
                     
-                    sheet_tested_cols = []
                     for d in date_list:
-                        d_date = d.date() # Extract pure date from Timestamp
-                        match_indices = []
+                        # 🛡️ VERIFY DATE EXISTS IN THIS SHEET (So we don't accidentally pull May data from the June sheet)
+                        d_str1 = f"{d.month}/{d.day}/"
+                        d_str2 = f"{d.month:02d}/{d.day:02d}/"
+                        d_str3 = d.strftime("%d-%b").lower()
                         
-                        for i, val in enumerate(date_row):
-                            # 1. Check exact mathematical date equality first (Flawless)
-                            if pd.notna(parsed_dates[i]) and parsed_dates[i] == d_date:
-                                match_indices.append(i)
-                            else:
-                                # 2. Fallback: Strip everything and check pure string layout
-                                v_str_clean = str(val).lower().replace("-", "").replace("/", "").replace(" ", "")
-                                if (f"{d.month:02d}{d.day:02d}" in v_str_clean) or \
-                                   (f"{d.day:02d}{d.month:02d}" in v_str_clean) or \
-                                   (f"{d.month}{d.day}" in v_str_clean) or \
-                                   (d.strftime("%d%b").lower() in v_str_clean) or \
-                                   (d.strftime("%b%d").lower() in v_str_clean):
-                                    match_indices.append(i)
+                        is_in_sheet = any(d_str1 in x or d_str2 in x or d_str3 in x for x in date_row.values)
                         
-                        for idx in match_indices:
-                            # We explicitly ONLY pull the "TESTED" column, ignoring Stocks/Backlogs!
-                            if "TESTED" in header_row[idx]:
-                                sheet_tested_cols.append(idx); break
-                    
-                    if sheet_tested_cols:
-                        found_any_date = True
-                        df_valid = df_naat.iloc[header_row_idx + 1:].copy()
-                        mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
-                        df_valid = df_valid[~mask_tot]
-                        
-                        for _, row in df_valid.iterrows():
-                            site_name = str(row[0]).strip()
-                            if site_name not in ["", "nan", "NaN", "None"]:
-                                sum_val = 0
-                                for col in sheet_tested_cols:
-                                    raw_val = row[col]
-                                    if pd.notna(raw_val) and str(raw_val).strip() != "":
-                                        try: sum_val += float(raw_val)
-                                        except: pass
-                                if site_name in site_totals: site_totals[site_name] += sum_val
-                                else: site_totals[site_name] = sum_val
+                        if is_in_sheet:
+                            found_any_date = True
+                            
+                            # 🎯 THE CTO'S EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
+                            col_idx = 6 + ((d.day - 1) * 4) 
+                            
+                            for _, row in df_valid.iterrows():
+                                site_name = str(row[0]).strip()
+                                if site_name not in ["", "nan", "NaN", "None"] and "TOTAL" not in site_name.upper():
+                                    if col_idx < len(row):
+                                        raw_val = row[col_idx]
+                                        if pd.notna(raw_val) and str(raw_val).strip() != "":
+                                            try: 
+                                                sum_val = float(raw_val)
+                                                if site_name in site_totals: site_totals[site_name] += sum_val
+                                                else: site_totals[site_name] = sum_val
+                                            except: pass
                 except: continue
 
             if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May or June sheets."
