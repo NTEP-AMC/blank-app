@@ -1062,7 +1062,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH 100% PURE COLUMN MATH)
+    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH PURE COLUMN MATH)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1118,20 +1118,29 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            naat_urls = [
-                "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
-                "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
-            ]
+            # 🎯 EXPLICIT MONTH MAPPING (No guessing dates from text!)
+            naat_urls = {
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # Month 6 = JUNE
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # Month 5 = MAY
+            }
             
             site_totals = {}
             found_any_date = False
 
-            for naat_url in naat_urls:
-                try:
-                    df_naat = pd.read_csv(naat_url, header=None)
-                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+            # Group the selected dates by their actual month
+            dates_by_month = {}
+            for d in date_list:
+                if d.month not in dates_by_month: dates_by_month[d.month] = []
+                dates_by_month[d.month].append(d)
+                
+            for target_month, m_dates in dates_by_month.items():
+                if target_month not in naat_urls:
+                    continue # Skip if we don't have the Google Sheet link for this specific month
                     
-                    # 🛡️ DYNAMIC ROW FINDER (Safely find where the data actually starts)
+                try:
+                    df_naat = pd.read_csv(naat_urls[target_month], header=None)
+                    
+                    # Find where the actual data starts (just in case they add blank rows at the top)
                     date_row_idx = 0
                     for i in range(min(5, len(df_naat))):
                         row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
@@ -1139,39 +1148,29 @@ with tab4:
                             date_row_idx = i - 1
                             break
                             
-                    date_row = df_naat.iloc[date_row_idx].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.lower()
-                    
-                    # Data always starts 2 rows below the date row
+                    # Data always starts exactly 2 rows below the date row
                     df_valid = df_naat.iloc[date_row_idx + 2:].copy()
                     
-                    for d in date_list:
-                        # 🛡️ VERIFY DATE EXISTS IN THIS SHEET (So we don't accidentally pull May data from the June sheet)
-                        d_str1 = f"{d.month}/{d.day}/"
-                        d_str2 = f"{d.month:02d}/{d.day:02d}/"
-                        d_str3 = d.strftime("%d-%b").lower()
+                    for d in m_dates:
+                        found_any_date = True
                         
-                        is_in_sheet = any(d_str1 in x or d_str2 in x or d_str3 in x for x in date_row.values)
+                        # 🎯 THE EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
+                        col_idx = 6 + ((d.day - 1) * 4) 
                         
-                        if is_in_sheet:
-                            found_any_date = True
-                            
-                            # 🎯 THE CTO'S EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
-                            col_idx = 6 + ((d.day - 1) * 4) 
-                            
-                            for _, row in df_valid.iterrows():
-                                site_name = str(row[0]).strip()
-                                if site_name not in ["", "nan", "NaN", "None"] and "TOTAL" not in site_name.upper():
-                                    if col_idx < len(row):
-                                        raw_val = row[col_idx]
-                                        if pd.notna(raw_val) and str(raw_val).strip() != "":
-                                            try: 
-                                                sum_val = float(raw_val)
-                                                if site_name in site_totals: site_totals[site_name] += sum_val
-                                                else: site_totals[site_name] = sum_val
-                                            except: pass
+                        for _, row in df_valid.iterrows():
+                            site_name = str(row[0]).strip()
+                            if site_name not in ["", "nan", "NaN", "None"] and "TOTAL" not in site_name.upper():
+                                if col_idx < len(row):
+                                    raw_val = row[col_idx]
+                                    if pd.notna(raw_val) and str(raw_val).strip() != "":
+                                        try: 
+                                            sum_val = float(raw_val)
+                                            if site_name in site_totals: site_totals[site_name] += sum_val
+                                            else: site_totals[site_name] = sum_val
+                                        except: pass
                 except: continue
 
-            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May or June sheets."
+            if not found_any_date: return None, "⚠️ Could not process the dates for the selected months. Please check the date range."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
