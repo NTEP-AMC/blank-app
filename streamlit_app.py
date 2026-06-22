@@ -1063,7 +1063,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH INVINCIBLE DATE PARSER)
+    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH 100% BULLETPROOF DATE MATCHER)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1087,7 +1087,6 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
-            import re
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -1133,22 +1132,40 @@ with tab4:
                     df_naat = pd.read_csv(naat_url, header=None)
                     df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
-                    date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
-                    header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
+                    # 🛡️ DYNAMIC ROW FINDER
+                    date_row_idx = 0
+                    header_row_idx = 1
+                    for i in range(min(5, len(df_naat))):
+                        row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
+                        if "tested" in row_str or "sample sent" in row_str:
+                            header_row_idx = i
+                            date_row_idx = i - 1
+                            break
+                            
+                    date_row = df_naat.iloc[date_row_idx].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
+                    header_row = df_naat.iloc[header_row_idx].fillna("").astype(str).str.upper().str.strip()
                     
-                    # 🎯 UPGRADED: True Datetime Parsing Engine (Invincible to format changes)
+                    # 🛡️ THE FIX: Convert to pure Python Date object to avoid Timestamp conflicts!
                     parsed_dates = pd.to_datetime(date_row, errors='coerce').dt.date
                     
                     sheet_tested_cols = []
                     for d in date_list:
-                        # Fallback formats just in case Pandas needs help
-                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y"), d.strftime("%Y-%m-%d")]
+                        d_date = d.date() # Extract pure date from Timestamp
                         match_indices = []
+                        
                         for i, val in enumerate(date_row):
-                            val_clean = val.split(" ")[0].strip()
-                            # 🎯 Check BOTH string formats AND true datetime objects
-                            if val_clean in fmts or parsed_dates[i] == d: 
+                            # 1. Check exact mathematical date equality first (Flawless)
+                            if pd.notna(parsed_dates[i]) and parsed_dates[i] == d_date:
                                 match_indices.append(i)
+                            else:
+                                # 2. Fallback: Strip everything and check pure string layout
+                                v_str_clean = str(val).lower().replace("-", "").replace("/", "").replace(" ", "")
+                                if (f"{d.month:02d}{d.day:02d}" in v_str_clean) or \
+                                   (f"{d.day:02d}{d.month:02d}" in v_str_clean) or \
+                                   (f"{d.month}{d.day}" in v_str_clean) or \
+                                   (d.strftime("%d%b").lower() in v_str_clean) or \
+                                   (d.strftime("%b%d").lower() in v_str_clean):
+                                    match_indices.append(i)
                         
                         for idx in match_indices:
                             # We explicitly ONLY pull the "TESTED" column, ignoring Stocks/Backlogs!
@@ -1157,7 +1174,7 @@ with tab4:
                     
                     if sheet_tested_cols:
                         found_any_date = True
-                        df_valid = df_naat.iloc[2:].copy()
+                        df_valid = df_naat.iloc[header_row_idx + 1:].copy()
                         mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
                         df_valid = df_valid[~mask_tot]
                         
@@ -1183,12 +1200,14 @@ with tab4:
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
             def clean_site(s):
+                import re
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
             grouped['NAAT Site'] = grouped['NAAT Site'].apply(clean_site)
             grouped = grouped[grouped['NAAT Site'] != ""]
             
             zone_map_strict = {"MC- CIVIL HOSPITAL, AMC": "Central", "MC-GCS MEDICAL COLLEGE, AMC": "North", "MC GMERS SOLA": "North West", "DH SCL GEN. HOSP.": "North", "UCHC VATVA": "South", "UCHC SABARMATI": "West", "MC-NHL MEDICAL COLLEGE, AMC": "West", "UCHC THALTEJ": "North West", "NARENDRA MODI MC": "South", "FAISALNAGAR CHC": "South", "UCHC DANILIMDA": "South", "UCHC BEHERAMPURA": "South", "CHC VASTRAL": "East", "SDH ESIC MODEL HOSP.": "North", "UHC RANIP": "West", "MC-NARENDRA MODI MEDICAL COLLEGE": "South", "UCHC CHANDKHEDA": "West", "UCHC RAKHIAL": "North", "CHC SARKHEJ": "South West", "UCHC NARODA": "North", "UHC SAIJPUR": "North", "MC-DR. M K SHAH MEDICAL COLLEGE AND RESEARCH CENTER AMC": "West", "UHC SHAHPUR": "Central", "UHC STADIUM": "West", "UHC JAMALPUR": "Central", "UHC GHATLODIA": "North West", "UHC VIRATNAGAR": "East", "UCHC GOMTIPUR": "East", "UHC ISANPUR": "South", "UHC BHAIPURA": "East", "JODHPUR UHC": "South West", "UHC NAVRANGPURA": "West"}
+            import re
             clean_zone_map = {re.sub(r'[^A-Z0-9]', '', k.replace("CBNAAT","").replace("TRUNAAT","").upper()): v for k,v in zone_map_strict.items()}
 
             def get_zone(site):
@@ -1246,7 +1265,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-    
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
