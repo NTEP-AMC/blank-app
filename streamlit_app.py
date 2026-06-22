@@ -1139,19 +1139,36 @@ with tab4:
                 try:
                     df_naat = pd.read_csv(naat_urls[target_month], header=None)
                     
-                    # 🎯 1. THIS IS YOUR EXACT LOGIC: Force ffill() down to populate "UCHC THALTEJ"
+                    # 🎯 1. Force ffill() down to populate NAAT sites accurately across empty CSV rows
                     df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
-                    date_row = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill().astype(str).str.strip()
+                    # 🛡️ FIX: Clean and forward fill the date row securely
+                    date_row_raw = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
+                    
+                    # Core datetime conversion step to safely check true timestamp values alongside raw text strings
+                    parsed_date_series = pd.to_datetime(date_row_raw, errors='coerce')
                     
                     tested_cols = []
                     for d in m_dates:
-                        fmts = [d.strftime("%m/%d/%Y"), f"{d.month:02d}/{d.day:02d}/{d.year}", f"{d.month}/{d.day}/{d.year}", d.strftime("%d/%m/%Y")]
+                        # Map out all possible structural formats exported by pandas/google engines
+                        fmts = [
+                            d.strftime("%m/%d/%Y"), 
+                            f"{d.month:02d}/{d.day:02d}/{d.year}", 
+                            f"{d.month}/{d.day}/{d.year}", 
+                            d.strftime("%d/%m/%Y"),
+                            d.strftime("%Y-%m-%d"),
+                            f"{d.year}-{d.month:02d}-{d.day:02d}"
+                        ]
+                        
                         match_indices = []
-                        for i, val in enumerate(date_row):
-                            val_clean = val.split(" ")[0].strip()
-                            if val_clean in fmts: match_indices.append(i)
+                        for i, val in enumerate(date_row_raw):
+                            val_clean = str(val).split(" ")[0].strip()
+                            
+                            # Complete matching security block: resolves String matches OR structural datetime equals
+                            if val_clean in fmts or (pd.notna(parsed_date_series.iloc[i]) and parsed_date_series.iloc[i].date() == d.date()):
+                                match_indices.append(i)
+                                
                         for idx in match_indices:
                             if "TESTED" in header_row[idx]:
                                 tested_cols.append(idx); break
@@ -1159,7 +1176,7 @@ with tab4:
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    # 🎯 2. THIS IS YOUR EXACT LOGIC: Exclude the total row and sum sub-rows!
+                    # 🎯 2. Exclude the total row to sum sub-rows elegantly
                     df_valid = df_naat.iloc[2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
                     df_valid = df_valid[~mask_tot]
@@ -1206,7 +1223,7 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
-            # 🎯 3. THIS IS YOUR EXACT LOGIC: Concat the TOTAL at the end so it matches your May output format!
+            # 🎯 3. Concat the TOTAL row at the bottom out matching the May output format
             total_tested = int(grouped['Tested'].sum())
             total_avg = format_avg(total_tested / w_days)
             total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
