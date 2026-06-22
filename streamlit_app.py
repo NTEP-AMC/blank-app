@@ -1062,7 +1062,7 @@ with tab4:
 
 
     # ==========================================
-    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH PURE COLUMN MATH)
+    # 🎯 3. NAAT UTILIZATION REPORT DECK (WITH 100% BULLETPROOF FIXES)
     # ==========================================
     st.markdown("<br><hr style='margin: 30px 0; border: 2px solid #e8f4f8;'>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #E67E22;'>🔬 NAAT Utilization Report Generator</h3>", unsafe_allow_html=True)
@@ -1118,10 +1118,10 @@ with tab4:
                 date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🎯 EXPLICIT MONTH MAPPING (No guessing dates from text!)
+            # 🎯 EXPLICIT MONTH MAPPING
             naat_urls = {
-                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # Month 6 = JUNE
-                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # Month 5 = MAY
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
             }
             
             site_totals = {}
@@ -1134,43 +1134,82 @@ with tab4:
                 dates_by_month[d.month].append(d)
                 
             for target_month, m_dates in dates_by_month.items():
-                if target_month not in naat_urls:
-                    continue # Skip if we don't have the Google Sheet link for this specific month
+                if target_month not in naat_urls: continue 
                     
                 try:
                     df_naat = pd.read_csv(naat_urls[target_month], header=None)
                     
-                    # 🛡️ DYNAMIC ROW FINDER (Safely find where the data actually starts)
+                    # 🛡️ THE FIX: Forward-fill Column 0 so UCHC THALTEJ persists down its merged cells!
+                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    
+                    # 🛡️ DYNAMIC ROW FINDER
                     date_row_idx = 0
+                    header_row_idx = 1
                     for i in range(min(5, len(df_naat))):
                         row_str = " ".join(df_naat.iloc[i].fillna("").astype(str).values).lower()
                         if "tested" in row_str or "sample sent" in row_str:
+                            header_row_idx = i
                             date_row_idx = i - 1
                             break
                             
-                    # Data always starts exactly 2 rows below the date row
-                    df_valid = df_naat.iloc[date_row_idx + 2:].copy()
+                    # 🛡️ Forward-fill the Date Row so sub-columns inherit the correct date
+                    date_series = df_naat.iloc[date_row_idx].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    header_series = df_naat.iloc[header_row_idx].fillna("").astype(str).str.upper().str.strip()
+                    
+                    parsed_dates = pd.to_datetime(date_series, errors='coerce').dt.date
+                    date_str_series = date_series.astype(str).str.lower().str.replace("-", "").str.replace("/", "").str.replace(" ", "")
+
+                    # Slice to data rows
+                    df_valid = df_naat.iloc[header_row_idx + 1:].copy()
+                    
+                    # 🛡️ Ignore the TOTAL rows dynamically to prevent double counting
+                    mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | 
+                                df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | 
+                                df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
+                    df_valid = df_valid[~mask_tot]
                     
                     for d in m_dates:
-                        found_any_date = True 
+                        d_date = d.date()
+                        f1 = f"{d.month:02d}{d.day:02d}" 
+                        f2 = f"{d.day:02d}{d.month:02d}" 
+                        f3 = f"{d.month}{d.day}"         
+                        f4 = d.strftime("%d%b").lower()  
+                        f5 = d.strftime("%b%d").lower()  
                         
-                        # 🎯 THE CTO'S EXACT MATH LOGIC: Day 1 = Col G (Index 6), Day 2 = Col K (Index 10), etc.
-                        col_idx = 6 + ((d.day - 1) * 4) 
+                        sheet_tested_cols = []
                         
-                        for _, row in df_valid.iterrows():
-                            site_name = str(row[0]).strip()
-                            if site_name not in ["", "nan", "NaN", "None"] and "TOTAL" not in site_name.upper():
-                                if col_idx < len(row):
-                                    raw_val = row[col_idx]
-                                    if pd.notna(raw_val) and str(raw_val).strip() != "":
-                                        try: 
-                                            sum_val = float(raw_val)
-                                            if site_name in site_totals: site_totals[site_name] += sum_val
-                                            else: site_totals[site_name] = sum_val
-                                        except: pass
+                        for i in range(len(date_series)):
+                            is_match = False
+                            if pd.notna(parsed_dates[i]) and parsed_dates[i] == d_date:
+                                is_match = True
+                            else:
+                                v_str = date_str_series[i]
+                                if f1 in v_str or f2 in v_str or f3 in v_str or f4 in v_str or f5 in v_str:
+                                    is_match = True
+                                    
+                            # 🛡️ We strictly only pull the TESTED column!
+                            if is_match and "TEST" in header_series[i]:
+                                sheet_tested_cols.append(i)
+                                break 
+                        
+                        if sheet_tested_cols:
+                            found_any_date = True
+                            col_idx = sheet_tested_cols[0]
+                            
+                            for _, row in df_valid.iterrows():
+                                site_name = str(row[0]).strip()
+                                if site_name not in ["", "nan", "NaN", "None"]:
+                                    if col_idx < len(row):
+                                        raw_val = row[col_idx]
+                                        if pd.notna(raw_val) and str(raw_val).strip() != "":
+                                            try: 
+                                                sum_val = float(raw_val)
+                                                if site_name in site_totals: site_totals[site_name] += sum_val
+                                                else: site_totals[site_name] = sum_val
+                                            except: pass
                 except: continue
 
-            if not found_any_date: return None, "⚠️ Could not process data for the selected dates. Ensure dates belong to May or June."
+            if not found_any_date: return None, "⚠️ Could not process data for the selected dates. Please check the date format in Google Sheets."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
