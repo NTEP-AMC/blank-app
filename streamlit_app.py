@@ -2255,7 +2255,6 @@ with tab8:
     import re
 
     # 🛡️ THE FIX: Indestructible Header Normalizer for the Master Sheet
-    # This prevents column duplication and ensures the Anti-Duplicate Shield never fails!
     if not df_master_orig.empty:
         rename_map = {}
         for col in df_master_orig.columns:
@@ -2334,7 +2333,6 @@ with tab8:
             has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            # 🛡️ Prevents blank ghost IDs from triggering false deltas
             df_this_adv = df_this_adv[df_this_adv['_ID_UP'] != ""]
             
             prev_keys = set(df_prev['_ID_UP'] + "_" + df_prev['_OUT_UP'])
@@ -2406,7 +2404,6 @@ with tab8:
                 
                 df_export['On Treatment Days'] = df_export.apply(calc_new_days, axis=1)
                 
-                # 🛑 THE FIX: Invincible Anti-Duplicate Shield prevents 59 old patients from re-appearing!
                 if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
                     m_id = df_master_orig['Episode ID'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
                     m_out = df_master_orig['Treatment Outcome'].astype(str).str.strip().str.upper()
@@ -2450,9 +2447,10 @@ with tab8:
     df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
     df_combined_master = df_combined_master.fillna("")
 
+    # 🛡️ THE FIX: Deep Regex Scrubber deletes hidden HTML spaces/ghost characters!
     for col in ['Treatment Outcome', 'ZONE', 'ADVERSE DATE']:
         if col in df_combined_master.columns:
-            df_combined_master[col] = df_combined_master[col].astype(str).str.strip().str.upper()
+            df_combined_master[col] = df_combined_master[col].astype(str).replace(r'\s+', ' ', regex=True).str.strip().str.upper()
 
     # ---------------------------------------------------------
     # 📊 DASHBOARD FILTERS 
