@@ -2326,7 +2326,8 @@ with tab8:
             df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
             df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
-            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
+            # 🎯 NEW FIX: Added "WRONGLY" to the good list so Wrongly Diagnosed is completely ignored!
+            good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS", "WRONGLY"]
             blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
             is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
@@ -2447,7 +2448,7 @@ with tab8:
     df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
     df_combined_master = df_combined_master.fillna("")
 
-    # 🛡️ THE FIX: Deep Regex Scrubber deletes hidden HTML spaces/ghost characters!
+    # 🛡️ Deep Regex Scrubber
     for col in ['Treatment Outcome', 'ZONE', 'ADVERSE DATE']:
         if col in df_combined_master.columns:
             df_combined_master[col] = df_combined_master[col].astype(str).replace(r'\s+', ' ', regex=True).str.strip().str.upper()
