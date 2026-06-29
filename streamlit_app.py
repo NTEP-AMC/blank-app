@@ -2313,31 +2313,32 @@ with tab8:
         out_col_prev = get_col_name_or_idx(df_prev, aliases_out_val, 'BK')
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
-            df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.strip().str.upper()
+            # 🛡️ THE FIX: Strip ".0" floats entirely so IDs match perfectly!
+            df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
             df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
-            df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.strip().str.upper()
+            df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
             df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS"]
-            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL", "nan", "None"]
+            blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
             is_adv_this = ~df_this['_OUT_UP'].str.contains('|'.join(good), na=False)
             has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            prev_map = dict(zip(df_prev['_ID_UP'], df_prev['_OUT_UP']))
+            # 🛡️ THE BULLETPROOF DELTA LOGIC: Mimics an exact Excel VLOOKUP
+            # Creates a solid Set of all ID+Outcome combinations from last week
+            prev_keys = set(df_prev['_ID_UP'] + "_" + df_prev['_OUT_UP'])
             
             def is_new(row):
-                pid = row['_ID_UP']
-                pout = row['_OUT_UP']
-                if pid not in prev_map: return True
-                if prev_map[pid] != pout: return True
-                return False
+                key = row['_ID_UP'] + "_" + row['_OUT_UP']
+                # If this exact patient + outcome combo was NOT here last week, it's new!
+                return key not in prev_keys
                 
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # 🎯 STRICT 14 COLUMNS DEFINITION (Added Age and Regimen)
+            # 🎯 STRICT 14 COLUMNS DEFINITION
             master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
             
@@ -2349,7 +2350,6 @@ with tab8:
                 df_export['Patient Name'] = safe_extract(df_new, aliases_name, 'N')
                 df_export['Episode ID'] = safe_extract(df_new, aliases_id, 'M')
                 
-                # 🎯 EXACT EXCEL EXTRACTION FOR NEW COLUMNS
                 df_export['Age'] = safe_extract(df_new, ['AGE', 'PATIENT AGE'], 'BA')
                 df_export['Type_of_TB_regimen'] = safe_extract(df_new, ['TYPE OF TB REGIMEN', 'TB REGIMEN', 'REGIMEN', 'TYPE_OF_TB_REGIMEN', 'REGIME'], 'BJ')
                 
@@ -2358,7 +2358,6 @@ with tab8:
                 df_export['Outcome Date'] = safe_extract(df_new, aliases_out, 'CB')
                 df_export['Treatment Outcome'] = safe_extract(df_new, aliases_out_val, 'BK')
                 
-                # 🛡️ Upgraded Fallback Logic
                 def assign_fallback_zone(phi_name, tu_name):
                     val = str(phi_name).upper().strip()
                     if val in ["", "NAN", "NONE", "N/A", "<NA>"]: 
@@ -2376,7 +2375,6 @@ with tab8:
 
                 df_export['ZONE'] = df_export.apply(lambda r: assign_fallback_zone(r['PHI'], r['TB Unit']) if str(r['ZONE']).strip().upper() in ["", "NAN", "NONE", "N/A", "<NA>", "NAT"] or len(str(r['ZONE']).strip()) <= 2 else r['ZONE'], axis=1)
 
-                # ⏱️ Multi-Stage Date Parsing Engine
                 def clean_date_display(dt_series):
                     s = dt_series.astype(str).str.split(' ').str[0].replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
                     p1 = pd.to_datetime(s, format='%Y-%m-%d', errors='coerce')
@@ -2391,7 +2389,6 @@ with tab8:
                 df_export['Initiation Date'] = clean_date_display(df_export['Initiation Date'])
                 df_export['Outcome Date'] = clean_date_display(df_export['Outcome Date'])
 
-                # ⏱️ Accurately calculate On Treatment Days
                 today_ts = pd.Timestamp.today(tz='Asia/Kolkata').tz_localize(None).normalize()
                 def calc_new_days(row):
                     init = pd.to_datetime(row.get('Initiation Date'), errors='coerce')
@@ -2402,10 +2399,16 @@ with tab8:
                 
                 df_export['On Treatment Days'] = df_export.apply(calc_new_days, axis=1)
                 
-                # 🛑 ANTI-DUPLICATE SHIELD
+                # 🛑 UPGRADED ANTI-DUPLICATE SHIELD: Invincible to .0 floats and casing differences!
                 if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
-                    master_keys = df_master_orig['Episode ID'].astype(str).str.strip() + "_" + df_master_orig['Treatment Outcome'].astype(str).str.strip()
-                    new_keys = df_export['Episode ID'].astype(str).str.strip() + "_" + df_export['Treatment Outcome'].astype(str).str.strip()
+                    m_id = df_master_orig['Episode ID'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
+                    m_out = df_master_orig['Treatment Outcome'].astype(str).str.strip().str.upper()
+                    master_keys = m_id + "_" + m_out
+                    
+                    n_id = df_export['Episode ID'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
+                    n_out = df_export['Treatment Outcome'].astype(str).str.strip().str.upper()
+                    new_keys = n_id + "_" + n_out
+                    
                     df_export = df_export[~new_keys.isin(master_keys)]
 
                 df_new_adverse = df_export.copy()
@@ -2422,7 +2425,6 @@ with tab8:
             df_new_adverse['ADVERSE DATE'] = report_period_input
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Merge existing Master with dynamically calculated New records
     df_combined_master = df_master_orig.copy()
 
     if not df_combined_master.empty and 'Initiation Date' in df_combined_master.columns:
@@ -2440,6 +2442,10 @@ with tab8:
         
     df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
     df_combined_master = df_combined_master.fillna("")
+
+    for col in ['Treatment Outcome', 'ZONE', 'ADVERSE DATE']:
+        if col in df_combined_master.columns:
+            df_combined_master[col] = df_combined_master[col].astype(str).str.strip().str.upper()
 
     # ---------------------------------------------------------
     # 📊 DASHBOARD FILTERS 
@@ -2474,7 +2480,6 @@ with tab8:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🎯 Ensures final display strictly maps exactly to your requested columns
     display_cols = [c for c in master_cols if c in df_f.columns]
     st.dataframe(df_f[display_cols], use_container_width=True, hide_index=True)
     
