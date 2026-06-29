@@ -2252,17 +2252,27 @@ with tab8:
 
     df_master_orig, df_this, df_prev = load_adverse_data()
 
-    # 🛡️ ALIAS MAPPER FOR MASTER SHEET: Maps "REGIME" -> "Type_of_TB_regimen" perfectly
+    import re
+
+    # 🛡️ THE FIX: Indestructible Header Normalizer for the Master Sheet
+    # This prevents column duplication and ensures the Anti-Duplicate Shield never fails!
     if not df_master_orig.empty:
         rename_map = {}
         for col in df_master_orig.columns:
-            c_up = str(col).strip().upper()
-            if c_up == 'AGE': rename_map[col] = 'Age'
-            elif c_up in ['REGIME', 'REGIMEN', 'TYPE OF TB REGIMEN', 'TYPE_OF_TB_REGIMEN']: rename_map[col] = 'Type_of_TB_regimen'
-        
+            c_clean = re.sub(r'[^A-Z0-9]', '', str(col).upper())
+            if c_clean in ['AGE', 'PATIENTAGE']: rename_map[col] = 'Age'
+            elif c_clean in ['REGIME', 'REGIMEN', 'TYPEOFTBREGIMEN']: rename_map[col] = 'Type_of_TB_regimen'
+            elif c_clean in ['EPISODEID', 'NTEPID', 'ID', 'PATIENTID']: rename_map[col] = 'Episode ID'
+            elif c_clean in ['TREATMENTOUTCOME', 'OUTCOME']: rename_map[col] = 'Treatment Outcome'
+            elif c_clean in ['ZONE', 'CURRENTZONE', 'DISTRICT']: rename_map[col] = 'ZONE'
+            elif c_clean in ['TBUNIT', 'TU']: rename_map[col] = 'TB Unit'
+            elif c_clean in ['PHI', 'HEALTHFACILITY', 'FACILITY']: rename_map[col] = 'PHI'
+            elif c_clean in ['PATIENTNAME', 'NAME']: rename_map[col] = 'Patient Name'
+            elif c_clean in ['FACILITYTYPE', 'TYPE']: rename_map[col] = 'Facility Type'
+            
         df_master_orig = df_master_orig.rename(columns=rename_map)
 
-        # Safety check: Force columns into Master if they are entirely missing
+        # Force safety columns
         if 'Age' not in df_master_orig.columns: df_master_orig['Age'] = ""
         if 'Type_of_TB_regimen' not in df_master_orig.columns: df_master_orig['Type_of_TB_regimen'] = ""
 
@@ -2271,7 +2281,6 @@ with tab8:
     # ---------------------------------------------------------
     df_new_adverse = pd.DataFrame()
     
-    import re
     def cx(col_letter):
         num = 0
         for c in col_letter.upper(): num = num * 26 + (ord(c) - ord('A') + 1)
@@ -2313,7 +2322,6 @@ with tab8:
         out_col_prev = get_col_name_or_idx(df_prev, aliases_out_val, 'BK')
         
         if id_col_this and out_col_this and id_col_prev and out_col_prev:
-            # 🛡️ THE FIX: Strip ".0" floats entirely so IDs match perfectly!
             df_this['_ID_UP'] = df_this[id_col_this].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
             df_this['_OUT_UP'] = df_this[out_col_this].fillna("").astype(str).str.strip().str.upper()
             df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
@@ -2326,19 +2334,18 @@ with tab8:
             has_out_this = ~df_this['_OUT_UP'].isin(blank_variants)
             df_this_adv = df_this[is_adv_this & has_out_this].copy()
             
-            # 🛡️ THE BULLETPROOF DELTA LOGIC: Mimics an exact Excel VLOOKUP
-            # Creates a solid Set of all ID+Outcome combinations from last week
+            # 🛡️ Prevents blank ghost IDs from triggering false deltas
+            df_this_adv = df_this_adv[df_this_adv['_ID_UP'] != ""]
+            
             prev_keys = set(df_prev['_ID_UP'] + "_" + df_prev['_OUT_UP'])
             
             def is_new(row):
                 key = row['_ID_UP'] + "_" + row['_OUT_UP']
-                # If this exact patient + outcome combo was NOT here last week, it's new!
                 return key not in prev_keys
                 
             df_new = df_this_adv[df_this_adv.apply(is_new, axis=1)].copy()
             df_new = df_new.drop(columns=['_ID_UP', '_OUT_UP'], errors='ignore')
             
-            # 🎯 STRICT 14 COLUMNS DEFINITION
             master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
             df_export = pd.DataFrame(columns=master_cols)
             
@@ -2399,17 +2406,17 @@ with tab8:
                 
                 df_export['On Treatment Days'] = df_export.apply(calc_new_days, axis=1)
                 
-                # 🛑 UPGRADED ANTI-DUPLICATE SHIELD: Invincible to .0 floats and casing differences!
+                # 🛑 THE FIX: Invincible Anti-Duplicate Shield prevents 59 old patients from re-appearing!
                 if not df_master_orig.empty and 'Episode ID' in df_master_orig.columns and 'Treatment Outcome' in df_master_orig.columns:
                     m_id = df_master_orig['Episode ID'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
                     m_out = df_master_orig['Treatment Outcome'].astype(str).str.strip().str.upper()
-                    master_keys = m_id + "_" + m_out
+                    master_keys = set(m_id + "_" + m_out)
                     
                     n_id = df_export['Episode ID'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
                     n_out = df_export['Treatment Outcome'].astype(str).str.strip().str.upper()
                     new_keys = n_id + "_" + n_out
                     
-                    df_export = df_export[~new_keys.isin(master_keys)]
+                    df_export = df_export[~new_keys.isin(list(master_keys))]
 
                 df_new_adverse = df_export.copy()
 
