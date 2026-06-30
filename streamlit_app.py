@@ -2668,7 +2668,6 @@ with tab10:
     st.markdown("<h3 style='text-align: center; color: #0f4a8a; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
 
-    # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
@@ -2686,17 +2685,29 @@ with tab10:
         }
     }
 
+    # 🛡️ THE FIX: Indestructible Dynamic Header Loader (Bypasses NTEP Metadata)
     @st.cache_data(ttl=600, show_spinner=False)
-    def load_ptfu_sheet(gid):
+    def load_clean_ptfu_sheet(gid):
         import urllib.request
         import io
         try:
             url = SHEET_BASE_URL + gid
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=30) as response:
-                df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
-            df.columns = df.columns.astype(str).str.strip()
-            return df
+                df_raw = pd.read_csv(io.BytesIO(response.read()), header=None, low_memory=False, dtype=str)
+            
+            if df_raw.empty: return pd.DataFrame()
+            
+            header_idx = 0
+            for i in range(min(15, len(df_raw))):
+                row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper())
+                if "EPISODE" in row_str or "TOKEN" in row_str or "ZONE" in row_str or "PHI" in row_str or "FACILITY" in row_str:
+                    header_idx = i
+                    break
+                    
+            df_raw.columns = df_raw.iloc[header_idx].astype(str).str.strip()
+            df_clean = df_raw.iloc[header_idx+1:].reset_index(drop=True)
+            return df_clean
         except: return pd.DataFrame()
 
     import re
@@ -2717,37 +2728,35 @@ with tab10:
         btn_generate_ptfu = st.button("🚀 Generate Comprehensive PTFU Report", use_container_width=True)
 
     def get_pct_color(pct):
-        if pct == 0: return "#fca5a5"       # Light Red
-        elif pct < 6: return "#f87171"      # Red
-        elif pct < 16: return "#fde047"     # Yellow
-        elif pct < 25: return "#bbf7d0"     # Light Green
-        else: return "#4ade80"              # Dark Green
+        if pct == 0: return "#fca5a5"       
+        elif pct < 6: return "#f87171"      
+        elif pct < 16: return "#fde047"     
+        elif pct < 25: return "#bbf7d0"     
+        else: return "#4ade80"              
 
     if btn_generate_ptfu:
         with st.spinner(f"Fetching Live Data for {selected_month} and analyzing Master Entries..."):
             
             # 1. Load Master & Extract Exact IDs
-            df_master = load_ptfu_sheet("708709969")
+            df_master = load_clean_ptfu_sheet("708709969")
             done_ids = set()
             if not df_master.empty:
-                m_ep_col = find_col_name(df_master, ['EPISODEID', 'TOKENID'])
-                if not m_ep_col and len(df_master.columns) > 12: m_ep_col = df_master.columns[12]
-                
+                m_ep_col = find_col_name(df_master, ['EPISODE', 'PATIENTID', 'TOKEN'])
                 if m_ep_col:
                     master_ids = df_master[m_ep_col].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\s+', '', regex=True).str.upper()
                     done_ids = set(master_ids[master_ids != 'NAN'].tolist())
 
-            # 2. Load Zone Map
-            df_zone = load_ptfu_sheet("1336449768")
+            # 2. Load Zone Map (True VLOOKUP Matcher)
+            df_zone = load_clean_ptfu_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty:
+                phi_col_zone = df_zone.columns[0]
+                zone_col_zone = df_zone.columns[1]
                 for _, row in df_zone.iterrows():
-                    raw_phi = str(row.iloc[0]).strip().upper()
-                    phi_clean_key = re.sub(r'[^A-Z0-9]', '', raw_phi)
-                    zone_clean = str(row.iloc[1]).strip().upper()
-                    
-                    if phi_clean_key and phi_clean_key != "NAN":
-                        zone_map[phi_clean_key] = zone_clean
+                    vlookup_phi = str(row[phi_col_zone]).strip().upper()
+                    vlookup_zone = str(row[zone_col_zone]).strip().upper()
+                    if vlookup_phi and vlookup_phi != "NAN":
+                        zone_map[vlookup_phi] = vlookup_zone
 
             zones_order = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'NOT MAPPING ZONE']
             
@@ -2763,15 +2772,12 @@ with tab10:
 
             # 3. Aggregation Engine
             for p_key, p_info in period_data.items():
-                df_sub = load_ptfu_sheet(configs[p_key]["gid"])
+                df_sub = load_clean_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
-                ep_col = find_col_name(df_sub, ['EPISODEID'])
-                phi_col = find_col_name(df_sub, ['HF', 'PHI'], exclude='TYPE')
-                name_col = find_col_name(df_sub, ['NAME'])
-                
-                if not ep_col: ep_col = df_sub.columns[12] if len(df_sub.columns) > 12 else None
-                if not phi_col: phi_col = df_sub.columns[4] if len(df_sub.columns) > 4 else None
+                ep_col = find_col_name(df_sub, ['EPISODE'])
+                phi_col = find_col_name(df_sub, ['HF', 'PHI', 'FACILITY'], exclude='TYPE')
+                name_col = find_col_name(df_sub, ['NAME'], exclude='STATE')
                 
                 if not ep_col or not phi_col: continue
 
@@ -2782,9 +2788,8 @@ with tab10:
                     
                     if raw_id in ["", "NAN", "NONE", "EPISODE_ID"]: continue 
                     
-                    phi_search_key = re.sub(r'[^A-Z0-9]', '', raw_phi)
-                    z_match = zone_map.get(phi_search_key, "NOT MAPPING ZONE")
-                    
+                    # Exact VLOOKUP match logic
+                    z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
                     if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                     
                     is_done = 1 if raw_id in done_ids else 0
@@ -2801,7 +2806,42 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
-            # 4. HTML Table Generator (No Indentations to prevent Markdown Code Blocks)
+            # 4. Generate Summary DataFrame for Download
+            summary_rows = []
+            tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
+            
+            for z in zones_order:
+                e6 = period_data["6M"]["data"][z]['elig']; d6 = period_data["6M"]["data"][z]['done']; p6 = int((d6/e6)*100) if e6>0 else 0
+                e12 = period_data["12M"]["data"][z]['elig']; d12 = period_data["12M"]["data"][z]['done']; p12 = int((d12/e12)*100) if e12>0 else 0
+                e18 = period_data["18M"]["data"][z]['elig']; d18 = period_data["18M"]["data"][z]['done']; p18 = int((d18/e18)*100) if e18>0 else 0
+                e24 = period_data["24M"]["data"][z]['elig']; d24 = period_data["24M"]["data"][z]['done']; p24 = int((d24/e24)*100) if e24>0 else 0
+                
+                tot_6e+=e6; tot_6d+=d6; tot_12e+=e12; tot_12d+=d12; tot_18e+=e18; tot_18d+=d18; tot_24e+=e24; tot_24d+=d24
+                
+                summary_rows.append({
+                    "Zone": z,
+                    "6M Eligible": e6, "6M Done": d6, "6M %": f"{p6}%",
+                    "12M Eligible": e12, "12M Done": d12, "12M %": f"{p12}%",
+                    "18M Eligible": e18, "18M Done": d18, "18M %": f"{p18}%",
+                    "24M Eligible": e24, "24M Done": d24, "24M %": f"{p24}%"
+                })
+                
+            tp6 = int((tot_6d/tot_6e)*100) if tot_6e>0 else 0
+            tp12 = int((tot_12d/tot_12e)*100) if tot_12e>0 else 0
+            tp18 = int((tot_18d/tot_18e)*100) if tot_18e>0 else 0
+            tp24 = int((tot_24d/tot_24e)*100) if tot_24e>0 else 0
+            
+            summary_rows.append({
+                "Zone": "TOTAL",
+                "6M Eligible": tot_6e, "6M Done": tot_6d, "6M %": f"{tp6}%",
+                "12M Eligible": tot_12e, "12M Done": tot_12d, "12M %": f"{tp12}%",
+                "18M Eligible": tot_18e, "18M Done": tot_18d, "18M %": f"{tp18}%",
+                "24M Eligible": tot_24e, "24M Done": tot_24d, "24M %": f"{tp24}%"
+            })
+            
+            df_summary = pd.DataFrame(summary_rows)
+
+            # 5. HTML Table Generator (Strictly left-aligned to prevent Markdown Code Blocks)
             html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
@@ -2825,45 +2865,35 @@ with tab10:
 </thead>
 <tbody>"""
             
-            tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
-            
-            for idx, z in enumerate(zones_order):
-                bg_color = "#f8fafc" if idx % 2 == 0 else "#ffffff"
+            for idx, row in df_summary.iterrows():
+                is_total = (row['Zone'] == 'TOTAL')
+                bg = "#0f4a8a" if is_total else ("#f8fafc" if idx % 2 == 0 else "#ffffff")
+                txt_color = "white" if is_total else "#333"
+                z_bg = "#1a73e8" if is_total else "#3b82f6"
                 
-                e6 = period_data["6M"]["data"][z]['elig']; d6 = period_data["6M"]["data"][z]['done']; p6 = int((d6/e6)*100) if e6>0 else 0
-                e12 = period_data["12M"]["data"][z]['elig']; d12 = period_data["12M"]["data"][z]['done']; p12 = int((d12/e12)*100) if e12>0 else 0
-                e18 = period_data["18M"]["data"][z]['elig']; d18 = period_data["18M"]["data"][z]['done']; p18 = int((d18/e18)*100) if e18>0 else 0
-                e24 = period_data["24M"]["data"][z]['elig']; d24 = period_data["24M"]["data"][z]['done']; p24 = int((d24/e24)*100) if e24>0 else 0
-                
-                tot_6e+=e6; tot_6d+=d6; tot_12e+=e12; tot_12d+=d12; tot_18e+=e18; tot_18d+=d18; tot_24e+=e24; tot_24d+=d24
-                
-                html_table += f"""<tr style="background-color: {bg_color}; text-align: center; color: #333; font-size: 13px;">
-<td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: #3b82f6; color: white;">{z}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{e6}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d6}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p6)}; color: #111; font-weight: bold;">{p6}%</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{e12}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d12}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p12)}; color: #111; font-weight: bold;">{p12}%</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{e18}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d18}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p18)}; color: #111; font-weight: bold;">{p18}%</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{e24}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d24}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p24)}; color: #111; font-weight: bold;">{p24}%</td>
+                c6 = "#1a73e8" if is_total else get_pct_color(int(row['6M %'].replace('%','')))
+                c12 = "#1a73e8" if is_total else get_pct_color(int(row['12M %'].replace('%','')))
+                c18 = "#1a73e8" if is_total else get_pct_color(int(row['18M %'].replace('%','')))
+                c24 = "#1a73e8" if is_total else get_pct_color(int(row['24M %'].replace('%','')))
+                txt_pct = "white" if is_total else "#111"
+
+                html_table += f"""<tr style="background-color: {bg}; text-align: center; color: {txt_color}; font-size: 13px;">
+<td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: {z_bg}; color: white;">{row['Zone']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c6}; color: {txt_pct}; font-weight: bold;">{row['6M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c12}; color: {txt_pct}; font-weight: bold;">{row['12M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c18}; color: {txt_pct}; font-weight: bold;">{row['18M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c24}; color: {txt_pct}; font-weight: bold;">{row['24M %']}</td>
 </tr>"""
                 
-            tp6 = int((tot_6d/tot_6e)*100) if tot_6e>0 else 0
-            tp12 = int((tot_12d/tot_12e)*100) if tot_12e>0 else 0
-            tp18 = int((tot_18d/tot_18e)*100) if tot_18e>0 else 0
-            tp24 = int((tot_24d/tot_24e)*100) if tot_24e>0 else 0
-            
-            html_table += f"""<tr style="background-color: #0f4a8a; color: white; text-align: center; font-weight: bold; font-size: 14px;">
-<td style="padding: 10px; border: 1px solid #1a73e8; text-align: left;">TOTAL</td>
-<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp6}%</td>
-<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp12}%</td>
-<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp18}%</td>
-<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp24}%</td>
-</tr>
-</tbody></table></div><br>"""
-            
+            html_table += "</tbody></table></div><br>"
             st.markdown(html_table, unsafe_allow_html=True)
             
-            # 5. Interactive Line List
+            # Download Summary Button
+            st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
+            
+            # 6. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
-            st.markdown("<h4 style='color: #333;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
             fc1, fc2, fc3 = st.columns(3)
             with fc1: f_period = st.selectbox("Filter by Period", ["All", configs["6M"]["name"], configs["12M"]["name"], configs["18M"]["name"], configs["24M"]["name"]])
@@ -2876,11 +2906,4 @@ with tab10:
             if f_zone != "All": df_display = df_display[df_display['Zone'] == f_zone]
             
             st.dataframe(df_display, use_container_width=True, hide_index=True)
-            
-            csv = df_display.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download PTFU Line List (CSV)",
-                data=csv,
-                file_name=f"PTFU_Line_List_{selected_month}.csv",
-                mime="text/csv",
-            )
+            st.download_button("📥 Download PTFU Line List (CSV)", df_display.to_csv(index=False).encode('utf-8'), f"PTFU_Line_List_{selected_month}.csv", "text/csv")
