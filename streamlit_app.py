@@ -2700,9 +2700,10 @@ with tab10:
         except: return pd.DataFrame()
 
     import re
-    def find_col_name(df, keywords):
+    def find_col_name(df, keywords, exclude=None):
         for col in df.columns:
             c_clean = re.sub(r'[^A-Z0-9]', '', str(col).upper())
+            if exclude and exclude in c_clean: continue
             for k in keywords:
                 if k in c_clean: return col
         return None
@@ -2726,24 +2727,28 @@ with tab10:
     if btn_generate_ptfu:
         with st.spinner(f"Fetching Live Data for {selected_month} and analyzing Master Entries..."):
             
-            # 1. Load Master & Extract Exact IDs
+            # 1. Load Master & Extract Exact IDs (Flawless Parsing)
             df_master = load_ptfu_sheet("708709969")
             done_ids = set()
             if not df_master.empty:
                 m_ep_col = find_col_name(df_master, ['EPISODEID', 'TOKENID'])
+                if not m_ep_col and len(df_master.columns) > 12: m_ep_col = df_master.columns[12]
+                
                 if m_ep_col:
                     master_ids = df_master[m_ep_col].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\s+', '', regex=True).str.upper()
                     done_ids = set(master_ids[master_ids != 'NAN'].tolist())
 
-            # 2. Load Zone Map
+            # 2. Load Zone Map (Aggressive Clean for perfect matching)
             df_zone = load_ptfu_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty:
                 for _, row in df_zone.iterrows():
-                    phi_clean = str(row.iloc[0]).strip().upper()
+                    raw_phi = str(row.iloc[0]).strip().upper()
+                    phi_clean_key = re.sub(r'[^A-Z0-9]', '', raw_phi) # Destroys spaces/symbols
                     zone_clean = str(row.iloc[1]).strip().upper()
-                    if phi_clean and phi_clean != "NAN":
-                        zone_map[phi_clean] = zone_clean
+                    
+                    if phi_clean_key and phi_clean_key != "NAN":
+                        zone_map[phi_clean_key] = zone_clean
 
             zones_order = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'NOT MAPPING ZONE']
             
@@ -2763,8 +2768,9 @@ with tab10:
                 df_sub = load_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
+                # 🛡️ THE FIX: Ignore "TYPE" column so it perfectly grabs the actual hospital name!
                 ep_col = find_col_name(df_sub, ['EPISODEID'])
-                phi_col = find_col_name(df_sub, ['PHI', 'HF'])
+                phi_col = find_col_name(df_sub, ['HF', 'PHI'], exclude='TYPE')
                 name_col = find_col_name(df_sub, ['NAME'])
                 
                 if not ep_col: ep_col = df_sub.columns[12] if len(df_sub.columns) > 12 else None
@@ -2779,7 +2785,10 @@ with tab10:
                     
                     if raw_id in ["", "NAN", "NONE", "EPISODE_ID"]: continue 
                     
-                    z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
+                    # Look up zone using aggressively cleaned string to prevent mismatches
+                    phi_search_key = re.sub(r'[^A-Z0-9]', '', raw_phi)
+                    z_match = zone_map.get(phi_search_key, "NOT MAPPING ZONE")
+                    
                     if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                     
                     is_done = 1 if raw_id in done_ids else 0
@@ -2796,7 +2805,7 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
-            # 4. HTML Table Generator (EXACT COPY OF YOUR DESIGN)
+            # 4. HTML Table Generator
             html_table = f"""
             <div style="overflow-x:auto;">
             <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
