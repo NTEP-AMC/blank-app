@@ -2668,7 +2668,7 @@ with tab10:
     st.markdown("<h3 style='text-align: center; color: #0f4a8a; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
 
-    # 🔗 Central Data Dictionary (All GIDs mapped to their logical Months)
+    # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
@@ -2708,7 +2708,6 @@ with tab10:
                 if k in c_clean: return col
         return None
 
-    # 🎛️ Single, Elegant UI Selection
     c1, c2 = st.columns([1, 2])
     with c1:
         st.markdown("<b>🗓️ Select Target Month:</b>", unsafe_allow_html=True)
@@ -2727,7 +2726,7 @@ with tab10:
     if btn_generate_ptfu:
         with st.spinner(f"Fetching Live Data for {selected_month} and analyzing Master Entries..."):
             
-            # 1. Load Master & Extract Exact IDs (Flawless Parsing)
+            # 1. Load Master & Extract Exact IDs
             df_master = load_ptfu_sheet("708709969")
             done_ids = set()
             if not df_master.empty:
@@ -2738,13 +2737,13 @@ with tab10:
                     master_ids = df_master[m_ep_col].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\s+', '', regex=True).str.upper()
                     done_ids = set(master_ids[master_ids != 'NAN'].tolist())
 
-            # 2. Load Zone Map (Aggressive Clean for perfect matching)
+            # 2. Load Zone Map
             df_zone = load_ptfu_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty:
                 for _, row in df_zone.iterrows():
                     raw_phi = str(row.iloc[0]).strip().upper()
-                    phi_clean_key = re.sub(r'[^A-Z0-9]', '', raw_phi) # Destroys spaces/symbols
+                    phi_clean_key = re.sub(r'[^A-Z0-9]', '', raw_phi)
                     zone_clean = str(row.iloc[1]).strip().upper()
                     
                     if phi_clean_key and phi_clean_key != "NAN":
@@ -2752,7 +2751,6 @@ with tab10:
 
             zones_order = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'NOT MAPPING ZONE']
             
-            # Data Store
             configs = MONTH_CONFIGS[selected_month]
             period_data = {
                 "6M": {"name": configs["6M"]["name"], "data": {z: {'elig': 0, 'done': 0} for z in zones_order}},
@@ -2763,12 +2761,11 @@ with tab10:
             
             line_list_rows = []
 
-            # 3. Aggregation Engine (With Indestructible Seeker)
+            # 3. Aggregation Engine
             for p_key, p_info in period_data.items():
                 df_sub = load_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
-                # 🛡️ THE FIX: Ignore "TYPE" column so it perfectly grabs the actual hospital name!
                 ep_col = find_col_name(df_sub, ['EPISODEID'])
                 phi_col = find_col_name(df_sub, ['HF', 'PHI'], exclude='TYPE')
                 name_col = find_col_name(df_sub, ['NAME'])
@@ -2785,7 +2782,6 @@ with tab10:
                     
                     if raw_id in ["", "NAN", "NONE", "EPISODE_ID"]: continue 
                     
-                    # Look up zone using aggressively cleaned string to prevent mismatches
                     phi_search_key = re.sub(r'[^A-Z0-9]', '', raw_phi)
                     z_match = zone_map.get(phi_search_key, "NOT MAPPING ZONE")
                     
@@ -2805,31 +2801,29 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
-            # 4. HTML Table Generator
-            html_table = f"""
-            <div style="overflow-x:auto;">
-            <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <thead>
-                    <tr style="background-color: #0f4a8a; color: white; text-align: center;">
-                        <th colspan="13" style="padding: 12px; font-size: 16px; border: 1px solid #1a73e8;">AMC NTEP — Zone-wise PTFU Pendancy Summary ({selected_month})</th>
-                    </tr>
-                    <tr style="background-color: #1a73e8; color: white; text-align: center; font-size: 14px;">
-                        <th style="padding: 10px; border: 1px solid #60a5fa; width: 12%;">Zone</th>
-                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">6th Month PTFU ({configs["6M"]["name"].split(' - ')[0]})</th>
-                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">12th Month PTFU ({configs["12M"]["name"].split(' - ')[0]})</th>
-                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">18th Month PTFU ({configs["18M"]["name"].split(' - ')[0]})</th>
-                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">24th Month PTFU ({configs["24M"]["name"].split(' - ')[0]})</th>
-                    </tr>
-                    <tr style="background-color: #3b82f6; color: white; text-align: center; font-size: 12px;">
-                        <th style="padding: 8px; border: 1px solid #93c5fd;"></th>
-                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
+            # 4. HTML Table Generator (No Indentations to prevent Markdown Code Blocks)
+            html_table = f"""<div style="overflow-x:auto;">
+<table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+<thead>
+<tr style="background-color: #0f4a8a; color: white; text-align: center;">
+<th colspan="13" style="padding: 12px; font-size: 16px; border: 1px solid #1a73e8;">AMC NTEP — Zone-wise PTFU Pendancy Summary ({selected_month})</th>
+</tr>
+<tr style="background-color: #1a73e8; color: white; text-align: center; font-size: 14px;">
+<th style="padding: 10px; border: 1px solid #60a5fa; width: 12%;">Zone</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">6th Month PTFU ({configs["6M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">12th Month PTFU ({configs["12M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">18th Month PTFU ({configs["18M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">24th Month PTFU ({configs["24M"]["name"].split(' - ')[0]})</th>
+</tr>
+<tr style="background-color: #3b82f6; color: white; text-align: center; font-size: 12px;">
+<th style="padding: 8px; border: 1px solid #93c5fd;"></th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+</tr>
+</thead>
+<tbody>"""
             
             tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
             
@@ -2843,39 +2837,32 @@ with tab10:
                 
                 tot_6e+=e6; tot_6d+=d6; tot_12e+=e12; tot_12d+=d12; tot_18e+=e18; tot_18d+=d18; tot_24e+=e24; tot_24d+=d24
                 
-                html_table += f"""
-                <tr style="background-color: {bg_color}; text-align: center; color: #333; font-size: 13px;">
-                    <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: #3b82f6; color: white;">{z}</td>
-                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e6}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d6}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p6)}; color: #111; font-weight: bold;">{p6}%</td>
-                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e12}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d12}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p12)}; color: #111; font-weight: bold;">{p12}%</td>
-                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e18}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d18}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p18)}; color: #111; font-weight: bold;">{p18}%</td>
-                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e24}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d24}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p24)}; color: #111; font-weight: bold;">{p24}%</td>
-                </tr>
-                """
+                html_table += f"""<tr style="background-color: {bg_color}; text-align: center; color: #333; font-size: 13px;">
+<td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: #3b82f6; color: white;">{z}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{e6}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d6}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p6)}; color: #111; font-weight: bold;">{p6}%</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{e12}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d12}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p12)}; color: #111; font-weight: bold;">{p12}%</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{e18}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d18}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p18)}; color: #111; font-weight: bold;">{p18}%</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{e24}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d24}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_pct_color(p24)}; color: #111; font-weight: bold;">{p24}%</td>
+</tr>"""
                 
-            # Totals Row
             tp6 = int((tot_6d/tot_6e)*100) if tot_6e>0 else 0
             tp12 = int((tot_12d/tot_12e)*100) if tot_12e>0 else 0
             tp18 = int((tot_18d/tot_18e)*100) if tot_18e>0 else 0
             tp24 = int((tot_24d/tot_24e)*100) if tot_24e>0 else 0
             
-            html_table += f"""
-                <tr style="background-color: #0f4a8a; color: white; text-align: center; font-weight: bold; font-size: 14px;">
-                    <td style="padding: 10px; border: 1px solid #1a73e8; text-align: left;">TOTAL</td>
-                    <td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp6}%</td>
-                    <td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp12}%</td>
-                    <td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp18}%</td>
-                    <td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp24}%</td>
-                </tr>
-                </tbody></table></div><br>
-            """
+            html_table += f"""<tr style="background-color: #0f4a8a; color: white; text-align: center; font-weight: bold; font-size: 14px;">
+<td style="padding: 10px; border: 1px solid #1a73e8; text-align: left;">TOTAL</td>
+<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_6d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp6}%</td>
+<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_12d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp12}%</td>
+<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_18d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp18}%</td>
+<td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24e}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tot_24d}</td><td style="padding: 10px; border: 1px solid #1a73e8;">{tp24}%</td>
+</tr>
+</tbody></table></div><br>"""
             
-            # Display Final Table
             st.markdown(html_table, unsafe_allow_html=True)
             
             # 5. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
-            
             st.markdown("<h4 style='color: #333;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
             fc1, fc2, fc3 = st.columns(3)
