@@ -2668,6 +2668,7 @@ with tab10:
     st.markdown("<h3 style='text-align: center; color: #0f4a8a; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
 
+    # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
@@ -2713,25 +2714,30 @@ with tab10:
         else: return "#4ade80"              
 
     if btn_generate_ptfu:
-        with st.spinner(f"Fetching Live Data for {selected_month} and processing exact VLOOKUP matching..."):
+        with st.spinner(f"Fetching Live Data for {selected_month} and mapping exact Excel VLOOKUPs..."):
             
-            # 1. Load Master & Extract Exact IDs from COLUMN R (Index 17)
+            # 1. Load Master & Multi-Column Sweeper (Finds IDs in Col M AND Col R)
             df_master = load_raw_sheet("708709969")
             done_ids = set()
-            if not df_master.empty and df_master.shape[1] > 17:
-                # Strip spaces for IDs because standard VLOOKUP handles numbers better
-                raw_master_ids = df_master.iloc[:, 17].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
-                done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE", "EPISODE ID", "EPISODE_ID", "TOKEN ID"])].tolist())
+            if not df_master.empty:
+                m_cols = []
+                if df_master.shape[1] > 17: m_cols.append(17) # Col R
+                if df_master.shape[1] > 12: m_cols.append(12) # Col M
+                
+                if m_cols:
+                    raw_master_ids = pd.concat([df_master.iloc[:, c] for c in m_cols]).astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
+                    done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE", "EPISODE ID", "EPISODE_ID", "TOKEN ID"])].tolist())
 
             # 2. Load Zone Map (STRICT EXCEL VLOOKUP SIMULATION)
             df_zone = load_raw_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty and df_zone.shape[1] > 1:
                 for _, row in df_zone.iterrows():
-                    # 🛡️ FIX: NO STRIP on the Key! This perfectly mimics Excel's inability to match trailing spaces!
+                    # 🛡️ FIX: NO STRIP on the lookup key! This perfectly mimics Excel's #N/A failure on trailing spaces!
                     vlookup_phi = str(row.iloc[0]).upper()
                     vlookup_zone = str(row.iloc[1]).strip().upper()
-                    if vlookup_phi != "NAN":
+                    # Keep only the FIRST match, exactly like Excel VLOOKUP
+                    if vlookup_phi != "NAN" and vlookup_phi not in zone_map:
                         zone_map[vlookup_phi] = vlookup_zone
 
             zones_order = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'NOT MAPPING ZONE']
@@ -2746,27 +2752,30 @@ with tab10:
             
             line_list_rows = []
 
-            # 3. Aggregation Engine (Strict Column Extraction)
+            # 3. Aggregation Engine (Strict Row Counting)
             for p_key, p_info in period_data.items():
                 df_sub = load_raw_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
                 if df_sub.shape[1] > 12:
                     for _, row in df_sub.iterrows():
-                        # 🛡️ FIX: NO STRIP! Keep exact spaces to replicate Excel VLOOKUP
-                        raw_phi_exact = str(row.iloc[4]).upper()     # Col E
-                        raw_id = str(row.iloc[12]).replace(r'\.0$', '').strip().upper()               # Col M
-                        pat_name = str(row.iloc[13]).strip().upper() if df_sub.shape[1] > 13 else "N/A" # Col N
+                        raw_phi_str = str(row.iloc[4]).strip().upper() if df_sub.shape[1] > 4 else ""
+                        raw_id_str = str(row.iloc[12]).strip().upper()
                         
-                        # Only skip actual header metadata or truly empty rows
-                        if "SPECTRUM" in raw_phi_exact or "CURRENT_HF" in raw_phi_exact or (raw_phi_exact == "NAN" and raw_id in ["", "NAN"]): 
-                            continue 
+                        # Only skip actual metadata/header rows or completely ghost blank rows
+                        if "SPECTRUM" in raw_phi_str or "CURRENT_HF" in raw_phi_str or raw_phi_str == "SPECTRUM_CURRENT_HF": continue
+                        if raw_phi_str == "NAN" and raw_id_str == "NAN": continue
+                        
+                        # Process the row!
+                        raw_phi_exact = str(row.iloc[4]).upper() # Col E (Space sensitive for VLOOKUP)
+                        raw_id = str(row.iloc[12]).replace(r'\.0$', '').strip().upper() # Col M
+                        pat_name = str(row.iloc[13]).strip().upper() if df_sub.shape[1] > 13 else "N/A" # Col N
                         
                         # Exact VLOOKUP match logic (will fail on trailing spaces exactly like Excel)
                         z_match = zone_map.get(raw_phi_exact, "NOT MAPPING ZONE")
                         if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                         
-                        # 🛡️ FIX: Even if raw_id is blank, we count them as Eligible to match Excel's total row count!
+                        # 🛡️ FIX: Even if raw_id is blank, they count as Eligible! But obviously 0 Done.
                         is_done = 1 if (raw_id and raw_id not in ["", "NAN", "NONE"] and raw_id in done_ids) else 0
                         
                         period_data[p_key]["data"][z_match]['elig'] += 1
