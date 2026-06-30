@@ -2698,6 +2698,33 @@ with tab10:
             return df
         except: return pd.DataFrame()
 
+    # 🛡️ THE FIX 1: Indestructible Header Scanner (Bypasses metadata & shifting columns!)
+    @st.cache_data(ttl=600, show_spinner=False)
+    def load_clean_ptfu_sheet(gid):
+        df_raw = load_raw_sheet(gid)
+        if df_raw.empty: return pd.DataFrame()
+        
+        header_idx = -1
+        for i in range(min(20, len(df_raw))):
+            row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper().tolist())
+            if ("EPISODE" in row_str or "ID" in row_str) and ("HF" in row_str or "PHI" in row_str):
+                header_idx = i
+                break
+                
+        if header_idx != -1:
+            df_raw.columns = df_raw.iloc[header_idx].astype(str).str.strip().str.upper()
+            return df_raw.iloc[header_idx+1:].reset_index(drop=True)
+        return df_raw
+
+    import re
+    def find_col_name(df, keywords, exclude=None):
+        for col in df.columns:
+            c_clean = re.sub(r'[^A-Z0-9]', '', str(col).upper())
+            if exclude and exclude in c_clean: continue
+            for k in keywords:
+                if k in c_clean: return col
+        return None
+
     c1, c2 = st.columns([1, 2])
     with c1:
         st.markdown("<b>🗓️ Select Target Month:</b>", unsafe_allow_html=True)
@@ -2716,20 +2743,19 @@ with tab10:
     if btn_generate_ptfu:
         with st.spinner(f"Fetching Live Data for {selected_month} and mapping exact Excel VLOOKUPs..."):
             
-            # 1. Load Master & Extract Exact IDs from COLUMN R (Index 17)
+            # 🛡️ THE FIX 2: Explicitly grab Column R (Index 17) from Master!
             df_master = load_raw_sheet("708709969")
             done_ids = set()
             if not df_master.empty and df_master.shape[1] > 17:
                 raw_master_ids = df_master.iloc[:, 17].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
-                done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE", "EPISODE ID", "EPISODE_ID", "TOKEN ID"])].tolist())
+                done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE"])].tolist())
 
-            # 2. Load Zone Map (STRICT EXCEL VLOOKUP SIMULATION)
+            # 3. Load Zone Map (True Excel VLOOKUP Matcher)
             df_zone = load_raw_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty and df_zone.shape[1] > 1:
                 for _, row in df_zone.iterrows():
-                    # 🛡️ THE FIX: NO STRIP on the lookup key! This perfectly mimics Excel's exact matching!
-                    vlookup_phi = str(row.iloc[0]).upper()
+                    vlookup_phi = str(row.iloc[0]).strip().upper()
                     vlookup_zone = str(row.iloc[1]).strip().upper()
                     if vlookup_phi != "NAN" and vlookup_phi not in zone_map:
                         zone_map[vlookup_phi] = vlookup_zone
@@ -2746,42 +2772,44 @@ with tab10:
             
             line_list_rows = []
 
-            # 3. Aggregation Engine (Strict Row Counting)
+            # 4. Aggregation Engine (With Header Scanner)
             for p_key, p_info in period_data.items():
-                df_sub = load_raw_sheet(configs[p_key]["gid"])
+                df_sub = load_clean_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
-                if df_sub.shape[1] > 12:
-                    for _, row in df_sub.iterrows():
-                        # 🛡️ THE FIX: NO STRIP! Keep exact spaces to replicate Excel VLOOKUP
-                        raw_phi_exact = str(row.iloc[4]).upper()     # Col E
-                        raw_id = str(row.iloc[12]).replace(r'\.0$', '').strip().upper()               # Col M
-                        pat_name = str(row.iloc[13]).strip().upper() if df_sub.shape[1] > 13 else "N/A" # Col N
-                        
-                        # Only skip actual header metadata or truly empty rows
-                        if "SPECTRUM_CURRENT_HF" in raw_phi_exact or (raw_phi_exact == "NAN" and raw_id in ["", "NAN"]): 
-                            continue 
-                        
-                        # Exact VLOOKUP match logic (will fail on trailing spaces exactly like Excel)
-                        z_match = zone_map.get(raw_phi_exact, "NOT MAPPING ZONE")
-                        if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
-                        
-                        # 🛡️ THE FIX: Even if raw_id is blank, we count them as Eligible to match Excel's total count!
-                        is_done = 1 if (raw_id and raw_id not in ["", "NAN", "NONE"] and raw_id in done_ids) else 0
-                        
-                        period_data[p_key]["data"][z_match]['elig'] += 1
-                        period_data[p_key]["data"][z_match]['done'] += is_done
-                        
-                        line_list_rows.append({
-                            "Follow-Up Period": p_info['name'],
-                            "Zone": z_match,
-                            "PHI": raw_phi_exact.strip() if raw_phi_exact != "NAN" else "N/A",
-                            "Patient Name": pat_name,
-                            "Episode ID": raw_id if raw_id not in ["", "NAN"] else "MISSING ID",
-                            "Status": "✅ DONE" if is_done else "❌ PENDING"
-                        })
+                ep_col = find_col_name(df_sub, ['EPISODEID', 'ID'])
+                phi_col = find_col_name(df_sub, ['HF', 'PHI', 'FACILITY'], exclude='TYPE')
+                name_col = find_col_name(df_sub, ['NAME'], exclude='STATE')
+                
+                if not ep_col or not phi_col: continue
 
-            # 4. Generate Summary DataFrame for Download
+                for _, row in df_sub.iterrows():
+                    raw_id = str(row[ep_col]).replace(r'\.0$', '').strip().upper()
+                    raw_phi = str(row[phi_col]).strip().upper()
+                    pat_name = str(row[name_col]).strip().upper() if name_col else "N/A"
+                    
+                    if raw_phi == "NAN" and raw_id in ["", "NAN"]: continue 
+                    if "SPECTRUM" in raw_phi or "CURRENT" in raw_phi: continue
+                    
+                    # Exact VLOOKUP logic
+                    z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
+                    if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
+                    
+                    is_done = 1 if (raw_id and raw_id not in ["", "NAN", "NONE"] and raw_id in done_ids) else 0
+                    
+                    period_data[p_key]["data"][z_match]['elig'] += 1
+                    period_data[p_key]["data"][z_match]['done'] += is_done
+                    
+                    line_list_rows.append({
+                        "Follow-Up Period": p_info['name'],
+                        "Zone": z_match,
+                        "PHI": raw_phi if raw_phi != "NAN" else "N/A",
+                        "Patient Name": pat_name,
+                        "Episode ID": raw_id if raw_id != "NAN" else "MISSING ID",
+                        "Status": "✅ DONE" if is_done else "❌ PENDING"
+                    })
+
+            # 5. Generate Summary DataFrame
             summary_rows = []
             tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
             
@@ -2816,7 +2844,7 @@ with tab10:
             
             df_summary = pd.DataFrame(summary_rows)
 
-            # 5. HTML Table Generator 
+            # 6. HTML Table Generator (Flattened for Streamlit Rendering)
             html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
@@ -2865,7 +2893,7 @@ with tab10:
             
             st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
             
-            # 6. Interactive Line List
+            # 7. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
             st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
