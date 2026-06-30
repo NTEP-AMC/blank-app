@@ -2660,3 +2660,226 @@ with tab9:
             key=f'dl_epi_{sel_slug}'
         )
 
+
+# ==========================================
+# 🟢 TAB 9: POST TREATMENT FOLLOW UP (PTFU) TRACKER
+# ==========================================
+with tab9:
+    st.markdown("<h3 style='text-align: center; color: #1e40af; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
+
+    # 🔗 Central Data Dictionary (All GIDs from your sheets)
+    SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
+    
+    PTFU_GIDS = {
+        "MASTER": "708709969",
+        "ZONE": "1336449768",
+        "Nov 25 - 6th month PTFU": "21841364",
+        "May 25 - 12 month PTFU": "255526054",
+        "Nov 24 - 18 month PTFU": "1645839494",
+        "May 24 - 24 month PTFU": "1756546670",
+        "Dec 25 - 6 month FU": "1106954976",
+        "June 25 - 12 Month FU": "720336715",
+        "Dec 24 - 18 month FU": "874343032",
+        "June 24 - 24 month FU": "1689944221"
+    }
+
+    @st.cache_data(ttl=600, show_spinner=False)
+    def load_ptfu_sheet(sheet_name):
+        import urllib.request
+        import io
+        try:
+            url = SHEET_BASE_URL + PTFU_GIDS.get(sheet_name, "")
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
+            df.columns = df.columns.astype(str).str.strip()
+            return df
+        except: return pd.DataFrame()
+
+    # 🎛️ Dynamic Sheet Selection UI
+    st.markdown("<div style='background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+    st.markdown("<b>🗓️ Select PTFU Sheets to Analyze:</b>", unsafe_allow_html=True)
+    
+    fu_options = [k for k in PTFU_GIDS.keys() if k not in ["MASTER", "ZONE"]]
+    
+    cc1, cc2, cc3, cc4 = st.columns(4)
+    with cc1: sheet_6m = st.selectbox("6th Month PTFU", fu_options, index=fu_options.index("Dec 25 - 6 month FU") if "Dec 25 - 6 month FU" in fu_options else 0)
+    with cc2: sheet_12m = st.selectbox("12th Month PTFU", fu_options, index=fu_options.index("June 25 - 12 Month FU") if "June 25 - 12 Month FU" in fu_options else 1)
+    with cc3: sheet_18m = st.selectbox("18th Month PTFU", fu_options, index=fu_options.index("Dec 24 - 18 month FU") if "Dec 24 - 18 month FU" in fu_options else 2)
+    with cc4: sheet_24m = st.selectbox("24th Month PTFU", fu_options, index=fu_options.index("June 24 - 24 month FU") if "June 24 - 24 month FU" in fu_options else 3)
+    
+    st.markdown("</div><br>", unsafe_allow_html=True)
+    btn_generate_ptfu = st.button("🚀 Generate Zone-Wise PTFU Report", use_container_width=True)
+
+    def get_color(pct):
+        if pct < 10: return "#f87171"       # Red
+        elif pct < 20: return "#fb923c"     # Orange
+        elif pct < 30: return "#fde047"     # Yellow
+        elif pct < 45: return "#bbf7d0"     # Light Green
+        else: return "#4ade80"              # Dark Green
+
+    if btn_generate_ptfu:
+        with st.spinner("Analyzing Master Database and mapping Zones..."):
+            
+            # 1. Load Core Dictionaries
+            df_master = load_ptfu_sheet("MASTER")
+            df_zone = load_ptfu_sheet("ZONE")
+
+            # Extract Done IDs from MASTER (Strictly Column M / Index 12)
+            done_ids = set()
+            if not df_master.empty:
+                try:
+                    # Column M is index 12. Strip spaces and hidden .0 decimals!
+                    master_id_col = df_master.iloc[:, 12].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\s+', '', regex=True).str.upper()
+                    done_ids = set(master_id_col.tolist())
+                except: st.error("⚠️ Ensure MASTER sheet has at least 13 columns (Col M).")
+
+            # Extract Zone Mapping 
+            zone_map = {}
+            if not df_zone.empty:
+                for _, row in df_zone.iterrows():
+                    try:
+                        phi_clean = str(row.iloc[0]).strip().upper() # Col A: PHI
+                        zone_clean = str(row.iloc[1]).strip().upper() # Col B: Zone
+                        if phi_clean and phi_clean != "NAN":
+                            zone_map[phi_clean] = zone_clean
+                    except: pass
+
+            zones_order = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'NOT MAPPING ZONE']
+            
+            # Master Data Store
+            period_data = {
+                "6M": {"name": sheet_6m, "data": {z: {'elig': 0, 'done': 0} for z in zones_order}},
+                "12M": {"name": sheet_12m, "data": {z: {'elig': 0, 'done': 0} for z in zones_order}},
+                "18M": {"name": sheet_18m, "data": {z: {'elig': 0, 'done': 0} for z in zones_order}},
+                "24M": {"name": sheet_24m, "data": {z: {'elig': 0, 'done': 0} for z in zones_order}}
+            }
+            
+            line_list_rows = []
+
+            # 2. Aggregation Engine
+            for p_key, p_info in period_data.items():
+                df_sub = load_ptfu_sheet(p_info['name'])
+                if df_sub.empty: continue
+                
+                for _, row in df_sub.iterrows():
+                    try:
+                        # Col E (Index 4) = PHI, Col M (Index 12) = Episode ID, Col N (Index 13) = Patient Name
+                        raw_phi = str(row.iloc[4]).strip().upper()
+                        raw_id = str(row.iloc[12]).replace(r'\.0$', '').replace(r'\s+', '').strip().upper()
+                        pat_name = str(row.iloc[13]).strip().upper() if len(row) > 13 else "N/A"
+                        
+                        if raw_id in ["", "NAN", "NONE", "EPISODE_ID"]: continue # Skip headers or blanks
+                        
+                        z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
+                        if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
+                        
+                        is_done = 1 if raw_id in done_ids else 0
+                        
+                        period_data[p_key]["data"][z_match]['elig'] += 1
+                        period_data[p_key]["data"][z_match]['done'] += is_done
+                        
+                        # Add to Line List
+                        line_list_rows.append({
+                            "Follow-Up Period": p_info['name'],
+                            "Zone": z_match,
+                            "PHI": raw_phi,
+                            "Patient Name": pat_name,
+                            "Episode ID": raw_id,
+                            "Status": "✅ DONE" if is_done else "❌ PENDING"
+                        })
+                    except: continue
+
+            # 3. HTML Table Generator (Exact Copy of CTO's Design)
+            html_table = f"""
+            <div style="overflow-x:auto;">
+            <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background-color: #1e40af; color: white; text-align: center;">
+                        <th colspan="13" style="padding: 12px; font-size: 16px; border: 1px solid #3b82f6;">AMC NTEP — Zone-wise PTFU Pendency Summary</th>
+                    </tr>
+                    <tr style="background-color: #3b82f6; color: white; text-align: center; font-size: 14px;">
+                        <th style="padding: 10px; border: 1px solid #60a5fa; width: 12%;">Zone</th>
+                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">{sheet_6m.split(' - ')[0]}</th>
+                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">{sheet_12m.split(' - ')[0]}</th>
+                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">{sheet_18m.split(' - ')[0]}</th>
+                        <th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">{sheet_24m.split(' - ')[0]}</th>
+                    </tr>
+                    <tr style="background-color: #60a5fa; color: white; text-align: center; font-size: 12px;">
+                        <th style="padding: 8px; border: 1px solid #93c5fd;"></th>
+                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+                        <th style="padding: 8px; border: 1px solid #93c5fd;">Eligible Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            
+            tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
+            
+            for idx, z in enumerate(zones_order):
+                bg_color = "#f8fafc" if idx % 2 == 0 else "#ffffff"
+                
+                e6 = period_data["6M"]["data"][z]['elig']; d6 = period_data["6M"]["data"][z]['done']; p6 = int((d6/e6)*100) if e6>0 else 0
+                e12 = period_data["12M"]["data"][z]['elig']; d12 = period_data["12M"]["data"][z]['done']; p12 = int((d12/e12)*100) if e12>0 else 0
+                e18 = period_data["18M"]["data"][z]['elig']; d18 = period_data["18M"]["data"][z]['done']; p18 = int((d18/e18)*100) if e18>0 else 0
+                e24 = period_data["24M"]["data"][z]['elig']; d24 = period_data["24M"]["data"][z]['done']; p24 = int((d24/e24)*100) if e24>0 else 0
+                
+                tot_6e+=e6; tot_6d+=d6; tot_12e+=e12; tot_12d+=d12; tot_18e+=e18; tot_18d+=d18; tot_24e+=e24; tot_24d+=d24
+                
+                html_table += f"""
+                <tr style="background-color: {bg_color}; text-align: center; color: #333; font-size: 13px;">
+                    <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: #e0f2fe;">{z}</td>
+                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e6}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d6}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_color(p6)}; color: #111; font-weight: bold;">{p6}%</td>
+                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e12}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d12}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_color(p12)}; color: #111; font-weight: bold;">{p12}%</td>
+                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e18}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d18}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_color(p18)}; color: #111; font-weight: bold;">{p18}%</td>
+                    <td style="padding: 8px; border: 1px solid #cbd5e1;">{e24}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{d24}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {get_color(p24)}; color: #111; font-weight: bold;">{p24}%</td>
+                </tr>
+                """
+                
+            # Totals Row
+            tp6 = int((tot_6d/tot_6e)*100) if tot_6e>0 else 0
+            tp12 = int((tot_12d/tot_12e)*100) if tot_12e>0 else 0
+            tp18 = int((tot_18d/tot_18e)*100) if tot_18e>0 else 0
+            tp24 = int((tot_24d/tot_24e)*100) if tot_24e>0 else 0
+            
+            html_table += f"""
+                <tr style="background-color: #1e40af; color: white; text-align: center; font-weight: bold; font-size: 14px;">
+                    <td style="padding: 10px; border: 1px solid #3b82f6; text-align: left;">TOTAL</td>
+                    <td style="padding: 10px; border: 1px solid #3b82f6;">{tot_6e}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tot_6d}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tp6}%</td>
+                    <td style="padding: 10px; border: 1px solid #3b82f6;">{tot_12e}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tot_12d}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tp12}%</td>
+                    <td style="padding: 10px; border: 1px solid #3b82f6;">{tot_18e}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tot_18d}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tp18}%</td>
+                    <td style="padding: 10px; border: 1px solid #3b82f6;">{tot_24e}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tot_24d}</td><td style="padding: 10px; border: 1px solid #3b82f6;">{tp24}%</td>
+                </tr>
+                </tbody></table></div><br>
+            """
+            
+            # Display Final Table
+            st.markdown(html_table, unsafe_allow_html=True)
+            
+            # 4. Generate the Final Line List Dataframe
+            df_line_list = pd.DataFrame(line_list_rows)
+            
+            st.markdown("<h4 style='color: #333;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
+            
+            # Simple Interactive Filters
+            fc1, fc2 = st.columns(2)
+            with fc1: f_stat = st.selectbox("Filter by Status", ["All", "❌ PENDING", "✅ DONE"])
+            with fc2: f_zone = st.selectbox("Filter by Zone", ["All"] + zones_order)
+            
+            df_display = df_line_list.copy()
+            if f_stat != "All": df_display = df_display[df_display['Status'] == f_stat]
+            if f_zone != "All": df_display = df_display[df_display['Zone'] == f_zone]
+            
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            
+            # Allow Download
+            csv = df_display.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download PTFU Line List (CSV)",
+                data=csv,
+                file_name="PTFU_Line_List.csv",
+                mime="text/csv",
+            )
