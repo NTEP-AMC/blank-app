@@ -2668,6 +2668,7 @@ with tab10:
     st.markdown("<h3 style='text-align: center; color: #0f4a8a; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
 
+    # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
@@ -2685,39 +2686,18 @@ with tab10:
         }
     }
 
-    # 🛡️ THE FIX: Indestructible Dynamic Header Loader (Bypasses NTEP Metadata)
+    # 🛡️ THE FIX: Load the sheet completely raw. No header scanning. Pure columns.
     @st.cache_data(ttl=600, show_spinner=False)
-    def load_clean_ptfu_sheet(gid):
+    def load_raw_sheet(gid):
         import urllib.request
         import io
         try:
             url = SHEET_BASE_URL + gid
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=30) as response:
-                df_raw = pd.read_csv(io.BytesIO(response.read()), header=None, low_memory=False, dtype=str)
-            
-            if df_raw.empty: return pd.DataFrame()
-            
-            header_idx = 0
-            for i in range(min(15, len(df_raw))):
-                row_str = " ".join(df_raw.iloc[i].fillna("").astype(str).str.upper())
-                if "EPISODE" in row_str or "TOKEN" in row_str or "ZONE" in row_str or "PHI" in row_str or "FACILITY" in row_str:
-                    header_idx = i
-                    break
-                    
-            df_raw.columns = df_raw.iloc[header_idx].astype(str).str.strip()
-            df_clean = df_raw.iloc[header_idx+1:].reset_index(drop=True)
-            return df_clean
+                df = pd.read_csv(io.BytesIO(response.read()), header=None, low_memory=False, dtype=str)
+            return df
         except: return pd.DataFrame()
-
-    import re
-    def find_col_name(df, keywords, exclude=None):
-        for col in df.columns:
-            c_clean = re.sub(r'[^A-Z0-9]', '', str(col).upper())
-            if exclude and exclude in c_clean: continue
-            for k in keywords:
-                if k in c_clean: return col
-        return None
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -2735,26 +2715,23 @@ with tab10:
         else: return "#4ade80"              
 
     if btn_generate_ptfu:
-        with st.spinner(f"Fetching Live Data for {selected_month} and analyzing Master Entries..."):
+        with st.spinner(f"Fetching Live Data for {selected_month} and mapping VLOOKUPs..."):
             
-            # 1. Load Master & Extract Exact IDs
-            df_master = load_clean_ptfu_sheet("708709969")
+            # 1. Load Master & Extract Exact IDs from COLUMN R (Index 17)
+            df_master = load_raw_sheet("708709969")
             done_ids = set()
-            if not df_master.empty:
-                m_ep_col = find_col_name(df_master, ['EPISODE', 'PATIENTID', 'TOKEN'])
-                if m_ep_col:
-                    master_ids = df_master[m_ep_col].astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\s+', '', regex=True).str.upper()
-                    done_ids = set(master_ids[master_ids != 'NAN'].tolist())
+            if not df_master.empty and df_master.shape[1] > 17:
+                raw_master_ids = df_master.iloc[:, 17].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
+                # Ignore headers or empty rows in Col R
+                done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE", "EPISODE ID", "EPISODE_ID", "TOKEN ID"])].tolist())
 
-            # 2. Load Zone Map (True VLOOKUP Matcher)
-            df_zone = load_clean_ptfu_sheet("1336449768")
+            # 2. Load Zone Map (True Excel VLOOKUP Matcher)
+            df_zone = load_raw_sheet("1336449768")
             zone_map = {}
-            if not df_zone.empty:
-                phi_col_zone = df_zone.columns[0]
-                zone_col_zone = df_zone.columns[1]
+            if not df_zone.empty and df_zone.shape[1] > 1:
                 for _, row in df_zone.iterrows():
-                    vlookup_phi = str(row[phi_col_zone]).strip().upper()
-                    vlookup_zone = str(row[zone_col_zone]).strip().upper()
+                    vlookup_phi = str(row.iloc[0]).strip().upper()   # Col A
+                    vlookup_zone = str(row.iloc[1]).strip().upper()  # Col B
                     if vlookup_phi and vlookup_phi != "NAN":
                         zone_map[vlookup_phi] = vlookup_zone
 
@@ -2770,41 +2747,37 @@ with tab10:
             
             line_list_rows = []
 
-            # 3. Aggregation Engine
+            # 3. Aggregation Engine (Strict Column Extraction)
             for p_key, p_info in period_data.items():
-                df_sub = load_clean_ptfu_sheet(configs[p_key]["gid"])
+                df_sub = load_raw_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
                 
-                ep_col = find_col_name(df_sub, ['EPISODE'])
-                phi_col = find_col_name(df_sub, ['HF', 'PHI', 'FACILITY'], exclude='TYPE')
-                name_col = find_col_name(df_sub, ['NAME'], exclude='STATE')
-                
-                if not ep_col or not phi_col: continue
-
-                for _, row in df_sub.iterrows():
-                    raw_id = str(row[ep_col]).replace(r'\.0$', '').replace(r'\s+', '').strip().upper()
-                    raw_phi = str(row[phi_col]).strip().upper()
-                    pat_name = str(row[name_col]).strip().upper() if name_col else "N/A"
-                    
-                    if raw_id in ["", "NAN", "NONE", "EPISODE_ID"]: continue 
-                    
-                    # Exact VLOOKUP match logic
-                    z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
-                    if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
-                    
-                    is_done = 1 if raw_id in done_ids else 0
-                    
-                    period_data[p_key]["data"][z_match]['elig'] += 1
-                    period_data[p_key]["data"][z_match]['done'] += is_done
-                    
-                    line_list_rows.append({
-                        "Follow-Up Period": p_info['name'],
-                        "Zone": z_match,
-                        "PHI": raw_phi,
-                        "Patient Name": pat_name,
-                        "Episode ID": raw_id,
-                        "Status": "✅ DONE" if is_done else "❌ PENDING"
-                    })
+                # Check if sheet has enough columns to pull E (4), M (12), N (13)
+                if df_sub.shape[1] > 12:
+                    for _, row in df_sub.iterrows():
+                        raw_phi = str(row.iloc[4]).strip().upper() if df_sub.shape[1] > 4 else ""     # Col E
+                        raw_id = str(row.iloc[12]).replace(r'\.0$', '').strip().upper()               # Col M
+                        pat_name = str(row.iloc[13]).strip().upper() if df_sub.shape[1] > 13 else "N/A" # Col N
+                        
+                        if raw_id in ["", "NAN", "NONE", "EPISODE_ID", "EPISODE ID"]: continue 
+                        
+                        # Exact VLOOKUP match logic
+                        z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
+                        if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
+                        
+                        is_done = 1 if raw_id in done_ids else 0
+                        
+                        period_data[p_key]["data"][z_match]['elig'] += 1
+                        period_data[p_key]["data"][z_match]['done'] += is_done
+                        
+                        line_list_rows.append({
+                            "Follow-Up Period": p_info['name'],
+                            "Zone": z_match,
+                            "PHI": raw_phi,
+                            "Patient Name": pat_name,
+                            "Episode ID": raw_id,
+                            "Status": "✅ DONE" if is_done else "❌ PENDING"
+                        })
 
             # 4. Generate Summary DataFrame for Download
             summary_rows = []
