@@ -355,7 +355,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data"])
+tab1, tab2, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🔬 Presumptive TB", "🚨 Adverse Outcomes", "📱 Live Field Data", "📞 Post Follow Up"])
 
 
 # ==========================================
@@ -2662,9 +2662,9 @@ with tab9:
 
 
 # ==========================================
-# 🟢 TAB 9: POST TREATMENT FOLLOW UP (PTFU) TRACKER
+# 🟢 TAB 10: POST TREATMENT FOLLOW UP (PTFU) TRACKER
 # ==========================================
-with tab9:
+with tab10:
     st.markdown("<h3 style='text-align: center; color: #1e40af; font-weight: 800;'>📞 Post-Treatment Follow Up (PTFU) Tracker</h3>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; text-align: center; margin-bottom: 25px;'><i>Automated tracking of Eligible PTFU patients vs. Actual follow-ups entered in the Master sheet.</i></div>", unsafe_allow_html=True)
 
