@@ -2676,13 +2676,13 @@ with tab10:
     # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
-    # 🟢 UPDATED: July Month Config added beautifully without touching logic!
+    # 🟢 EXACT JULY GIDS MAPPED HERE!
     MONTH_CONFIGS = {
         "JULY 2026": {
-            "6M": {"name": "Jan 26 - 6th month PTFU", "gid": "173873434"},   # Update GID if different, using placeholder based on typical increment
-            "12M": {"name": "Jul 25 - 12 month PTFU", "gid": "161103350"},   # Update GID if different
-            "18M": {"name": "Jan 25 - 18 month PTFU", "gid": "131454660"},   # Update GID if different
-            "24M": {"name": "July 24 - 24 month PTFU", "gid": "1211167936"}  # From screenshot
+            "6M": {"name": "Jan 26 - 6th month PTFU", "gid": "1211167936"},
+            "12M": {"name": "Jul 25 - 12 month PTFU", "gid": "1485758275"},
+            "18M": {"name": "Jan 25 - 18 month PTFU", "gid": "477517545"},
+            "24M": {"name": "July 24 - 24 month PTFU", "gid": "333137550"}
         },
         "JUNE 2026": {
             "6M": {"name": "Dec 25 - 6 month FU", "gid": "1106954976"},
@@ -2710,7 +2710,6 @@ with tab10:
             return df
         except: return pd.DataFrame()
 
-    # 🛡️ THE FIX 1: Indestructible Header Scanner (Bypasses metadata & shifting columns!)
     @st.cache_data(ttl=600, show_spinner=False)
     def load_clean_ptfu_sheet(gid):
         df_raw = load_raw_sheet(gid)
@@ -2753,16 +2752,14 @@ with tab10:
         else: return "#4ade80"              
 
     if btn_generate_ptfu:
-        with st.spinner(f"Fetching Live Data for {selected_month} and processing exact VLOOKUP matching..."):
+        with st.spinner(f"Fetching Live Data for {selected_month} and mapping exact Excel VLOOKUPs..."):
             
-            # 🛡️ THE FIX 2: Explicitly grab Column R (Index 17) from Master!
             df_master = load_raw_sheet("708709969")
             done_ids = set()
             if not df_master.empty and df_master.shape[1] > 17:
                 raw_master_ids = df_master.iloc[:, 17].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
                 done_ids = set(raw_master_ids[~raw_master_ids.isin(["", "NAN", "NONE"])].tolist())
 
-            # 3. Load Zone Map (True Excel VLOOKUP Matcher)
             df_zone = load_raw_sheet("1336449768")
             zone_map = {}
             if not df_zone.empty and df_zone.shape[1] > 1:
@@ -2784,7 +2781,6 @@ with tab10:
             
             line_list_rows = []
 
-            # 4. Aggregation Engine (With Header Scanner)
             for p_key, p_info in period_data.items():
                 df_sub = load_clean_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
@@ -2803,7 +2799,6 @@ with tab10:
                     if raw_phi == "NAN" and raw_id in ["", "NAN"]: continue 
                     if "SPECTRUM" in raw_phi or "CURRENT" in raw_phi: continue
                     
-                    # Exact VLOOKUP logic
                     z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
                     if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                     
@@ -2821,7 +2816,6 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
-            # 5. Generate Summary DataFrame
             summary_rows = []
             tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
             
@@ -2856,7 +2850,6 @@ with tab10:
             
             df_summary = pd.DataFrame(summary_rows)
 
-            # 6. HTML Table Generator (Flattened for Streamlit Rendering)
             html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
@@ -2905,7 +2898,6 @@ with tab10:
             
             st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
             
-            # 7. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
             st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
