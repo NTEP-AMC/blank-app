@@ -2676,7 +2676,14 @@ with tab10:
     # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
+    # 🟢 UPDATED: July Month Config added beautifully without touching logic!
     MONTH_CONFIGS = {
+        "JULY 2026": {
+            "6M": {"name": "Jan 26 - 6th month PTFU", "gid": "173873434"},   # Update GID if different, using placeholder based on typical increment
+            "12M": {"name": "Jul 25 - 12 month PTFU", "gid": "161103350"},   # Update GID if different
+            "18M": {"name": "Jan 25 - 18 month PTFU", "gid": "131454660"},   # Update GID if different
+            "24M": {"name": "July 24 - 24 month PTFU", "gid": "1211167936"}  # From screenshot
+        },
         "JUNE 2026": {
             "6M": {"name": "Dec 25 - 6 month FU", "gid": "1106954976"},
             "12M": {"name": "June 25 - 12 Month FU", "gid": "720336715"},
@@ -2746,7 +2753,7 @@ with tab10:
         else: return "#4ade80"              
 
     if btn_generate_ptfu:
-        with st.spinner(f"Fetching Live Data for {selected_month} and mapping exact Excel VLOOKUPs..."):
+        with st.spinner(f"Fetching Live Data for {selected_month} and processing exact VLOOKUP matching..."):
             
             # 🛡️ THE FIX 2: Explicitly grab Column R (Index 17) from Master!
             df_master = load_raw_sheet("708709969")
