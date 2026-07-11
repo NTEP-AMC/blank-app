@@ -1441,7 +1441,8 @@ with tab5:
         # 🎯 UPGRADED UI: Group By Toggle + All New Filters neatly arranged
         cm1, cm2, cm3 = st.columns(3)
         with cm1:
-            mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit"], key="mat_view_mid", help="Switch between seeing rows by 7 Zones or all 23 TB Units")
+            # 🟢 ADDED: UHC/PHI to the dropdown options
+            mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit", "UHC/PHI"], key="mat_view_mid", help="Switch between seeing rows by 7 Zones, all 23 TB Units, or Individual PHIs")
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
             today_date = datetime.date.today()
@@ -1479,7 +1480,7 @@ with tab5:
             ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
         ]
         
-        # 🎯 DYNAMIC ROW GROUPING (Zone vs TB Unit)
+        # 🟢 UPGRADED: DYNAMIC ROW GROUPING (Zone vs TB Unit vs UHC/PHI)
         if mat_view == "Zone":
             display_entities = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
             entity_label = 'ZONE'
@@ -1496,11 +1497,18 @@ with tab5:
                 return "AMC"
             
             df_mat['Entity_Col'] = df_mat['ZONE'].apply(get_zone_mat)
-        else:
+            
+        elif mat_view == "TB Unit":
             # Display all TB Units
             display_entities = sorted([x for x in df_mat['TB Unit'].unique() if pd.notna(x) and str(x).strip() != ""])
             entity_label = 'TB Unit'
             df_mat['Entity_Col'] = df_mat['TB Unit'].astype(str).str.strip().str.upper()
+            
+        else:
+            # 🟢 ADDED: Display all UHC/PHI 
+            display_entities = sorted([x for x in df_mat['PHI'].unique() if pd.notna(x) and str(x).strip() != ""])
+            entity_label = 'PHI'
+            df_mat['Entity_Col'] = df_mat['PHI'].astype(str).str.strip().str.upper()
         
         mat_rows = []
         for entity in display_entities:
