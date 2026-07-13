@@ -4,3 +4,4 @@ xlsxwriter
 python-pptx
 matplotlib
 streamlit-option-menu
+pyarrow==24.0.0
