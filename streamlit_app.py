@@ -2657,7 +2657,6 @@ with tab10:
                     if raw_phi == "NAN" and raw_id in ["", "NAN"]: continue 
                     if "SPECTRUM" in raw_phi or "CURRENT" in raw_phi: continue
                     
-                    # Exact VLOOKUP logic
                     z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
                     if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                     
@@ -2788,13 +2787,14 @@ with tab10:
                 
                 pct_val = int((tot_done / tot_elig) * 100) if tot_elig > 0 else 0
                 
+                # 🛡️ THE EXCEL FIX: Using ' | ' (Pipe) instead of '/' permanently stops Excel from converting fractions to dates!
                 phi_rows.append({
-                    "Facility (UHC/CHC/Hosp)": phi,
                     "Zone": p_data["ZONE"],
-                    "6M_Str": f"{d6} / {e6}",
-                    "12M_Str": f"{d12} / {e12}",
-                    "18M_Str": f"{d18} / {e18}",
-                    "24M_Str": f"{d24} / {e24}",
+                    "Facility Name (UHC/CHC/Hosp)": phi,
+                    "6M_Str": f"{d6} | {e6}",
+                    "12M_Str": f"{d12} | {e12}",
+                    "18M_Str": f"{d18} | {e18}",
+                    "24M_Str": f"{d24} | {e24}",
                     "Total Eligible": tot_elig,
                     "Entry Done": tot_done,
                     "Pending_Count": tot_pend,
@@ -2814,12 +2814,12 @@ with tab10:
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
 <tr style="background-color: #111827; color: white; text-align: center; font-size: 13px;">
-<th style="padding: 10px; border: 1px solid #374151; text-align: left; width: 25%;">Facility Name (UHC / CHC / Hospital)</th>
 <th style="padding: 10px; border: 1px solid #374151; width: 10%;">Zone</th>
-<th style="padding: 10px; border: 1px solid #374151; width: 9%;">6th Month<br><small>(Done/Elig)</small></th>
-<th style="padding: 10px; border: 1px solid #374151; width: 9%;">12th Month<br><small>(Done/Elig)</small></th>
-<th style="padding: 10px; border: 1px solid #374151; width: 9%;">18th Month<br><small>(Done/Elig)</small></th>
-<th style="padding: 10px; border: 1px solid #374151; width: 9%;">24th Month<br><small>(Done/Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; text-align: left; width: 25%;">Facility Name (UHC / CHC / Hospital)</th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">6th Month<br><small>(Done | Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">12th Month<br><small>(Done | Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">18th Month<br><small>(Done | Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">24th Month<br><small>(Done | Elig)</small></th>
 <th style="background-color: #0f4a8a; padding: 10px; border: 1px solid #1a73e8; width: 10%;">Total Eligible</th>
 <th style="background-color: #16a34a; padding: 10px; border: 1px solid #15803d; width: 10%;">Entry Done</th>
 <th style="padding: 10px; border: 1px solid #374151; width: 9%;">% Completed</th>
@@ -2833,8 +2833,8 @@ with tab10:
                     c_color = get_pct_color(pct_int)
                     
                     html_phi_table += f"""<tr style="background-color: {bg}; text-align: center; color: #1f2937; font-size: 12px; font-weight: 500;">
-<td style="padding: 8px; border: 1px solid #e5e7eb; text-align: left; font-weight: bold; color: #111827;">{row['Facility (UHC/CHC/Hosp)']}</td>
 <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold; color: #4b5563;"><small>{row['Zone']}</small></td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; text-align: left; font-weight: bold; color: #111827;">{row['Facility Name (UHC/CHC/Hosp)']}</td>
 <td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['6M_Str']}</td>
 <td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['12M_Str']}</td>
 <td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['18M_Str']}</td>
@@ -2846,7 +2846,7 @@ with tab10:
                     
                 html_phi_table += "</tbody></table></div><br>"
                 st.markdown(html_phi_table, unsafe_allow_html=True)
-                st.download_button("📥 Download Top 20 High-Pendency Facilities (CSV)", df_phi_top20.to_csv(index=False).encode('utf-8'), f"PTFU_Top20_Facilities_{selected_month}.csv", "text/csv")
+                st.download_button("📥 Download Top 20 High-Pendency Facilities (CSV)", df_phi_top20.drop(columns=["Pending_Count"]).to_csv(index=False).encode('utf-8'), f"PTFU_Top20_Facilities_{selected_month}.csv", "text/csv")
 
             # 7. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
