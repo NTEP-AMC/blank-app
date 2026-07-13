@@ -2533,7 +2533,6 @@ with tab10:
     # 🔗 Central Data Dictionary
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
-    # 🟢 EXACT JULY GIDS MAPPED HERE!
     MONTH_CONFIGS = {
         "JULY 2026": {
             "6M": {"name": "Jan 26 - 6th month PTFU", "gid": "1211167936"},
@@ -2637,7 +2636,9 @@ with tab10:
             }
             
             line_list_rows = []
+            phi_counts = {} # Secondary object for Facility level tracking
 
+            # 4. Aggregation Engine (With Header Scanner)
             for p_key, p_info in period_data.items():
                 df_sub = load_clean_ptfu_sheet(configs[p_key]["gid"])
                 if df_sub.empty: continue
@@ -2656,14 +2657,29 @@ with tab10:
                     if raw_phi == "NAN" and raw_id in ["", "NAN"]: continue 
                     if "SPECTRUM" in raw_phi or "CURRENT" in raw_phi: continue
                     
+                    # Exact VLOOKUP logic
                     z_match = zone_map.get(raw_phi, "NOT MAPPING ZONE")
                     if z_match not in period_data[p_key]["data"]: z_match = "NOT MAPPING ZONE"
                     
                     is_done = 1 if (raw_id and raw_id not in ["", "NAN", "NONE"] and raw_id in done_ids) else 0
                     
+                    # Core Zone Aggregations (Untouched!)
                     period_data[p_key]["data"][z_match]['elig'] += 1
                     period_data[p_key]["data"][z_match]['done'] += is_done
                     
+                    # Facility Level Aggregations
+                    if raw_phi not in ["NAN", "N/A", ""]:
+                        if raw_phi not in phi_counts:
+                            phi_counts[raw_phi] = {
+                                "ZONE": z_match,
+                                "6M": {"elig": 0, "done": 0},
+                                "12M": {"elig": 0, "done": 0},
+                                "18M": {"elig": 0, "done": 0},
+                                "24M": {"elig": 0, "done": 0}
+                            }
+                        phi_counts[raw_phi][p_key]["elig"] += 1
+                        phi_counts[raw_phi][p_key]["done"] += is_done
+
                     line_list_rows.append({
                         "Follow-Up Period": p_info['name'],
                         "Zone": z_match,
@@ -2673,6 +2689,7 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
+            # 5. Generate Summary DataFrame
             summary_rows = []
             tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
             
@@ -2707,6 +2724,7 @@ with tab10:
             
             df_summary = pd.DataFrame(summary_rows)
 
+            # 6. HTML Table Generator (Zone View)
             html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
@@ -2752,9 +2770,85 @@ with tab10:
                 
             html_table += "</tbody></table></div><br>"
             st.markdown(html_table, unsafe_allow_html=True)
-            
             st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
-            
+
+            # --------------------------------=============================
+            # 🎯 NEW ADDITION: TOP 20 HIGH PENDENCY FACILITIES (UHC/CHC/HOSP)
+            # --------------------------------=============================
+            phi_rows = []
+            for phi, p_data in phi_counts.items():
+                e6 = p_data["6M"]["elig"]; d6 = p_data["6M"]["done"]
+                e12 = p_data["12M"]["elig"]; d12 = p_data["12M"]["done"]
+                e18 = p_data["18M"]["elig"]; d18 = p_data["18M"]["done"]
+                e24 = p_data["24M"]["elig"]; d24 = p_data["24M"]["done"]
+                
+                tot_elig = e6 + e12 + e18 + e24
+                tot_done = d6 + d12 + d18 + d24
+                tot_pend = tot_elig - tot_done
+                
+                pct_val = int((tot_done / tot_elig) * 100) if tot_elig > 0 else 0
+                
+                phi_rows.append({
+                    "Facility (UHC/CHC/Hosp)": phi,
+                    "Zone": p_data["ZONE"],
+                    "6M_Str": f"{d6} / {e6}",
+                    "12M_Str": f"{d12} / {e12}",
+                    "18M_Str": f"{d18} / {e18}",
+                    "24M_Str": f"{d24} / {e24}",
+                    "Total Eligible": tot_elig,
+                    "Entry Done": tot_done,
+                    "Pending_Count": tot_pend,
+                    "% Completed": f"{pct_val}%"
+                })
+
+            df_phi_all = pd.DataFrame(phi_rows)
+            if not df_phi_all.empty:
+                # Strictly isolate the top 20 worst facilities sorted by raw pending counts
+                df_phi_top20 = df_phi_all.sort_values(by="Pending_Count", ascending=False).head(20).reset_index(drop=True)
+                
+                st.markdown("<br><hr style='border: 1.5px solid #0f4a8a;'>", unsafe_allow_html=True)
+                st.markdown("<h4 style='color: #0f4a8a; font-weight: 700;'>🏆 Top 20 High-Pendency Facilities (Action Required)</h4>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 15px;'><i>Displays the top 20 operational healthcare facilities with the highest volume of unresolved follow-up entries. Monitored monthly.</i></div>", unsafe_allow_html=True)
+                
+                html_phi_table = f"""<div style="overflow-x:auto;">
+<table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+<thead>
+<tr style="background-color: #111827; color: white; text-align: center; font-size: 13px;">
+<th style="padding: 10px; border: 1px solid #374151; text-align: left; width: 25%;">Facility Name (UHC / CHC / Hospital)</th>
+<th style="padding: 10px; border: 1px solid #374151; width: 10%;">Zone</th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">6th Month<br><small>(Done/Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">12th Month<br><small>(Done/Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">18th Month<br><small>(Done/Elig)</small></th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">24th Month<br><small>(Done/Elig)</small></th>
+<th style="background-color: #0f4a8a; padding: 10px; border: 1px solid #1a73e8; width: 10%;">Total Eligible</th>
+<th style="background-color: #16a34a; padding: 10px; border: 1px solid #15803d; width: 10%;">Entry Done</th>
+<th style="padding: 10px; border: 1px solid #374151; width: 9%;">% Completed</th>
+</tr>
+</thead>
+<tbody>"""
+                
+                for idx, row in df_phi_top20.iterrows():
+                    bg = "#f9fafb" if idx % 2 == 0 else "#ffffff"
+                    pct_int = int(row['% Completed'].replace('%',''))
+                    c_color = get_pct_color(pct_int)
+                    
+                    html_phi_table += f"""<tr style="background-color: {bg}; text-align: center; color: #1f2937; font-size: 12px; font-weight: 500;">
+<td style="padding: 8px; border: 1px solid #e5e7eb; text-align: left; font-weight: bold; color: #111827;">{row['Facility (UHC/CHC/Hosp)']}</td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold; color: #4b5563;"><small>{row['Zone']}</small></td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['6M_Str']}</td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['12M_Str']}</td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['18M_Str']}</td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; color: #4b5563;">{row['24M_Str']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; background-color: #f0fdf4; color: #0f4a8a;">{row['Total Eligible']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; background-color: #f0fdf4; color: #16a34a;">{row['Entry Done']}</td>
+<td style="padding: 8px; border: 1px solid #e5e7eb; background-color: {c_color}; color: #111; font-weight: bold;">{row['% Completed']}</td>
+</tr>"""
+                    
+                html_phi_table += "</tbody></table></div><br>"
+                st.markdown(html_phi_table, unsafe_allow_html=True)
+                st.download_button("📥 Download Top 20 High-Pendency Facilities (CSV)", df_phi_top20.to_csv(index=False).encode('utf-8'), f"PTFU_Top20_Facilities_{selected_month}.csv", "text/csv")
+
+            # 7. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
             st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
