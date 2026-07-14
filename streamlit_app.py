@@ -280,7 +280,7 @@ def get_live_dc():
             return pd.DataFrame()
 
     try:
-        url_new = "https://docs.google.com/spreadsheets/d/1hkJBnJOuxcVu233f6e2_0cOE-BM7bdDOyHuzrlGogMU/export?format=csv&gid=1152778583"
+        url_new = "https://docs.google.com/spreadsheets/d/1vg3yEKZDHdg4vG7fkA9GlzBzJY_gkFTpH7xW_hMtcA0/export?format=csv&gid=1152778583"
         url_old = "https://docs.google.com/spreadsheets/d/1zdf96eisZHzdk5ECFSI7eeOtNQoOXk3QRUUROtIZQmc/export?format=csv&gid=1152778583"
         
         df_new = fetch_sheet(url_new)
