@@ -109,9 +109,16 @@ if not st.session_state.auth:
     st.stop()
 
 # ==========================================
-# 🟢 POST LOGIN DASHBOARD UI & DATA FETCHING (તમારો જૂનો ડેટા કોડ)
+# 🟢 POST LOGIN DASHBOARD UI & DATA FETCHING
 # ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
+
+# 🛡️ THE SAFETY NET: Prevents AttributeError if server memory wipes session data
+if 'role' not in st.session_state or 'target' not in st.session_state:
+    st.session_state.auth = False
+    st.warning("⚠️ Session expired due to inactivity or server refresh. Please log in again.")
+    st.stop()
+
 st.markdown(f"<div style='background-color: #d4edda; color: #155724; padding: 12px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 10px; font-size: 16px; font-weight: bold;'>👤 Logged in as: <span style='color: #0b2e13; font-size: 18px;'>{st.session_state.target} ({st.session_state.role})</span></div>", unsafe_allow_html=True)
 
 with st.expander("⚙️ Account Settings & Change Password"):
@@ -144,7 +151,6 @@ if st.session_state.role == "ADMIN":
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-# 🎯 તમારું EXCEL ડાઉનલોડ કરવાનું ફંક્શન
 def convert_df_to_excel(df, sheet_name="Data"):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -164,7 +170,6 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-# 🎯 તમારું DATA FETCH કરવાનું ફંક્શન
 @st.cache_data(ttl=3600)
 def load_all_data():
     try:
@@ -186,7 +191,6 @@ def load_all_data():
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🎯 તમારું ગૂગલ શીટ માંથી LIVE DATA લાવવાનું ફંક્શન
 @st.cache_data(ttl=300) 
 def get_live_dc():
     def fetch_sheet(url):
@@ -289,9 +293,6 @@ def get_live_dc():
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
-# ==========================================
-# 🎯 BULLETPROOF LOGIN FILTER 
-# ==========================================
 def filter_by_role(df, role, target):
     if df.empty: return df
     target_up = str(target).upper().strip()
@@ -356,7 +357,6 @@ if not df_time.empty:
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab4, tab5, tab6, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🚨 Adverse Outcomes", "📱 Live Field Data", "📞 Post Follow Up"])
-
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
