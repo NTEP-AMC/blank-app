@@ -1289,12 +1289,10 @@ with tab5:
                     s6_z = st.multiselect("Zone", sorted([x for x in df_dc['ZONE'].unique() if pd.notna(x) and x!=""]), key='z6')
                     if s6_z: df_dc = df_dc[df_dc['ZONE'].isin(s6_z)]
                 
-                # 🎯 DEPENDENT FILTER
                 tu_opts = sorted([x for x in df_dc['TB Unit'].unique() if pd.notna(x) and x!=""])
                 s6_tu = st.multiselect("TB Unit", tu_opts, key='tu6')
                 if s6_tu: df_dc = df_dc[df_dc['TB Unit'].isin(s6_tu)]
                 
-                # 🎯 DEPENDENT FILTER
                 phi_opts = sorted([x for x in df_dc['PHI'].unique() if pd.notna(x) and x!=""])
                 s6_phi = st.multiselect("PHI", phi_opts, key='phi6')
                 if s6_phi: df_dc = df_dc[df_dc['PHI'].isin(s6_phi)]
@@ -1371,7 +1369,6 @@ with tab5:
         
         main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
         
-        # 🎯 7 MINI BOXES
         if st.session_state.role == "ADMIN" and ('s6_z' not in locals() or len(s6_z) == 0):
             st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
             cols7 = st.columns(7)
@@ -1380,16 +1377,15 @@ with tab5:
                 pct_val = 0
                 if not z_row.empty: pct_val = z_row['% Completed'].values[0]
                 
-                if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" # Green
-                elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" # Yellow
-                else: bg_c, t_c = "#f8d7da", "#721c24" # Red
+                if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" 
+                elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" 
+                else: bg_c, t_c = "#f8d7da", "#721c24" 
                 
                 card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 6px 1px; margin-bottom: 10px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 16px; font-weight: 900; margin-top: 2px;">{pct_val}%</div></div>"""
                 with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
 
         st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        # TARGETED TABLE COLORING
         def color_table(df):
             style_df = pd.DataFrame('', index=df.index, columns=df.columns)
             for i in df.index:
@@ -1398,12 +1394,9 @@ with tab5:
                     try:
                         val_str = str(df.at[i, '% Completed']).replace('%', '')
                         val = float(val_str)
-                        if val >= 75:
-                            style_df.at[i, '% Completed'] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
-                        elif val >= 50:
-                            style_df.at[i, '% Completed'] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
-                        else:
-                            style_df.at[i, '% Completed'] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                        if val >= 75: style_df.at[i, '% Completed'] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+                        elif val >= 50: style_df.at[i, '% Completed'] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
+                        else: style_df.at[i, '% Completed'] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
                     except: pass
             return style_df
 
@@ -1424,12 +1417,11 @@ with tab5:
             ll_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
             df_ll_display = df_ll[ll_cols].rename(columns={'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'})
             st.dataframe(df_ll_display, use_container_width=True, hide_index=True)
-            st.download_button(f"📥 Download {sel_period} Pending List", convert_df_to_excel(df_ll_display, f"{sel_period}_Pending"), f"DiffCare_{sel_period}_Pending.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=f'dl_ll_{sel_period}')
         else:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 NEW ADDITION (MIDDLE): DYNAMIC COHORT MATRIX (UPGRADED FILTERS + TOGGLE)
+        # 🎯 DYNAMIC COHORT MATRIX 
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
@@ -1438,11 +1430,9 @@ with tab5:
         st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
         st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients dynamically based on their specific diagnosis month relative to the review month.</i></div>", unsafe_allow_html=True)
         
-        # 🎯 UPGRADED UI: Group By Toggle + All New Filters neatly arranged
         cm1, cm2, cm3 = st.columns(3)
         with cm1:
-            # 🟢 ADDED: UHC/PHI to the dropdown options
-            mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit", "UHC/PHI"], key="mat_view_mid", help="Switch between seeing rows by 7 Zones, all 23 TB Units, or Individual PHIs")
+            mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit", "UHC/PHI"], key="mat_view_mid")
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
             today_date = datetime.date.today()
@@ -1457,18 +1447,12 @@ with tab5:
 
         df_mat = df_dc_new.copy()
         
-        if mat_fac == "Public":
-            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
-        elif mat_fac == "Private":
-            df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
+        if mat_fac == "Public": df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PUBLIC', 'PHI'])]
+        elif mat_fac == "Private": df_mat = df_mat[df_mat['Facility_Type'].astype(str).str.upper().isin(['PRIVATE'])]
 
-        # 🎯 APPLY THE NEW MULTISELECT FILTERS
-        if mat_tu:
-            df_mat = df_mat[df_mat['TB Unit'].isin(mat_tu)]
-        if mat_case:
-            df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
-        if mat_site:
-            df_mat = df_mat[df_mat['Site_of_TBDisease'].isin(mat_site)]
+        if mat_tu: df_mat = df_mat[df_mat['TB Unit'].isin(mat_tu)]
+        if mat_case: df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
+        if mat_site: df_mat = df_mat[df_mat['Site_of_TBDisease'].isin(mat_site)]
 
         mat_periods = [
             ('Baseline', 'BASELINE', 'Elig_BASELINE', 1),
@@ -1480,11 +1464,9 @@ with tab5:
             ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
         ]
         
-        # 🟢 UPGRADED: DYNAMIC ROW GROUPING (Zone vs TB Unit vs UHC/PHI)
         if mat_view == "Zone":
             display_entities = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
             entity_label = 'ZONE'
-            
             def get_zone_mat(z):
                 raw_z = str(z).upper().replace("ZONE", "").strip()
                 if "SOUTH WEST" in raw_z: return "SOUTH WEST"
@@ -1495,17 +1477,12 @@ with tab5:
                 if "EAST" in raw_z: return "EAST"
                 if "NORTH" in raw_z: return "NORTH"
                 return "AMC"
-            
             df_mat['Entity_Col'] = df_mat['ZONE'].apply(get_zone_mat)
-            
         elif mat_view == "TB Unit":
-            # Display all TB Units
             display_entities = sorted([x for x in df_mat['TB Unit'].unique() if pd.notna(x) and str(x).strip() != ""])
             entity_label = 'TB Unit'
             df_mat['Entity_Col'] = df_mat['TB Unit'].astype(str).str.strip().str.upper()
-            
         else:
-            # 🟢 ADDED: Display all UHC/PHI 
             display_entities = sorted([x for x in df_mat['PHI'].unique() if pd.notna(x) and str(x).strip() != ""])
             entity_label = 'PHI'
             df_mat['Entity_Col'] = df_mat['PHI'].astype(str).str.strip().str.upper()
@@ -1520,7 +1497,6 @@ with tab5:
                 target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
                 
                 cohort = entity_df[pd.to_datetime(entity_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
-                
                 is_elig = cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
                 elig_cnt = is_elig.sum()
                 
@@ -1528,7 +1504,6 @@ with tab5:
                 not_comp = ~due.str.contains("COMPLETED", na=False)
                 is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
                 pend_cnt = is_pending.sum()
-                
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
                 
                 row[f'Ep_{label}'] = elig_cnt
@@ -1536,14 +1511,12 @@ with tab5:
                 row[f'% {label}'] = f"{pct}%"
             mat_rows.append(row)
             
-        # AMC Row (Always displays at the bottom)
         amc_row = {entity_label: 'AMC TOTAL'}
         for label, rx, elig_col, m_offset in mat_periods:
             target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
             target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
             
             amc_cohort = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
-            
             is_elig = amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
             elig_cnt = is_elig.sum()
             
@@ -1551,7 +1524,6 @@ with tab5:
             not_comp = ~due.str.contains("COMPLETED", na=False)
             is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
             pend_cnt = is_pending.sum()
-            
             pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
             
             amc_row[f'Ep_{label}'] = elig_cnt
@@ -1559,7 +1531,6 @@ with tab5:
             amc_row[f'% {label}'] = f"{pct}%"
             
         mat_rows.append(amc_row)
-        
         df_matrix_final = pd.DataFrame(mat_rows)
         
         rename_dict = {}
@@ -1570,17 +1541,15 @@ with tab5:
         def style_matrix(styler):
             styler.set_properties(**{'text-align': 'center'})
             styler.set_properties(subset=[entity_label], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
-            
             for label, _, _, _ in mat_periods:
                 col_name = f'% {label}'
                 def color_rule(val):
                     try:
                         v = float(val.replace('%', '').strip())
-                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' # Red
-                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;' # Yellow
-                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;' # Green
-                    except:
-                        return ''
+                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' 
+                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;'
+                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;'
+                    except: return ''
                 styler.map(color_rule, subset=[col_name])
             return styler
         
@@ -1589,6 +1558,7 @@ with tab5:
         # -------------------------------------------------------------
         # 🎯 🔄 DIFF CARE COMPARISON ENGINE (BOTTOM)
         # -------------------------------------------------------------
+        import io
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
         
@@ -1603,7 +1573,6 @@ with tab5:
                 df_dc_comp_old = df_dc_comp_old[df_dc_comp_old['ZONE'].isin(comp_zones)]
                 
         with cc2:
-            # 🎯 DEPENDENT FILTER
             tu_opts_comp = sorted([x for x in df_dc_comp_new['TB Unit'].unique() if pd.notna(x) and x!=""])
             comp_tus = st.multiselect("Filter TB Unit (Comparison)", tu_opts_comp, key='dc_comp_tu')
             if comp_tus:
@@ -1617,6 +1586,63 @@ with tab5:
 
         def parse_comp_date(dt_series):
             return pd.to_datetime(dt_series, format='%d-%m-%Y', errors='coerce').combine_first(pd.to_datetime(dt_series, errors='coerce'))
+
+        # 🟢 NEW EXCEL GENERATOR (Multi-Sheet Matrix)
+        def generate_diff_care_excel(df_comp):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_comp.to_excel(writer, sheet_name='DC_Comparison', index=False)
+                
+                workbook = writer.book
+                summary_sheet = workbook.add_worksheet('Comparison_Summary')
+                
+                title_fmt = workbook.add_format({'bold': True, 'bg_color': '#1f497d', 'font_color': 'white', 'align': 'center', 'font_size': 12, 'border': 1})
+                pers_fmt = workbook.add_format({'bold': True, 'bg_color': '#c0504d', 'font_color': 'white', 'align': 'center', 'border': 1})
+                new_fmt = workbook.add_format({'bold': True, 'bg_color': '#4f81bd', 'font_color': 'white', 'align': 'center', 'border': 1})
+                res_fmt = workbook.add_format({'bold': True, 'bg_color': '#9bbb59', 'font_color': 'white', 'align': 'center', 'border': 1})
+                hdr_fmt = workbook.add_format({'bold': True, 'bg_color': '#f2f2f2', 'border': 1, 'align': 'center'})
+                cell_fmt = workbook.add_format({'border': 1, 'align': 'center'})
+                zone_fmt = workbook.add_format({'border': 1, 'align': 'left'})
+                
+                summary_sheet.merge_range('A1:I2', 'DiffCare Comparison Summary - Zone-wise x Period-wise', title_fmt)
+                summary_sheet.set_column('A:A', 18)
+                summary_sheet.set_column('B:I', 13)
+                
+                periods = list(periods_map.keys())
+                zones = ['EAST', 'WEST', 'NORTH', 'SOUTH', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST', 'MAPPING NOT DONE']
+                
+                def write_table(start_row, title, status_str, title_format):
+                    summary_sheet.merge_range(start_row, 0, start_row, len(periods)+1, title, title_format)
+                    start_row += 1
+                    summary_sheet.write(start_row, 0, 'ZONE', hdr_fmt)
+                    for col_idx, p in enumerate(periods): summary_sheet.write(start_row, col_idx+1, p, hdr_fmt)
+                    summary_sheet.write(start_row, len(periods)+1, 'TOTAL', hdr_fmt)
+                    start_row += 1
+                    
+                    for z in zones:
+                        z_df = df_comp[df_comp['ZONE'] == z]
+                        summary_sheet.write(start_row, 0, z, zone_fmt)
+                        row_tot = 0
+                        for col_idx, p in enumerate(periods):
+                            count = (z_df[p] == status_str).sum() if p in z_df.columns else 0
+                            summary_sheet.write(start_row, col_idx+1, count, cell_fmt)
+                            row_tot += count
+                        summary_sheet.write(start_row, len(periods)+1, row_tot, cell_fmt)
+                        start_row += 1
+                        
+                    summary_sheet.write(start_row, 0, 'TOTAL', hdr_fmt)
+                    grand_tot = 0
+                    for col_idx, p in enumerate(periods):
+                        p_tot = (df_comp[p] == status_str).sum() if p in df_comp.columns else 0
+                        summary_sheet.write(start_row, col_idx+1, p_tot, hdr_fmt)
+                        grand_tot += p_tot
+                    summary_sheet.write(start_row, len(periods)+1, grand_tot, hdr_fmt)
+                    return start_row + 3
+                
+                r = write_table(3, 'TABLE 1: PERSISTENT — Zone-wise x Period-wise', '🟡 PERSISTENT', pers_fmt)
+                r = write_table(r, 'TABLE 2: NEW — Zone-wise x Period-wise', '🔴 NEW', new_fmt)
+                write_table(r, 'TABLE 3: RESOLVED — Zone-wise x Period-wise', '🟢 RESOLVED', res_fmt)
+            return output.getvalue()
 
         if run_comp:
             if len(comp_dates) != 2:
@@ -1691,7 +1717,10 @@ with tab5:
                         
                         st.success(f"✅ Comparison Generated Successfully for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}!")
                         st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
-                        st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_final_comp, "DC_Comparison"), f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
+                        
+                        # 🟢 MAGIC HAPPENS HERE: Triggering the Custom Multi-Sheet Excel Engine!
+                        excel_bytes = generate_diff_care_excel(df_final_comp)
+                        st.download_button("📥 Download Comparison Matrix & Summary", excel_bytes, f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
                         st.info(f"👍 No differences (🔴 NEW or 🟢 RESOLVED) found between Old and New data for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}.")
 
