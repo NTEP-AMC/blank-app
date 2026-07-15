@@ -1339,14 +1339,21 @@ with tab5:
             if df.empty: return pd.DataFrame()
             grp = df.groupby(group_col)
             total_pts = grp.size()
+            
             is_elig = df[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
             eligible_pts = df[is_elig].groupby(group_col).size()
+            
             due = df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
-            is_pending = is_elig & not_comp & due.str.contains(p_regex, na=False)
+            
+            # 🛡️ THE FIX: Trust the Due_Status column 100%. Removed `is_elig &` to stop double-filtering.
+            is_pending = not_comp & due.str.contains(p_regex, na=False)
             pending_pts = df[is_pending].groupby(group_col).size()
             
             summary = pd.DataFrame({'Total Patient': total_pts, 'Eligible': eligible_pts, 'Pending': pending_pts}).fillna(0).astype(int)
+            
+            # 🛡️ THE FIX: Ensure Eligible is never lower than Pending (stops negative Completed counts)
+            summary['Eligible'] = summary[['Eligible', 'Pending']].max(axis=1)
             summary['Completed'] = summary['Eligible'] - summary['Pending']
             
             total_patient = summary['Total Patient'].sum()
@@ -1407,10 +1414,11 @@ with tab5:
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
-        is_elig_ll = df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~df_dc[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+        
+        # 🛡️ THE FIX FOR LINE LIST: Trust Due_Status completely
         due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
         not_comp_ll = ~due_ll.str.contains("COMPLETED", na=False)
-        is_pending_ll = is_elig_ll & not_comp_ll & due_ll.str.contains(p_regex, na=False)
+        is_pending_ll = not_comp_ll & due_ll.str.contains(p_regex, na=False)
         
         df_ll = df_dc[is_pending_ll].copy()
         if not df_ll.empty:
@@ -1502,8 +1510,14 @@ with tab5:
                 
                 due = cohort['Due_Status'].fillna('').astype(str).str.upper()
                 not_comp = ~due.str.contains("COMPLETED", na=False)
-                is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+                
+                # 🛡️ THE FIX FOR MATRIX: Trust Due_Status completely
+                is_pending = not_comp & due.str.contains(rx, na=False)
                 pend_cnt = is_pending.sum()
+                
+                # Force Eligible to be >= Pending
+                elig_cnt = max(elig_cnt, pend_cnt)
+                
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
                 
                 row[f'Ep_{label}'] = elig_cnt
@@ -1522,8 +1536,14 @@ with tab5:
             
             due = amc_cohort['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
-            is_pending = is_elig & not_comp & due.str.contains(rx, na=False)
+            
+            # 🛡️ THE FIX FOR AMC MATRIX ROW: Trust Due_Status completely
+            is_pending = not_comp & due.str.contains(rx, na=False)
             pend_cnt = is_pending.sum()
+            
+            # Force Eligible to be >= Pending
+            elig_cnt = max(elig_cnt, pend_cnt)
+            
             pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
             
             amc_row[f'Ep_{label}'] = elig_cnt
@@ -1587,7 +1607,6 @@ with tab5:
         def parse_comp_date(dt_series):
             return pd.to_datetime(dt_series, format='%d-%m-%Y', errors='coerce').combine_first(pd.to_datetime(dt_series, errors='coerce'))
 
-        # 🟢 NEW EXCEL GENERATOR (Multi-Sheet Matrix)
         def generate_diff_care_excel(df_comp):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
