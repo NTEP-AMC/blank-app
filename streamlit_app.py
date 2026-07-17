@@ -1346,7 +1346,6 @@ with tab5:
             due = df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
-            # 🛡️ TOP DASHBOARD FIX: Trust Due_Status completely (No double-filtering)
             is_pending = not_comp & due.str.contains(p_regex, na=False)
             pending_pts = df[is_pending].groupby(group_col).size()
             
@@ -1427,22 +1426,27 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 DYNAMIC COHORT MATRIX (Upgraded to Strict 28-Day Manual Calculation)
+        # 🎯 DYNAMIC COHORT MATRIX (With 14 vs 28 Day Toggle & IST Fix)
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
+        import pytz
         
         st.markdown("<br><hr style='border: 1.5px solid #2C3E50;'>", unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Strict 28-Day Intervals)</h4>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients manually based on strict 28-day intervals from treatment initiation relative to the review month.</i></div>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Intervals)</h4>", unsafe_allow_html=True)
         
+        # 🟢 NEW: TOGGLE BUTTON FOR DAYS LOGIC
+        interval_choice = st.radio("⏱️ Select Pending Days Interval Logic:", ["14-Day Cycle (Google Sheet Standard: 14, 42, 70...)", "28-Day Cycle (Strict Matrix: 28, 56, 84...)"], horizontal=True)
+
         cm1, cm2, cm3 = st.columns(3)
         with cm1:
             mat_view = st.selectbox("📊 View Matrix By", ["Zone", "TB Unit", "UHC/PHI"], key="mat_view_mid")
             mat_fac = st.selectbox("🏥 Facility Type", ["Public", "Private", "All"], key="mat_fac_mid")
         with cm2:
-            today_date = datetime.date.today()
-            ref_date = st.date_input("📅 Select Current Review Month", value=today_date, key="mat_ref_dt")
+            # 🟢 FIX: Forcing server to use accurate IST Time
+            india_tz = pytz.timezone('Asia/Kolkata')
+            ist_today = datetime.datetime.now(india_tz).date()
+            ref_date = st.date_input("📅 Select Current Review Month", value=ist_today, key="mat_ref_dt")
             case_opts = sorted([x for x in df_dc_new['Type_of_Case'].unique() if pd.notna(x) and x!=""])
             mat_case = st.multiselect("Type of Case", case_opts, key="mat_case_mid")
         with cm3:
@@ -1460,16 +1464,27 @@ with tab5:
         if mat_case: df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
         if mat_site: df_mat = df_mat[df_mat['Site_of_TBDisease'].isin(mat_site)]
 
-        # 🟢 THE MANUAL MATRIX INTERCEPTOR: (Label, Regex, Elig_Col, Month_Offset, Required_Days)
-        mat_periods = [
-            ('Baseline', 'BASELINE', 'Elig_BASELINE', 1, 0),
-            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2, 28),
-            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3, 56),
-            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4, 84),
-            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5, 112),
-            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6, 140),
-            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7, 168)
-        ]
+        # 🟢 DYNAMIC PERIODS BASED ON TOGGLE
+        if "14-Day" in interval_choice:
+            mat_periods = [
+                ('Baseline', 'BASELINE', 'Elig_BASELINE', 1, 0),
+                ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2, 14),
+                ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3, 42),
+                ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4, 70),
+                ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5, 98),
+                ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6, 126),
+                ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7, 154)
+            ]
+        else:
+            mat_periods = [
+                ('Baseline', 'BASELINE', 'Elig_BASELINE', 1, 0),
+                ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2, 28),
+                ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3, 56),
+                ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4, 84),
+                ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5, 112),
+                ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6, 140),
+                ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7, 168)
+            ]
         
         if mat_view == "Zone":
             display_entities = ['SOUTH', 'NORTH', 'EAST', 'WEST', 'CENTRAL', 'NORTH WEST', 'SOUTH WEST']
@@ -1505,19 +1520,16 @@ with tab5:
                 
                 cohort = entity_df[pd.to_datetime(entity_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
                 
-                # 🟢 DYNAMIC MANUAL DAY CALCULATOR (Today - Initiation Date)
+                # Use IST for accurate calculation
                 dates_to_use = pd.to_datetime(cohort['Initiation Date'], errors='coerce').combine_first(pd.to_datetime(cohort['Diagnosis Date'], errors='coerce')).dt.date
-                days_on_tx = dates_to_use.apply(lambda x: (today_date - x).days if pd.notnull(x) else 0)
+                days_on_tx = dates_to_use.apply(lambda x: (ist_today - x).days if pd.notnull(x) else 0)
                 
-                # Base Eligibility handles dead/shifted patients from Google Sheet
                 base_elig = cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
                 
-                # Raw Pendency from Google Sheet (which triggers at 14 days)
                 due = cohort['Due_Status'].fillna('').astype(str).str.upper()
                 not_comp = ~due.str.contains("COMPLETED", na=False)
                 raw_is_pending = not_comp & due.str.contains(rx, na=False)
                 
-                # 🟢 STRICT MATRIX OVERRIDE: Forces 28-day logic ONLY for the Matrix
                 if label == 'Baseline':
                     is_pending = raw_is_pending
                     is_elig = base_elig | is_pending
@@ -1528,7 +1540,7 @@ with tab5:
                 elig_cnt = is_elig.sum()
                 pend_cnt = is_pending.sum()
                 
-                elig_cnt = max(elig_cnt, pend_cnt) # Safety net
+                elig_cnt = max(elig_cnt, pend_cnt) 
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
                 
                 row[f'Ep_{label}'] = elig_cnt
@@ -1543,9 +1555,8 @@ with tab5:
             
             amc_cohort = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
             
-            # 🟢 DYNAMIC MANUAL DAY CALCULATOR (AMC ROW)
             dates_to_use = pd.to_datetime(amc_cohort['Initiation Date'], errors='coerce').combine_first(pd.to_datetime(amc_cohort['Diagnosis Date'], errors='coerce')).dt.date
-            days_on_tx = dates_to_use.apply(lambda x: (today_date - x).days if pd.notnull(x) else 0)
+            days_on_tx = dates_to_use.apply(lambda x: (ist_today - x).days if pd.notnull(x) else 0)
             
             base_elig = amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
             
