@@ -1346,13 +1346,12 @@ with tab5:
             due = df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
-            # 🛡️ THE FIX: Trust the Due_Status column 100%. Removed `is_elig &` to stop double-filtering.
+            # 🛡️ TOP DASHBOARD FIX: Trust Due_Status completely (No double-filtering)
             is_pending = not_comp & due.str.contains(p_regex, na=False)
             pending_pts = df[is_pending].groupby(group_col).size()
             
             summary = pd.DataFrame({'Total Patient': total_pts, 'Eligible': eligible_pts, 'Pending': pending_pts}).fillna(0).astype(int)
             
-            # 🛡️ THE FIX: Ensure Eligible is never lower than Pending (stops negative Completed counts)
             summary['Eligible'] = summary[['Eligible', 'Pending']].max(axis=1)
             summary['Completed'] = summary['Eligible'] - summary['Pending']
             
@@ -1415,7 +1414,6 @@ with tab5:
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         
-        # 🛡️ THE FIX FOR LINE LIST: Trust Due_Status completely
         due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
         not_comp_ll = ~due_ll.str.contains("COMPLETED", na=False)
         is_pending_ll = not_comp_ll & due_ll.str.contains(p_regex, na=False)
@@ -1429,14 +1427,14 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 DYNAMIC COHORT MATRIX 
+        # 🎯 DYNAMIC COHORT MATRIX (Upgraded to Strict 28-Day Manual Calculation)
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
         
         st.markdown("<br><hr style='border: 1.5px solid #2C3E50;'>", unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients dynamically based on their specific diagnosis month relative to the review month.</i></div>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Strict 28-Day Intervals)</h4>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 13px; color: #555; margin-bottom: 10px;'><i>Calculates pending patients manually based on strict 28-day intervals from treatment initiation relative to the review month.</i></div>", unsafe_allow_html=True)
         
         cm1, cm2, cm3 = st.columns(3)
         with cm1:
@@ -1462,14 +1460,15 @@ with tab5:
         if mat_case: df_mat = df_mat[df_mat['Type_of_Case'].isin(mat_case)]
         if mat_site: df_mat = df_mat[df_mat['Site_of_TBDisease'].isin(mat_site)]
 
+        # 🟢 THE MANUAL MATRIX INTERCEPTOR: (Label, Regex, Elig_Col, Month_Offset, Required_Days)
         mat_periods = [
-            ('Baseline', 'BASELINE', 'Elig_BASELINE', 1),
-            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2),
-            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3),
-            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4),
-            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5),
-            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6),
-            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7)
+            ('Baseline', 'BASELINE', 'Elig_BASELINE', 1, 0),
+            ('1 MONTH', '1ST MONTH|1 MONTH', 'Elig_1ST_MONTH', 2, 28),
+            ('2 MONTH', '2ND MONTH|2 MONTH', 'Elig_2ND_MONTH', 3, 56),
+            ('3 MONTH', '3RD MONTH|3 MONTH', 'Elig_3RD_MONTH', 4, 84),
+            ('4 MONTH', '4TH MONTH|4 MONTH', 'Elig_4TH_MONTH', 5, 112),
+            ('5 MONTH', '5TH MONTH|5 MONTH', 'Elig_5TH_MONTH', 6, 140),
+            ('6 MONTH', '6TH MONTH|6 MONTH', 'Elig_6TH_MONTH', 7, 168)
         ]
         
         if mat_view == "Zone":
@@ -1500,24 +1499,36 @@ with tab5:
             entity_df = df_mat[df_mat['Entity_Col'] == entity]
             row = {entity_label: entity}
             
-            for label, rx, elig_col, m_offset in mat_periods:
+            for label, rx, elig_col, m_offset, req_days in mat_periods:
                 target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
                 target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
                 
                 cohort = entity_df[pd.to_datetime(entity_df.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
-                is_elig = cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
-                elig_cnt = is_elig.sum()
                 
+                # 🟢 DYNAMIC MANUAL DAY CALCULATOR (Today - Initiation Date)
+                dates_to_use = pd.to_datetime(cohort['Initiation Date'], errors='coerce').combine_first(pd.to_datetime(cohort['Diagnosis Date'], errors='coerce')).dt.date
+                days_on_tx = dates_to_use.apply(lambda x: (today_date - x).days if pd.notnull(x) else 0)
+                
+                # Base Eligibility handles dead/shifted patients from Google Sheet
+                base_elig = cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
+                
+                # Raw Pendency from Google Sheet (which triggers at 14 days)
                 due = cohort['Due_Status'].fillna('').astype(str).str.upper()
                 not_comp = ~due.str.contains("COMPLETED", na=False)
+                raw_is_pending = not_comp & due.str.contains(rx, na=False)
                 
-                # 🛡️ THE FIX FOR MATRIX: Trust Due_Status completely
-                is_pending = not_comp & due.str.contains(rx, na=False)
+                # 🟢 STRICT MATRIX OVERRIDE: Forces 28-day logic ONLY for the Matrix
+                if label == 'Baseline':
+                    is_pending = raw_is_pending
+                    is_elig = base_elig | is_pending
+                else:
+                    is_pending = raw_is_pending & (days_on_tx >= req_days)
+                    is_elig = (base_elig | raw_is_pending) & (days_on_tx >= req_days)
+                
+                elig_cnt = is_elig.sum()
                 pend_cnt = is_pending.sum()
                 
-                # Force Eligible to be >= Pending
-                elig_cnt = max(elig_cnt, pend_cnt)
-                
+                elig_cnt = max(elig_cnt, pend_cnt) # Safety net
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
                 
                 row[f'Ep_{label}'] = elig_cnt
@@ -1526,24 +1537,33 @@ with tab5:
             mat_rows.append(row)
             
         amc_row = {entity_label: 'AMC TOTAL'}
-        for label, rx, elig_col, m_offset in mat_periods:
+        for label, rx, elig_col, m_offset, req_days in mat_periods:
             target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
             target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
             
             amc_cohort = df_mat[pd.to_datetime(df_mat.get('Diagnosis Date'), errors='coerce').dt.date.between(target_start, target_end)]
-            is_elig = amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
-            elig_cnt = is_elig.sum()
+            
+            # 🟢 DYNAMIC MANUAL DAY CALCULATOR (AMC ROW)
+            dates_to_use = pd.to_datetime(amc_cohort['Initiation Date'], errors='coerce').combine_first(pd.to_datetime(amc_cohort['Diagnosis Date'], errors='coerce')).dt.date
+            days_on_tx = dates_to_use.apply(lambda x: (today_date - x).days if pd.notnull(x) else 0)
+            
+            base_elig = amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("ELIG") & ~amc_cohort[elig_col].fillna('').astype(str).str.upper().str.contains("NOT")
             
             due = amc_cohort['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
+            raw_is_pending = not_comp & due.str.contains(rx, na=False)
             
-            # 🛡️ THE FIX FOR AMC MATRIX ROW: Trust Due_Status completely
-            is_pending = not_comp & due.str.contains(rx, na=False)
+            if label == 'Baseline':
+                is_pending = raw_is_pending
+                is_elig = base_elig | is_pending
+            else:
+                is_pending = raw_is_pending & (days_on_tx >= req_days)
+                is_elig = (base_elig | raw_is_pending) & (days_on_tx >= req_days)
+            
+            elig_cnt = is_elig.sum()
             pend_cnt = is_pending.sum()
             
-            # Force Eligible to be >= Pending
             elig_cnt = max(elig_cnt, pend_cnt)
-            
             pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
             
             amc_row[f'Ep_{label}'] = elig_cnt
@@ -1554,14 +1574,14 @@ with tab5:
         df_matrix_final = pd.DataFrame(mat_rows)
         
         rename_dict = {}
-        for i, (label, _, _, _) in enumerate(mat_periods):
+        for i, (label, _, _, _, _) in enumerate(mat_periods):
             rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
         df_matrix_final = df_matrix_final.rename(columns=rename_dict)
         
         def style_matrix(styler):
             styler.set_properties(**{'text-align': 'center'})
             styler.set_properties(subset=[entity_label], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
-            for label, _, _, _ in mat_periods:
+            for label, _, _, _, _ in mat_periods:
                 col_name = f'% {label}'
                 def color_rule(val):
                     try:
@@ -1737,7 +1757,6 @@ with tab5:
                         st.success(f"✅ Comparison Generated Successfully for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}!")
                         st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
                         
-                        # 🟢 MAGIC HAPPENS HERE: Triggering the Custom Multi-Sheet Excel Engine!
                         excel_bytes = generate_diff_care_excel(df_final_comp)
                         st.download_button("📥 Download Comparison Matrix & Summary", excel_bytes, f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
