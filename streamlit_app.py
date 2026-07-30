@@ -1374,42 +1374,48 @@ with tab5:
         
         main_zones = ['CENTRAL', 'EAST', 'NORTH', 'NORTH WEST', 'SOUTH', 'SOUTH WEST', 'WEST']
         
-        if st.session_state.role == "ADMIN" and ('s6_z' not in locals() or len(s6_z) == 0):
-            st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
-            cols7 = st.columns(7)
-            for i, z in enumerate(main_zones):
-                z_row = summary_df[summary_df[g_col] == z]
-                pct_val = 0
-                if not z_row.empty: pct_val = z_row['% Completed'].values[0]
-                
-                if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" 
-                elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" 
-                else: bg_c, t_c = "#f8d7da", "#721c24" 
-                
-                card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 6px 1px; margin-bottom: 10px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 16px; font-weight: 900; margin-top: 2px;">{pct_val}%</div></div>"""
-                with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
+        # 🛡️ THE FIX: Safety guard to prevent KeyError when filters result in zero patients!
+        if not summary_df.empty and '% Completed' in summary_df.columns:
+            if st.session_state.role == "ADMIN" and ('s6_z' not in locals() or len(s6_z) == 0):
+                st.markdown(f"##### 🎯 {sel_period} - Zone Wise % Completed")
+                cols7 = st.columns(7)
+                for i, z in enumerate(main_zones):
+                    z_row = summary_df[summary_df[g_col] == z]
+                    pct_val = 0
+                    if not z_row.empty: pct_val = z_row['% Completed'].values[0]
+                    
+                    if pct_val >= 75: bg_c, t_c = "#d4edda", "#155724" 
+                    elif pct_val >= 50: bg_c, t_c = "#fff3cd", "#856404" 
+                    else: bg_c, t_c = "#f8d7da", "#721c24" 
+                    
+                    card_html = f"""<div style="background-color: {bg_c}; color: {t_c}; border-radius: 5px; padding: 6px 1px; margin-bottom: 10px; text-align: center; border: 1px solid rgba(0,0,0,0.1);"><div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">{z}</div><div style="font-size: 16px; font-weight: 900; margin-top: 2px;">{pct_val}%</div></div>"""
+                    with cols7[i]: st.markdown(card_html, unsafe_allow_html=True)
 
-        st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
+            st.markdown(f"##### 📊 {sel_period} Summary ({g_col} Wise)")
 
-        def color_table(df):
-            style_df = pd.DataFrame('', index=df.index, columns=df.columns)
-            for i in df.index:
-                zone_val = df.at[i, g_col]
-                if zone_val in main_zones:
-                    try:
-                        val_str = str(df.at[i, '% Completed']).replace('%', '')
-                        val = float(val_str)
-                        if val >= 75: style_df.at[i, '% Completed'] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
-                        elif val >= 50: style_df.at[i, '% Completed'] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
-                        else: style_df.at[i, '% Completed'] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-                    except: pass
-            return style_df
+            def color_table(df):
+                style_df = pd.DataFrame('', index=df.index, columns=df.columns)
+                for i in df.index:
+                    zone_val = df.at[i, g_col]
+                    if zone_val in main_zones:
+                        try:
+                            val_str = str(df.at[i, '% Completed']).replace('%', '')
+                            val = float(val_str)
+                            if val >= 75: style_df.at[i, '% Completed'] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+                            elif val >= 50: style_df.at[i, '% Completed'] = 'background-color: #fff3cd; color: #856404; font-weight: bold;'
+                            else: style_df.at[i, '% Completed'] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                        except: pass
+                return style_df
 
-        sum_disp = summary_df.copy()
-        sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
-        
-        styled_df = sum_disp.style.apply(color_table, axis=None)
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            sum_disp = summary_df.copy()
+            sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
+            
+            styled_df = sum_disp.style.apply(color_table, axis=None)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+        else:
+            # 🟢 Elegant fallback instead of crashing
+            st.info(f"👍 No summary data available for {sel_period} with the current filters applied.")
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         
