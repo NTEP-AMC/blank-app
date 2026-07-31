@@ -7,6 +7,11 @@ import re
 from datetime import datetime, date, timedelta
 import pytz
 
+# 🤫 1. SILENCE THE YELLOW WARNINGS (Keeps your console logs 100% clean!)
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 def img_to_b64(img_path):
@@ -40,7 +45,7 @@ except:
     st.stop()
 
 # ==========================================
-# 🔐 NEW ENTERPRISE LOGIN PAGE DESIGN (BUG FIXED)
+# 🔐 ENTERPRISE LOGIN PAGE
 # ==========================================
 if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
@@ -170,28 +175,31 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-@st.cache_data(ttl=3600)
+
+# 🚀 2. THE SOLID SPEED SOLUTION: Master Caching & low_memory=False
+@st.cache_data(ttl=900, show_spinner="⚡ ડેટા લોડ થઈ રહ્યો છે... કૃપા કરીને રાહ જુઓ (Loading Main Data...)")
 def load_all_data():
     try:
-        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
+        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str}, low_memory=False)
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
-        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
+        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str}, low_memory=False)
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
-        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
-        t_df = pd.read_csv("Update_Timestamps.csv")
+        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str}, low_memory=False)
+        t_df = pd.read_csv("Update_Timestamps.csv", low_memory=False)
         try:
-            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str})
-            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str})
+            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str}, low_memory=False)
+            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str}, low_memory=False)
         except:
             p_today, p_yest = pd.DataFrame(), pd.DataFrame()
             
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-@st.cache_data(ttl=300) 
+# 🚀 CACHED DIFFERENTIATED CARE (Preserves your exact URL fetching logic)
+@st.cache_data(ttl=900, show_spinner="⚡ Differentiated Care ડેટા ફેચ થઈ રહ્યો છે...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
@@ -357,6 +365,7 @@ if not df_time.empty:
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab4, tab5, tab6, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🚨 Adverse Outcomes", "📱 Live Field Data", "📞 Post Follow Up"])
+
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
