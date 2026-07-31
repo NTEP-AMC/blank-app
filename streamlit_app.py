@@ -7,7 +7,7 @@ import re
 from datetime import datetime, date, timedelta
 import pytz
 
-# 🤫 1. SILENCE THE YELLOW WARNINGS (Keeps your console logs 100% clean!)
+# 🤫 SILENCE THE YELLOW WARNINGS (Keeps your console logs 100% clean)
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -118,7 +118,7 @@ if not st.session_state.auth:
 # ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
-# 🛡️ THE SAFETY NET: Prevents AttributeError if server memory wipes session data
+# 🛡️ THE SAFETY NET
 if 'role' not in st.session_state or 'target' not in st.session_state:
     st.session_state.auth = False
     st.warning("⚠️ Session expired due to inactivity or server refresh. Please log in again.")
@@ -176,7 +176,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
     return output.getvalue()
 
 
-# 🚀 2. THE SOLID SPEED SOLUTION: Master Caching & low_memory=False
+# 🚀 THE SOLID SPEED SOLUTION: Master Caching (Professional Loading Text)
 @st.cache_data(ttl=900, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
 def load_all_data():
     try:
@@ -198,8 +198,8 @@ def load_all_data():
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🚀 CACHED DIFFERENTIATED CARE (Preserves your exact URL fetching logic)
-@st.cache_data(ttl=900, show_spinner="🔄 Synchronizing reports and external tracking sheets...") 
+# 🚀 CACHED DIFFERENTIATED CARE (Professional Loading Text)
+@st.cache_data(ttl=900, show_spinner="🔄 Synchronizing real-time field reports and external tracking sheets...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
@@ -298,6 +298,7 @@ def get_live_dc():
     except:
         return pd.DataFrame(), pd.DataFrame()
 
+# Load everything cleanly into variables
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
@@ -334,6 +335,15 @@ df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.sessi
 df_pres_t = filter_by_role(df_pres_t_raw.copy(), st.session_state.role, st.session_state.target)
 df_pres_y = filter_by_role(df_pres_y_raw.copy(), st.session_state.role, st.session_state.target)
 
+# ==============================================================================
+# 🛠️ THE BEST FIX FOR TAB 5 ERROR (Defining master_cols globally)
+# ==============================================================================
+if not df_dc_new.empty:
+    master_cols = df_dc_new.columns.tolist()
+else:
+    master_cols = []
+# ==============================================================================
+
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
 
@@ -365,7 +375,6 @@ if not df_time.empty:
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
 tab1, tab2, tab4, tab5, tab6, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🚨 Adverse Outcomes", "📱 Live Field Data", "📞 Post Follow Up"])
-
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
