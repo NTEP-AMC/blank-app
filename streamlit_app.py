@@ -177,7 +177,7 @@ def convert_df_to_excel(df, sheet_name="Data"):
 
 
 # 🚀 2. THE SOLID SPEED SOLUTION: Master Caching & low_memory=False
-@st.cache_data(ttl=900, show_spinner="⚡ ડેટા લોડ થઈ રહ્યો છે... કૃપા કરીને રાહ જુઓ (Loading Main Data...)")
+@st.cache_data(ttl=900, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
 def load_all_data():
     try:
         m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str}, low_memory=False)
@@ -199,7 +199,7 @@ def load_all_data():
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # 🚀 CACHED DIFFERENTIATED CARE (Preserves your exact URL fetching logic)
-@st.cache_data(ttl=900, show_spinner="⚡ Differentiated Care ડેટા ફેચ થઈ રહ્યો છે...") 
+@st.cache_data(ttl=900, show_spinner="🔄 Synchronizing reports and external tracking sheets...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
