@@ -663,6 +663,45 @@ with tab4:
             if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
             else: color_target = p1_name
 
+    # 🛡️ BULLETPROOF DATE FINDER (Used by both Corporate & NAAT Decks)
+    def find_date_columns(df_raw, date_list):
+        import re
+        target_patterns = set()
+        for d in date_list:
+            day, day0 = str(d.day), f"{d.day:02d}"
+            mon, mon0 = str(d.month), f"{d.month:02d}"
+            yr = str(d.year)
+            b, B = d.strftime('%b').upper(), d.strftime('%B').upper()
+            target_patterns.update([
+                f"{b}{day}{yr}", f"{b}{day0}{yr}", f"{B}{day}{yr}", f"{B}{day0}{yr}", 
+                f"{day}{b}{yr}", f"{day0}{b}{yr}", f"{day}{mon}{yr}", f"{day0}{mon0}{yr}",
+                f"{mon}{day}{yr}", f"{mon0}{day0}{yr}", f"{yr}{mon0}{day0}", f"{yr}{mon}{day}",
+                f"{day}{mon0}{yr}", f"{day0}{mon}{yr}"
+            ])
+        
+        for i in range(min(10, len(df_raw))): 
+            row_raw = df_raw.iloc[i].fillna("").astype(str)
+            matched = []
+            for idx, cell_val in enumerate(row_raw):
+                val_clean = str(cell_val).strip()
+                if not val_clean or val_clean.lower() == 'nan': continue
+                
+                try:
+                    if pd.to_datetime(val_clean, dayfirst=False).date() in date_list:
+                        matched.append(idx); continue
+                except: pass
+                try:
+                    if pd.to_datetime(val_clean, dayfirst=True).date() in date_list:
+                        matched.append(idx); continue
+                except: pass
+                
+                val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
+                if val_stripped in target_patterns:
+                    matched.append(idx)
+                    
+            if matched: return i, list(set(matched))
+        return -1, []
+
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
         if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date'), errors='coerce').dt.date.between(diag[0], diag[1])
@@ -861,9 +900,11 @@ with tab4:
                             p.font.size = Pt(font_size)
                             if j > 1: p.alignment = PP_ALIGN.CENTER
 
-            # 🛡️ THE FIX: Advanced numerical extractor that ignores formulas and symbols
+            # 🛡️ THE FIX: Smart extraction that ignores percentages like (55.9%)
             def extract_num(val):
-                nums = re.findall(r'\d+', str(val))
+                if pd.isna(val) or str(val).lower() == 'nan': return 0
+                clean_str = str(val).split('(')[0].strip()
+                nums = re.findall(r'\d+', clean_str)
                 return int(nums[0]) if nums else 0
 
             def get_multi_color(pct):
@@ -901,47 +942,17 @@ with tab4:
             
             for url in zone_urls:
                 try:
-                    df_sheet1 = pd.read_csv(url, header=None, on_bad_lines='skip')
-                    if len(df_sheet1.columns) < 5: continue # Security Check: Skips HTML login pages if sheet is private
-                        
-                    h_idx1 = -1
-                    col_indices1 = []
-                    
-                    for i in range(5): 
-                        row_raw = df_sheet1.iloc[i].fillna("").astype(str)
-                        matched = []
-                        for idx, cell_val in enumerate(row_raw):
-                            val_clean = str(cell_val).strip()
-                            if not val_clean: continue
+                    # names=list(range(150)) prevents Pandas from dropping columns due to merged titles!
+                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
-                            # Method A: Direct Datetime Parsing
-                            p_date = pd.to_datetime(val_clean, errors='coerce')
-                            if pd.notna(p_date) and p_date.date() in date_list:
-                                matched.append(idx); continue
-                                
-                            # Method B: Aggressive Unicode Stripper Match
-                            val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
-                            for d in date_list:
-                                if val_stripped in [
-                                    f"{d.strftime('%b').upper()}{d.day}{d.year}",
-                                    f"{d.strftime('%b').upper()}{d.day:02d}{d.year}"
-                                ]:
-                                    matched.append(idx); break
-                                    
-                        if matched:
-                            h_idx1 = i; col_indices1 = matched; break
-                            
-                    if col_indices1:
+                    if h_idx1 != -1 and col_indices1:
                         for row_idx in range(h_idx1 + 1, len(df_sheet1)):
                             z_name = re.sub(r'\s+', ' ', str(df_sheet1.iloc[row_idx, 0])).strip().title()
                             if z_name in zone_achievements:
                                 ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
                                 zone_achievements[z_name] += ach_total
                 except Exception as e: continue
-
-            # 🚨 NEW SECURITY ALERT: If it STILL equals zero, tell the user exactly why!
-            if sum(zone_achievements.values()) == 0:
-                return None, "⚠️ DATA FETCH BLOCKED (All values read as 0) \n\n1. Ensure the selected dates exist in the sheets.\n2. 🔐 CRITICAL: Ensure the August & July Google Sheets are set to 'Anyone with the link can view'. If they are restricted to internal accounts only, the dashboard cannot download them!"
 
             # Build Zone Table
             res1 = []
@@ -984,35 +995,10 @@ with tab4:
 
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None, on_bad_lines='skip')
-                    if len(df_fac.columns) < 5: continue
-                        
-                    h_idx2 = -1
-                    col_indices_fac = []
-                    
-                    for i in range(5): 
-                        row_raw = df_fac.iloc[i].fillna("").astype(str)
-                        matched = []
-                        for idx, cell_val in enumerate(row_raw):
-                            val_clean = str(cell_val).strip()
-                            if not val_clean: continue
+                    df_fac = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
-                            p_date = pd.to_datetime(val_clean, errors='coerce')
-                            if pd.notna(p_date) and p_date.date() in date_list:
-                                matched.append(idx); continue
-                                
-                            val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
-                            for d in date_list:
-                                if val_stripped in [
-                                    f"{d.strftime('%b').upper()}{d.day}{d.year}",
-                                    f"{d.strftime('%b').upper()}{d.day:02d}{d.year}"
-                                ]:
-                                    matched.append(idx); break
-                                    
-                        if matched:
-                            h_idx2 = i; col_indices_fac = matched; break
-
-                    if col_indices_fac:
+                    if h_idx2 != -1 and col_indices_fac:
                         for row_idx in range(h_idx2 + 1, len(df_fac)):
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
@@ -1181,7 +1167,7 @@ with tab4:
                             if j > 1: p.alignment = PP_ALIGN.CENTER
             
             if len(selected_dates) == 2:
-                date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
+                date_list = [d.date() for d in pd.date_range(start=selected_dates[0], end=selected_dates[1])]
             else: return None, "⚠️ Please select a start and end date."
 
             naat_urls = {
@@ -1202,37 +1188,23 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    df_naat = pd.read_csv(naat_urls[target_month], header=None)
-                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
-                    
-                    date_row_raw = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
-                    header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
+                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx, match_indices = find_date_columns(df_naat, m_dates)
                     
                     tested_cols = []
-                    for d in m_dates:
-                        match_indices = []
-                        for i, val in enumerate(date_row_raw):
-                            val_clean = str(val).strip()
-                            
-                            p_date = pd.to_datetime(val_clean, errors='coerce')
-                            if pd.notna(p_date) and p_date.date() == d.date():
-                                match_indices.append(i); continue
-                                
-                            val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
-                            if val_stripped in [
-                                f"{d.strftime('%b').upper()}{d.day}{d.year}",
-                                f"{d.strftime('%b').upper()}{d.day:02d}{d.year}"
-                            ]:
-                                match_indices.append(i)
-                                
+                    if h_idx != -1 and match_indices:
+                        header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
                         for idx in match_indices:
-                            if "TESTED" in header_row[idx]:
-                                tested_cols.append(idx); break
-                    
+                            for offset in range(4): # Because of merged cells, search adjacent columns for 'TESTED'
+                                check_idx = idx + offset
+                                if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
+                                    tested_cols.append(check_idx)
+                                    break
+                                    
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    df_valid = df_naat.iloc[2:].copy()
+                    df_valid = df_naat.iloc[h_idx + 2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
                     df_valid = df_valid[~mask_tot]
                     
