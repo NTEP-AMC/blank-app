@@ -837,7 +837,8 @@ with tab4:
         return out_io.getvalue(), "Success"
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("✨ Generate Custom PPT ✨", use_container_width=True):
+    # 🟢 FIXED BUTTON
+    if st.button("✨ Generate Custom PPT ✨", width="stretch"):
         with st.spinner("Generating beautiful Enterprise PPT slides... Please wait..."):
             ppt_bytes, status = generate_smart_ppt(df_master, sel_report)
             if ppt_bytes:
@@ -863,7 +864,8 @@ with tab4:
         with tc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            btn_generate_target = st.button("✨ Generate Full Deck ✨", use_container_width=True)
+            # 🟢 FIXED BUTTON
+            btn_generate_target = st.button("✨ Generate Full Deck ✨", width="stretch")
 
     def generate_corporate_target_ppt(selected_dates, w_days):
         try:
@@ -900,7 +902,6 @@ with tab4:
                             p.font.size = Pt(font_size)
                             if j > 1: p.alignment = PP_ALIGN.CENTER
 
-            # 🛡️ THE FIX: Smart extraction that ignores percentages like (55.9%)
             def extract_num(val):
                 if pd.isna(val) or str(val).lower() == 'nan': return 0
                 clean_str = str(val).split('(')[0].strip()
@@ -922,17 +923,17 @@ with tab4:
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
             zone_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835",  # AUGUST ZONE
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1989403449", # JULY ZONE
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1902029689", # JUNE ZONE
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"   # MAY ZONE
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835",  
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1989403449", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1902029689", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"   
             ]
             
             fac_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0",          # AUGUST FACILITY
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", # JULY FACILITY
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", # JUNE FACILITY
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  # MAY FACILITY
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0",          
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  
             ]
 
             # ----------------------------------------------------
@@ -942,7 +943,6 @@ with tab4:
             
             for url in zone_urls:
                 try:
-                    # names=list(range(150)) prevents Pandas from dropping columns due to merged titles!
                     df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
                     h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
@@ -1129,7 +1129,8 @@ with tab4:
         with nc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            btn_generate_naat = st.button("✨ Generate NAAT PPT ✨", use_container_width=True)
+            # 🟢 FIXED BUTTON
+            btn_generate_naat = st.button("✨ Generate NAAT PPT ✨", width="stretch")
 
     def generate_naat_ppt(selected_dates, w_days):
         try:
@@ -1171,9 +1172,9 @@ with tab4:
             else: return None, "⚠️ Please select a start and end date."
 
             naat_urls = {
-                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", # JULY
-                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
-                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
+                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", 
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", 
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  
             }
             
             site_totals = {}
@@ -1195,7 +1196,7 @@ with tab4:
                     if h_idx != -1 and match_indices:
                         header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
                         for idx in match_indices:
-                            for offset in range(4): # Because of merged cells, search adjacent columns for 'TESTED'
+                            for offset in range(4):
                                 check_idx = idx + offset
                                 if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
                                     tested_cols.append(check_idx)
