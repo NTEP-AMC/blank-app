@@ -2640,6 +2640,12 @@ with tab10:
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
+        "AUGUST 2026": {
+            "6M": {"name": "Feb 26 - 6th month PTFU", "gid": "1698354779"},
+            "12M": {"name": "Aug 25 - 12 month PTFU", "gid": "595580210"},
+            "18M": {"name": "Feb 25 - 18 month PTFU", "gid": "358378892"},
+            "24M": {"name": "Aug 24 - 24 month PTFU", "gid": "304085111"}
+        },
         "JULY 2026": {
             "6M": {"name": "Jan 26 - 6th month PTFU", "gid": "1211167936"},
             "12M": {"name": "Jul 25 - 12 month PTFU", "gid": "1485758275"},
