@@ -96,7 +96,8 @@ if not st.session_state.auth:
             uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
             pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
             
-            if st.button("Sign In Securely", use_container_width=True):
+            # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+            if st.button("Sign In Securely", width="stretch"):
                 user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
                 if not user_match.empty: 
                     st.session_state.auth = True
@@ -110,7 +111,6 @@ if not st.session_state.auth:
                     
             st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
 
-    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;'>© 2026 Ahmedabad Municipal Corporation · All rights reserved</p>", unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
@@ -133,7 +133,8 @@ with st.expander("⚙️ Account Settings & Change Password"):
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
         st.write(""); st.write("")
-        if st.button("Update", use_container_width=True):
+        # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+        if st.button("Update", width="stretch"):
             current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
             if old_pwd != current_actual_pwd: st.error("⚠️ Old Password is incorrect!")
             elif new_pwd != conf_pwd: st.error("⚠️ New Passwords do not match!")
