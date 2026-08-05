@@ -664,6 +664,45 @@ with tab4:
             if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
             else: color_target = p1_name
 
+    # 🛡️ BULLETPROOF DATE FINDER (Used by both Corporate & NAAT Decks)
+    def find_date_columns(df_raw, date_list):
+        import re
+        target_patterns = set()
+        for d in date_list:
+            day, day0 = str(d.day), f"{d.day:02d}"
+            mon, mon0 = str(d.month), f"{d.month:02d}"
+            yr = str(d.year)
+            b, B = d.strftime('%b').upper(), d.strftime('%B').upper()
+            target_patterns.update([
+                f"{b}{day}{yr}", f"{b}{day0}{yr}", f"{B}{day}{yr}", f"{B}{day0}{yr}", 
+                f"{day}{b}{yr}", f"{day0}{b}{yr}", f"{day}{mon}{yr}", f"{day0}{mon0}{yr}",
+                f"{mon}{day}{yr}", f"{mon0}{day0}{yr}", f"{yr}{mon0}{day0}", f"{yr}{mon}{day}",
+                f"{day}{mon0}{yr}", f"{day0}{mon}{yr}"
+            ])
+        
+        for i in range(min(10, len(df_raw))): 
+            row_raw = df_raw.iloc[i].fillna("").astype(str)
+            matched = []
+            for idx, cell_val in enumerate(row_raw):
+                val_clean = str(cell_val).strip()
+                if not val_clean or val_clean.lower() == 'nan': continue
+                
+                try:
+                    if pd.to_datetime(val_clean, dayfirst=False).date() in date_list:
+                        matched.append(idx); continue
+                except: pass
+                try:
+                    if pd.to_datetime(val_clean, dayfirst=True).date() in date_list:
+                        matched.append(idx); continue
+                except: pass
+                
+                val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
+                if val_stripped in target_patterns:
+                    matched.append(idx)
+                    
+            if matched: return i, list(set(matched))
+        return -1, []
+
     def apply_date_filters(df, diag, init, out):
         mask = pd.Series(True, index=df.index)
         if len(diag) == 2: mask &= pd.to_datetime(df.get('Diagnosis Date'), errors='coerce').dt.date.between(diag[0], diag[1])
@@ -799,7 +838,8 @@ with tab4:
         return out_io.getvalue(), "Success"
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("✨ Generate Custom PPT ✨", use_container_width=True):
+    # 🟢 FIXED BUTTON
+    if st.button("✨ Generate Custom PPT ✨", width="stretch"):
         with st.spinner("Generating beautiful Enterprise PPT slides... Please wait..."):
             ppt_bytes, status = generate_smart_ppt(df_master, sel_report)
             if ppt_bytes:
@@ -825,7 +865,8 @@ with tab4:
         with tc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            btn_generate_target = st.button("✨ Generate Full Deck ✨", use_container_width=True)
+            # 🟢 FIXED BUTTON
+            btn_generate_target = st.button("✨ Generate Full Deck ✨", width="stretch")
 
     def generate_corporate_target_ppt(selected_dates, w_days):
         try:
@@ -863,7 +904,9 @@ with tab4:
                             if j > 1: p.alignment = PP_ALIGN.CENTER
 
             def extract_num(val):
-                nums = re.findall(r'^(\d+)', str(val).strip())
+                if pd.isna(val) or str(val).lower() == 'nan': return 0
+                clean_str = str(val).split('(')[0].strip()
+                nums = re.findall(r'\d+', clean_str)
                 return int(nums[0]) if nums else 0
 
             def get_multi_color(pct):
@@ -874,49 +917,43 @@ with tab4:
                 else: return RGBColor(231, 76, 60)
 
             if len(selected_dates) == 2:
-                date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
-                target_date_strings = [f"{d.strftime('%b')} {d.day}, {d.year}" for d in date_list]
+                date_list = [d.date() for d in pd.date_range(start=selected_dates[0], end=selected_dates[1])]
             else: return None, "⚠️ Please select a start and end date."
 
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🟢 UPDATED: July sheets added without touching your loop logic!
             zone_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835",  # JULY ZONE
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1902029689", # JUNE ZONE
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"   # MAY ZONE
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835",  
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1989403449", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1902029689", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"   
             ]
             
             fac_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0",          # JULY FACILITY
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", # JUNE FACILITY
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  # MAY FACILITY
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0",          
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", 
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  
             ]
 
             # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
             # ----------------------------------------------------
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
             for url in zone_urls:
                 try:
-                    df_sheet1 = pd.read_csv(url, header=None)
-                    h_idx1 = 0
-                    for i in range(3):
-                        if any(td in df_sheet1.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
-                            h_idx1 = i; break
+                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
-                    header_row1 = df_sheet1.iloc[h_idx1].fillna("").astype(str)
-                    col_indices1 = [idx for idx, val in enumerate(header_row1) if val.replace("  ", " ").strip() in target_date_strings]
-                    
-                    if col_indices1:
+                    if h_idx1 != -1 and col_indices1:
                         for row_idx in range(h_idx1 + 1, len(df_sheet1)):
-                            z_name = str(df_sheet1.iloc[row_idx, 0]).strip().title()
+                            z_name = re.sub(r'\s+', ' ', str(df_sheet1.iloc[row_idx, 0])).strip().title()
                             if z_name in zone_achievements:
                                 ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
                                 zone_achievements[z_name] += ach_total
-                except: continue
+                except Exception as e: continue
 
             # Build Zone Table
             res1 = []
@@ -953,22 +990,16 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (Including Hospitals)
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
             # ----------------------------------------------------
             fac_achievements = {}
 
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None)
-                    h_idx2 = 0
-                    for i in range(4):
-                        if any(td in df_fac.iloc[i].fillna("").astype(str).tolist() for td in target_date_strings):
-                            h_idx2 = i; break
-                    
-                    header_fac = df_fac.iloc[h_idx2].fillna("").astype(str)
-                    col_indices_fac = [idx for idx, val in enumerate(header_fac) if val.replace("  ", " ").strip() in target_date_strings]
-
-                    if col_indices_fac:
+                    df_fac = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
+                            
+                    if h_idx2 != -1 and col_indices_fac:
                         for row_idx in range(h_idx2 + 1, len(df_fac)):
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
@@ -983,9 +1014,8 @@ with tab4:
                             
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (zone_guj, fac_name, fac_type)
-                                if dict_key in fac_achievements: fac_achievements[dict_key] += achieved_total
-                                else: fac_achievements[dict_key] = achieved_total
-                except: continue
+                                fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
+                except Exception as e: continue
 
             # Build Facility Tables
             if fac_achievements:
@@ -1100,7 +1130,8 @@ with tab4:
         with nc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            btn_generate_naat = st.button("✨ Generate NAAT PPT ✨", use_container_width=True)
+            # 🟢 FIXED BUTTON
+            btn_generate_naat = st.button("✨ Generate NAAT PPT ✨", width="stretch")
 
     def generate_naat_ppt(selected_dates, w_days):
         try:
@@ -1138,20 +1169,18 @@ with tab4:
                             if j > 1: p.alignment = PP_ALIGN.CENTER
             
             if len(selected_dates) == 2:
-                date_list = pd.date_range(start=selected_dates[0], end=selected_dates[1]).tolist()
+                date_list = [d.date() for d in pd.date_range(start=selected_dates[0], end=selected_dates[1])]
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🟢 UPDATED: July NAAT dictionary mapped gracefully
             naat_urls = {
-                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", # JULY
-                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
-                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
+                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", 
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", 
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  
             }
             
             site_totals = {}
             found_any_date = False
 
-            # Group the selected dates by their actual month
             dates_by_month = {}
             for d in date_list:
                 if d.month not in dates_by_month: dates_by_month[d.month] = []
@@ -1161,47 +1190,23 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    df_naat = pd.read_csv(naat_urls[target_month], header=None)
-                    
-                    # 🎯 1. Force ffill() down to populate NAAT sites accurately across empty CSV rows
-                    df_naat[0] = df_naat[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
-                    
-                    # 🛡️ FIX: Clean and forward fill the date row securely
-                    date_row_raw = df_naat.iloc[0].replace(["", "nan", "NaN", "None"], pd.NA).ffill()
-                    header_row = df_naat.iloc[1].fillna("").astype(str).str.upper().str.strip()
-                    
-                    # Core datetime conversion step to safely check true timestamp values alongside raw text strings
-                    parsed_date_series = pd.to_datetime(date_row_raw, errors='coerce')
+                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    h_idx, match_indices = find_date_columns(df_naat, m_dates)
                     
                     tested_cols = []
-                    for d in m_dates:
-                        # Map out all possible structural formats exported by pandas/google engines
-                        fmts = [
-                            d.strftime("%m/%d/%Y"), 
-                            f"{d.month:02d}/{d.day:02d}/{d.year}", 
-                            f"{d.month}/{d.day}/{d.year}", 
-                            d.strftime("%d/%m/%Y"),
-                            d.strftime("%Y-%m-%d"),
-                            f"{d.year}-{d.month:02d}-{d.day:02d}"
-                        ]
-                        
-                        match_indices = []
-                        for i, val in enumerate(date_row_raw):
-                            val_clean = str(val).split(" ")[0].strip()
-                            
-                            # Complete matching security block: resolves String matches OR structural datetime equals
-                            if val_clean in fmts or (pd.notna(parsed_date_series.iloc[i]) and parsed_date_series.iloc[i].date() == d.date()):
-                                match_indices.append(i)
-                                
+                    if h_idx != -1 and match_indices:
+                        header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
                         for idx in match_indices:
-                            if "TESTED" in header_row[idx]:
-                                tested_cols.append(idx); break
-                    
+                            for offset in range(4):
+                                check_idx = idx + offset
+                                if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
+                                    tested_cols.append(check_idx)
+                                    break
+                                    
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    # 🎯 2. Exclude the total row to sum sub-rows elegantly
-                    df_valid = df_naat.iloc[2:].copy()
+                    df_valid = df_naat.iloc[h_idx + 2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
                     df_valid = df_valid[~mask_tot]
                     
@@ -1247,7 +1252,6 @@ with tab4:
             grouped.insert(0, 'Zone', grouped['NAAT Site'].apply(get_zone))
             grouped = grouped.sort_values(by=['Zone', 'Tested'], ascending=[True, False]).reset_index(drop=True)
             
-            # 🎯 3. Concat the TOTAL row at the bottom out matching the May output format
             total_tested = int(grouped['Tested'].sum())
             total_avg = format_avg(total_tested / w_days)
             total_row = pd.DataFrame([{"Zone": "AMC", "NAAT Site": "TOTAL", "Tested": total_tested, "Average": total_avg}])
