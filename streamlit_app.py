@@ -7,6 +7,11 @@ import re
 from datetime import datetime, date, timedelta
 import pytz
 
+# 🤫 SILENCE THE YELLOW WARNINGS (Keeps your console logs 100% clean)
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 def img_to_b64(img_path):
@@ -40,7 +45,7 @@ except:
     st.stop()
 
 # ==========================================
-# 🔐 NEW ENTERPRISE LOGIN PAGE DESIGN (BUG FIXED)
+# 🔐 ENTERPRISE LOGIN PAGE
 # ==========================================
 if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
@@ -91,7 +96,8 @@ if not st.session_state.auth:
             uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
             pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
             
-            if st.button("Sign In Securely", use_container_width=True):
+            # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+            if st.button("Sign In Securely", width="stretch"):
                 user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
                 if not user_match.empty: 
                     st.session_state.auth = True
@@ -105,7 +111,6 @@ if not st.session_state.auth:
                     
             st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
 
-    st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 12px; margin-top: 25px;'>© 2026 Ahmedabad Municipal Corporation · All rights reserved</p>", unsafe_allow_html=True)
     st.stop()
 
 # ==========================================
@@ -113,7 +118,7 @@ if not st.session_state.auth:
 # ==========================================
 st.markdown("""<style>#MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
 
-# 🛡️ THE SAFETY NET: Prevents AttributeError if server memory wipes session data
+# 🛡️ THE SAFETY NET
 if 'role' not in st.session_state or 'target' not in st.session_state:
     st.session_state.auth = False
     st.warning("⚠️ Session expired due to inactivity or server refresh. Please log in again.")
@@ -128,7 +133,8 @@ with st.expander("⚙️ Account Settings & Change Password"):
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
         st.write(""); st.write("")
-        if st.button("Update", use_container_width=True):
+        # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+        if st.button("Update", width="stretch"):
             current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
             if old_pwd != current_actual_pwd: st.error("⚠️ Old Password is incorrect!")
             elif new_pwd != conf_pwd: st.error("⚠️ New Passwords do not match!")
@@ -170,28 +176,31 @@ def convert_df_to_excel(df, sheet_name="Data"):
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
 
-@st.cache_data(ttl=3600)
+
+# 🚀 THE SOLID SPEED SOLUTION: Master Caching (Professional Loading Text)
+@st.cache_data(ttl=900, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
 def load_all_data():
     try:
-        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
+        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str}, low_memory=False)
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
-        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
+        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str}, low_memory=False)
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
-        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
-        t_df = pd.read_csv("Update_Timestamps.csv")
+        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str}, low_memory=False)
+        t_df = pd.read_csv("Update_Timestamps.csv", low_memory=False)
         try:
-            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str})
-            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str})
+            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str}, low_memory=False)
+            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str}, low_memory=False)
         except:
             p_today, p_yest = pd.DataFrame(), pd.DataFrame()
             
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-@st.cache_data(ttl=300) 
+# 🚀 CACHED DIFFERENTIATED CARE (Professional Loading Text)
+@st.cache_data(ttl=900, show_spinner="🔄 Synchronizing real-time field reports and external tracking sheets...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
@@ -290,6 +299,7 @@ def get_live_dc():
     except:
         return pd.DataFrame(), pd.DataFrame()
 
+# Load everything cleanly into variables
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
@@ -325,6 +335,15 @@ df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.sessi
 df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
 df_pres_t = filter_by_role(df_pres_t_raw.copy(), st.session_state.role, st.session_state.target)
 df_pres_y = filter_by_role(df_pres_y_raw.copy(), st.session_state.role, st.session_state.target)
+
+# ==============================================================================
+# 🛠️ THE BEST FIX FOR TAB 5 ERROR (Defining master_cols globally)
+# ==============================================================================
+if not df_dc_new.empty:
+    master_cols = df_dc_new.columns.tolist()
+else:
+    master_cols = []
+# ==============================================================================
 
 def draw_card(title, value, color, icon):
     return f"""<div style="background-color: {color}; border-radius: 8px; padding: 15px 5px; margin-bottom: 10px; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"><div style="font-size: 24px; margin-bottom: 5px;">{icon}</div><div style="font-size: 13px; font-weight: bold; text-transform: uppercase;">{title}</div><div style="font-size: 26px; font-weight: 900; margin-top: 8px;">{value}</div></div>"""
