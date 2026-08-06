@@ -2164,21 +2164,31 @@ with tab8:
         url_this = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1898426568"
         url_prev = "https://docs.google.com/spreadsheets/d/1Dfvl87uaZZ12_5F4dhHXTP_u8i9NM9TASWN8wyX18nE/export?format=csv&gid=1981365704"
 
-        def get_sheet(url):
+        def get_sheet(url, sheet_name):
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 with urllib.request.urlopen(req, timeout=30) as response:
-                    df = pd.read_csv(io.BytesIO(response.read()), low_memory=False, dtype=str)
+                    content = response.read()
+                    
+                    # 🚨 SECURITY CHECK: If Google sends an HTML login page, the sheet is private!
+                    if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
+                        st.error(f"⚠️ **{sheet_name} is Locked!** Please open the Google Sheet and change permissions to 'Anyone with the link can view'.")
+                        return pd.DataFrame()
+                        
+                    # 🛡️ BULLETPROOF PARSER: Skips broken lines (extra commas) instead of crashing the whole dataframe
+                    df = pd.read_csv(io.BytesIO(content), low_memory=False, dtype=str, on_bad_lines='skip')
                 return df
-            except: return pd.DataFrame()
+            except Exception as e: 
+                st.error(f"⚠️ **Failed to load {sheet_name}:** {e}")
+                return pd.DataFrame()
 
-        df_m = get_sheet(url_master)
+        df_m = get_sheet(url_master, "Master Sheet")
         if not df_m.empty: df_m.columns = df_m.columns.astype(str).str.strip()
 
-        df_t = get_sheet(url_this)
+        df_t = get_sheet(url_this, "This Week Sheet")
         if not df_t.empty: df_t.columns = df_t.columns.astype(str).str.strip()
             
-        df_p = get_sheet(url_prev)
+        df_p = get_sheet(url_prev, "Previous Week Sheet")
         if not df_p.empty: df_p.columns = df_p.columns.astype(str).str.strip()
 
         return df_m, df_t, df_p
@@ -2259,7 +2269,7 @@ with tab8:
             df_prev['_ID_UP'] = df_prev[id_col_prev].fillna("").astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.upper()
             df_prev['_OUT_UP'] = df_prev[out_col_prev].fillna("").astype(str).str.strip().str.upper()
             
-            # 🎯 NEW FIX: Added "WRONGLY" to the good list so Wrongly Diagnosed is completely ignored!
+            # 🎯 FIX: Added "WRONGLY" to the good list so Wrongly Diagnosed is completely ignored!
             good = ["CURED", "COMPLETE", "CHANGED", "SUCCESS", "WRONGLY"]
             blank_variants = ["", "NAN", "N/A", "NONE", "(BLANKS)", "BLANK", "NULL"]
             
@@ -2376,7 +2386,10 @@ with tab8:
         df_combined_master['On Treatment Days'] = df_combined_master.apply(calc_master_days, axis=1)
 
     if not df_new_adverse.empty:
-        df_combined_master = pd.concat([df_combined_master, df_new_adverse], ignore_index=True)
+        if df_combined_master.empty:
+            df_combined_master = df_new_adverse.copy()
+        else:
+            df_combined_master = pd.concat([df_combined_master, df_new_adverse], ignore_index=True)
         
     df_combined_master = df_combined_master.replace(["None", "nan", "NaN", "N/A", "<NA>"], "")
     df_combined_master = df_combined_master.fillna("")
@@ -2419,6 +2432,7 @@ with tab8:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
+    master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
     display_cols = [c for c in master_cols if c in df_f.columns]
     st.dataframe(df_f[display_cols], use_container_width=True, hide_index=True)
     
