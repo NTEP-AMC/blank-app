@@ -1173,6 +1173,7 @@ with tab4:
             else: return None, "⚠️ Please select a start and end date."
 
             naat_urls = {
+                8: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=621196571", # AUGUST
                 7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", 
                 6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", 
                 5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  
@@ -1221,7 +1222,7 @@ with tab4:
 
                 except: continue
 
-            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, or July sheets."
+            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, July, or August sheets."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
