@@ -650,7 +650,7 @@ with tab4:
             compare_mode = st.checkbox("📊 Enable Comparison (Period 2)")
             if compare_mode:
                 st.markdown("<div style='background-color:#fef5e7; padding:10px; border-radius:5px;'><b>📅 Period 2 (Previous)</b></div>", unsafe_allow_html=True)
-                p2_name = text_input("Name for Period 2", "Q2 - 2026")
+                p2_name = st.text_input("Name for Period 2", "Q2 - 2026")
                 p2_diag = st.date_input("Diagnosis Date (P2)", value=[])
                 p2_init = st.date_input("Treatment Start Date (P2)", value=[])
                 p2_out = st.date_input("Outcome Date (P2)", value=[])
@@ -1199,32 +1199,24 @@ with tab4:
                         if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
                             return None, f"⚠️ The Google Sheet for Month {target_month} is LOCKED. Please change its permissions to 'Anyone with the link can view'."
                         
-                        # 🛡️ THE BULLETPROOF DATA EXTRACTOR: Uses python engine to avoid overflows, and strictly ignores ALL quotation marks!
-                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, engine='python', on_bad_lines='skip', quoting=3)
+                        # 🛡️ THE FIX: Removed quoting=3 to prevent commas from breaking the CSV structure!
+                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, engine='python', on_bad_lines='skip')
                     
-                    # Instantly strips out any rogue quotation marks left behind so date-parsing won't fail
-                    df_naat = df_naat.replace('"', '', regex=True)
-                    
+                    # Forward-fill NAAT sites in Column 0 to merge empty rows
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
-                    # 🚀 Restored the Dynamic Scanner so it finds "NAAT TESTED" regardless of hidden/added columns!
-                    h_idx, match_indices = find_date_columns(df_naat, m_dates)
-                    
                     tested_cols = []
-                    if h_idx != -1 and match_indices:
-                        header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
-                        for idx in match_indices:
-                            # Expanded search radius up to 6 columns deep to safely find "TESTED"
-                            for offset in range(6):
-                                check_idx = idx + offset
-                                if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
-                                    tested_cols.append(check_idx)
-                                    break
-                                    
+                    for d in m_dates:
+                        # 🚀 THE GENIUS MATH FIX: Day 1 is Col G (Index 6), Day 2 is Col K (Index 10)
+                        # Formula: (Day * 4) + 2
+                        col_idx = (d.day * 4) + 2
+                        tested_cols.append(col_idx)
+                        
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    df_valid = df_naat.iloc[h_idx + 2:].copy()
+                    # Data starts at Row 3 (Index 2)
+                    df_valid = df_naat.iloc[2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | 
                                 df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | 
                                 df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
