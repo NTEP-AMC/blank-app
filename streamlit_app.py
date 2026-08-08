@@ -627,6 +627,7 @@ with tab2:
             
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
+
 # ==========================================
 # 🟢 TAB 4: PPT GENERATOR (SMART + CORPORATE + NAAT)
 # ==========================================
@@ -1136,6 +1137,7 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
+            import re
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -1187,23 +1189,34 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    # 🛡️ THE FIX: Force read 200 columns so wide August sheets are never chopped by Pandas!
-                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(200)), dtype=str, low_memory=False)
+                    import urllib.request
+                    import io
+                    url = naat_urls[target_month]
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        content = response.read()
+                        
+                        # SECURITY CHECK: If Google locks the sheet, it prevents silent failures.
+                        if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
+                            return None, f"⚠️ The Google Sheet for Month {target_month} is LOCKED. Please change its permissions to 'Anyone with the link can view'."
+                        
+                        # 🛡️ THE FIX: Force read 200 columns so wide August sheets are never chopped by Pandas!
+                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, on_bad_lines='skip', low_memory=False)
                     
                     # Forward-fill NAAT sites in Column 0 to merge empty rows
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
                     tested_cols = []
                     for d in m_dates:
-                        # 🚀 THE GENIUS FIX (Start from G, then K...):
-                        # Day 1 is Col G (Index 6), Day 2 is Col K (Index 10)... Formula: (Day * 4) + 2
+                        # 🚀 THE GENIUS MATH FIX: Day 1 is Col G (Index 6), Day 2 is Col K (Index 10)
+                        # Formula: (Day * 4) + 2
                         col_idx = (d.day * 4) + 2
                         tested_cols.append(col_idx)
                         
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    # Data starts at row 2
+                    # Data starts at Row 3 (Index 2)
                     df_valid = df_naat.iloc[2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | 
                                 df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | 
@@ -1220,7 +1233,7 @@ with tab4:
                         s_name = str(row[0]).strip()
                         site_totals[s_name] = site_totals.get(s_name, 0) + row['Tested_Sum']
 
-                except Exception as e: continue
+                except Exception as e: return None, f"⚠️ Fetch Error on Month {target_month}: {str(e)}"
 
             if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, July, or August sheets."
             
@@ -1230,7 +1243,6 @@ with tab4:
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
-            import re
             def clean_site(s):
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
