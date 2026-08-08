@@ -1200,11 +1200,11 @@ with tab4:
                         if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
                             return None, f"⚠️ The Google Sheet for Month {target_month} is LOCKED. Please change its permissions to 'Anyone with the link can view'."
                         
-                        # 🛡️ THE FIX: Force read 200 columns so wide August sheets are never chopped by Pandas!
-                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, on_bad_lines='skip', low_memory=False)
+                        # 🛡️ THE FIX: engine='python' and quoting=3 completely bypasses the C engine buffer overflow caused by broken quotes in the sheet!
+                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, engine='python', on_bad_lines='skip', quoting=3)
                     
-                    # Forward-fill NAAT sites in Column 0 to merge empty rows
-                    df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    # Forward-fill NAAT sites in Column 0 to merge empty rows (cleaning rogue quotes)
+                    df_naat[0] = df_naat[0].astype(str).str.replace('"', '').replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
                     tested_cols = []
                     for d in m_dates:
@@ -1243,6 +1243,7 @@ with tab4:
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
+            import re
             def clean_site(s):
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
