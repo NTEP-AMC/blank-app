@@ -838,7 +838,6 @@ with tab4:
         return out_io.getvalue(), "Success"
 
     st.markdown("<br>", unsafe_allow_html=True)
-    # 🟢 FIXED BUTTON
     if st.button("✨ Generate Custom PPT ✨", width="stretch"):
         with st.spinner("Generating beautiful Enterprise PPT slides... Please wait..."):
             ppt_bytes, status = generate_smart_ppt(df_master, sel_report)
@@ -865,7 +864,6 @@ with tab4:
         with tc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            # 🟢 FIXED BUTTON
             btn_generate_target = st.button("✨ Generate Full Deck ✨", width="stretch")
 
     def generate_corporate_target_ppt(selected_dates, w_days):
@@ -938,7 +936,7 @@ with tab4:
             ]
 
             # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS
             # ----------------------------------------------------
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
@@ -990,7 +988,7 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS
             # ----------------------------------------------------
             fac_achievements = {}
 
@@ -1130,7 +1128,6 @@ with tab4:
         with nc3:
             st.markdown("<div style='background-color:#ebedf0; padding:10px; border-radius:5px;'><b>⚙️ 3. Action</b></div>", unsafe_allow_html=True)
             st.write("")
-            # 🟢 FIXED BUTTON
             btn_generate_naat = st.button("✨ Generate NAAT PPT ✨", width="stretch")
 
     def generate_naat_ppt(selected_dates, w_days):
@@ -1192,6 +1189,10 @@ with tab4:
                     
                 try:
                     df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    
+                    # 🛡️ THE CRITICAL FIX: Restore the ffill for Column 0 so NAAT Sites are properly grouped across all their sending facilities!
+                    df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+
                     h_idx, match_indices = find_date_columns(df_naat, m_dates)
                     
                     tested_cols = []
