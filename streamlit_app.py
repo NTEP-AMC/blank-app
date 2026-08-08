@@ -664,7 +664,7 @@ with tab4:
             if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
             else: color_target = p1_name
 
-    # 🛡️ BULLETPROOF DATE FINDER (Used by both Corporate & NAAT Decks)
+    # 🛡️ BULLETPROOF DATE FINDER (Used by Corporate Deck)
     def find_date_columns(df_raw, date_list):
         import re
         target_patterns = set()
@@ -936,13 +936,13 @@ with tab4:
             ]
 
             # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS 
             # ----------------------------------------------------
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
             for url in zone_urls:
                 try:
-                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(400)), dtype=str, low_memory=False)
+                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
                     h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
                     if h_idx1 != -1 and col_indices1:
@@ -988,13 +988,13 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS 
             # ----------------------------------------------------
             fac_achievements = {}
 
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None, names=list(range(400)), dtype=str, low_memory=False)
+                    df_fac = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
                     if h_idx2 != -1 and col_indices_fac:
@@ -1136,7 +1136,6 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
-            import re
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -1169,12 +1168,11 @@ with tab4:
                 date_list = [d.date() for d in pd.date_range(start=selected_dates[0], end=selected_dates[1])]
             else: return None, "⚠️ Please select a start and end date."
 
-            # 🟢 The exact August and July links are preserved here
             naat_urls = {
-                8: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=621196571", # AUGUST
-                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", # JULY
-                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
-                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
+                8: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=621196571", 
+                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", 
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", 
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  
             }
             
             site_totals = {}
@@ -1189,41 +1187,40 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    # 🛡️ BULLETPROOF FETCH: Expanded memory footprint to 400 columns to prevent Pandas from truncating wide months like August!
-                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(400)), dtype=str, low_memory=False)
+                    # 🛡️ THE FIX: Force read 200 columns so wide August sheets are never chopped by Pandas!
+                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(200)), dtype=str, low_memory=False)
                     
+                    # Forward-fill NAAT sites in Column 0 to merge empty rows
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
-
-                    h_idx, match_indices = find_date_columns(df_naat, m_dates)
                     
                     tested_cols = []
-                    if h_idx != -1 and match_indices:
-                        header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
-                        for idx in match_indices:
-                            # Expanded offset search up to 10 columns deep to handle newly added columns in Google Sheets
-                            for offset in range(10):
-                                check_idx = idx + offset
-                                if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
-                                    tested_cols.append(check_idx)
-                                    break
-                                    
+                    for d in m_dates:
+                        # 🚀 THE GENIUS FIX (Start from G, then K...):
+                        # Day 1 is Col G (Index 6), Day 2 is Col K (Index 10)... Formula: (Day * 4) + 2
+                        col_idx = (d.day * 4) + 2
+                        tested_cols.append(col_idx)
+                        
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    df_valid = df_naat.iloc[h_idx + 2:].copy()
-                    mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
+                    # Data starts at row 2
+                    df_valid = df_naat.iloc[2:].copy()
+                    mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | 
+                                df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | 
+                                df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
                     df_valid = df_valid[~mask_tot]
                     
                     df_valid['Tested_Sum'] = 0
                     for col in tested_cols:
-                        df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
+                        if col < len(df_valid.columns):
+                            df_valid['Tested_Sum'] += pd.to_numeric(df_valid[col], errors='coerce').fillna(0)
                         
                     grouped_temp = df_valid.groupby(0)['Tested_Sum'].sum().reset_index()
                     for _, row in grouped_temp.iterrows():
                         s_name = str(row[0]).strip()
                         site_totals[s_name] = site_totals.get(s_name, 0) + row['Tested_Sum']
 
-                except: continue
+                except Exception as e: continue
 
             if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, July, or August sheets."
             
@@ -1233,6 +1230,7 @@ with tab4:
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
+            import re
             def clean_site(s):
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
