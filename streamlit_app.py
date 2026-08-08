@@ -936,13 +936,13 @@ with tab4:
             ]
 
             # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
             # ----------------------------------------------------
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
             for url in zone_urls:
                 try:
-                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(400)), dtype=str, low_memory=False)
                     h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
                     if h_idx1 != -1 and col_indices1:
@@ -988,13 +988,13 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (BULLETPROOF PARSER)
             # ----------------------------------------------------
             fac_achievements = {}
 
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    df_fac = pd.read_csv(url, header=None, names=list(range(400)), dtype=str, low_memory=False)
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
                     if h_idx2 != -1 and col_indices_fac:
@@ -1169,11 +1169,12 @@ with tab4:
                 date_list = [d.date() for d in pd.date_range(start=selected_dates[0], end=selected_dates[1])]
             else: return None, "⚠️ Please select a start and end date."
 
+            # 🟢 The exact August and July links are preserved here
             naat_urls = {
                 8: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=621196571", # AUGUST
-                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", 
-                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", 
-                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  
+                7: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=336417138", # JULY
+                6: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=718682714", # JUNE
+                5: "https://docs.google.com/spreadsheets/d/1a1F3BZsGjgM8-_JY0ohbvsODxM6cPPLksDRFlaVgB0s/export?format=csv&gid=910963940"  # MAY
             }
             
             site_totals = {}
@@ -1188,9 +1189,9 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    # 🛡️ BULLETPROOF FETCH: Expanded memory footprint to 400 columns to prevent Pandas from truncating wide months like August!
+                    df_naat = pd.read_csv(naat_urls[target_month], header=None, names=list(range(400)), dtype=str, low_memory=False)
                     
-                    # 🛡️ THE CRITICAL FIX: Restore the ffill for Column 0 so NAAT Sites are properly grouped across all their sending facilities!
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
 
                     h_idx, match_indices = find_date_columns(df_naat, m_dates)
@@ -1199,7 +1200,8 @@ with tab4:
                     if h_idx != -1 and match_indices:
                         header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
                         for idx in match_indices:
-                            for offset in range(4):
+                            # Expanded offset search up to 10 columns deep to handle newly added columns in Google Sheets
+                            for offset in range(10):
                                 check_idx = idx + offset
                                 if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
                                     tested_cols.append(check_idx)
