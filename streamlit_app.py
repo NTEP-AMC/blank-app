@@ -147,11 +147,11 @@ if st.session_state.role == "ADMIN":
     with st.expander("🛡️ Admin Panel: View Passwords & Activity Logs"):
         a_tab1, a_tab2 = st.tabs(["🔑 Manage Users", "📝 Activity Logs"])
         with a_tab1:
-            st.dataframe(df_users, use_container_width=True, hide_index=True)
+            st.dataframe(df_users, width="stretch", hide_index=True)
         with a_tab2:
             try:
                 df_logs = pd.read_csv(LOG_FILE)
-                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
+                st.dataframe(df_logs.iloc[::-1], width="stretch", hide_index=True)
             except: st.write("No logs available yet.")
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
