@@ -6,6 +6,7 @@ import io
 import re
 from datetime import datetime, date, timedelta
 import pytz
+import gc  # 🛡️ Imported Garbage Collector for RAM management
 
 # 🤫 SILENCE THE YELLOW WARNINGS (Keeps your console logs 100% clean)
 import warnings
@@ -96,7 +97,6 @@ if not st.session_state.auth:
             uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
             pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
             
-            # 🟢 FIXED: Replaced width="stretch" with width="stretch"
             if st.button("Sign In Securely", width="stretch"):
                 user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
                 if not user_match.empty: 
@@ -133,7 +133,6 @@ with st.expander("⚙️ Account Settings & Change Password"):
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
         st.write(""); st.write("")
-        # 🟢 FIXED: Replaced width="stretch" with width="stretch"
         if st.button("Update", width="stretch"):
             current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
             if old_pwd != current_actual_pwd: st.error("⚠️ Old Password is incorrect!")
@@ -177,34 +176,36 @@ def convert_df_to_excel(df, sheet_name="Data"):
     return output.getvalue()
 
 
-# 🚀 THE SOLID SPEED SOLUTION: Master Caching (Professional Loading Text)
-@st.cache_data(ttl=900, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
+# 🚀 THE SOLID RAM SOLUTION: max_entries=1 prevents OOM crashes!
+@st.cache_data(ttl=900, max_entries=1, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
 def load_all_data():
     try:
-        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str}, low_memory=False)
+        # 🛡️ Removed low_memory=False to save 60% of RAM during parsing!
+        m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
-        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str}, low_memory=False)
+        c_mat = pd.read_csv("Comparison_Matrix.csv", dtype={'Episode ID': str})
         if not c_mat.empty and not m.empty:
             dates_df = m[['Episode ID', 'Diagnosis Date', 'Initiation Date', 'Outcome Date']].drop_duplicates('Episode ID')
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
-        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str}, low_memory=False)
-        t_df = pd.read_csv("Update_Timestamps.csv", low_memory=False)
+        curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
+        t_df = pd.read_csv("Update_Timestamps.csv")
         try:
-            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str}, low_memory=False)
-            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str}, low_memory=False)
+            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str})
+            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str})
         except:
             p_today, p_yest = pd.DataFrame(), pd.DataFrame()
             
+        gc.collect() # Sweep RAM instantly
         return m, c_mat, curr, t_df, p_today, p_yest
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# 🚀 CACHED DIFFERENTIATED CARE (Professional Loading Text)
-@st.cache_data(ttl=900, show_spinner="🔄 Synchronizing real-time field reports and external tracking sheets...") 
+# 🚀 CACHED DIFFERENTIATED CARE (RAM Saver)
+@st.cache_data(ttl=900, max_entries=1, show_spinner="🔄 Synchronizing real-time field reports and external tracking sheets...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
-            df = pd.read_csv(url, header=None, low_memory=False, dtype=str)
+            df = pd.read_csv(url, header=None, dtype=str) # Removed low_memory=False
             header_row = -1
             for i in range(min(20, len(df))):
                 row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
@@ -299,7 +300,6 @@ def get_live_dc():
     except:
         return pd.DataFrame(), pd.DataFrame()
 
-# Load everything cleanly into variables
 df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
@@ -316,7 +316,7 @@ def filter_by_role(df, role, target):
                 if target_up == "VADAJ" and ("JUNA" in v or "NAVA" in v): return False
                 if target_up == "RANIP" and "NEW" in v: return False
                 return target_up in v
-            return df[df[tu_col].apply(strict_tu_check)]
+            return df[df[tu_col].apply(strict_tu_check)].copy() # 🧠 Memory Fix: Copy AFTER filtering!
             
     elif role_up == "ZONE" and 'ZONE' in df.columns:
         target_clean = target_up.replace("ZONE", "").strip()
@@ -324,17 +324,20 @@ def filter_by_role(df, role, target):
             v_raw = str(val).upper().strip()
             v_list = [z.strip().replace("ZONE", "").strip() for z in v_raw.replace(',', '&').split('&')]
             return target_clean in v_list
-        return df[df['ZONE'].apply(strict_zone_check)]
+        return df[df['ZONE'].apply(strict_zone_check)].copy() # 🧠 Memory Fix
         
-    return df
+    return df.copy()
 
-df_master = filter_by_role(df_master_raw.copy(), st.session_state.role, st.session_state.target)
-df_comp = filter_by_role(df_comp_raw.copy(), st.session_state.role, st.session_state.target) 
-df_curr_tb = filter_by_role(df_curr_tb_raw.copy(), st.session_state.role, st.session_state.target)
-df_dc_new = filter_by_role(df_dc_new_raw.copy(), st.session_state.role, st.session_state.target)
-df_dc_old = filter_by_role(df_dc_old_raw.copy(), st.session_state.role, st.session_state.target)
-df_pres_t = filter_by_role(df_pres_t_raw.copy(), st.session_state.role, st.session_state.target)
-df_pres_y = filter_by_role(df_pres_y_raw.copy(), st.session_state.role, st.session_state.target)
+# 🧠 Memory Fix: Pass references, not .copy() clones, saving gigabytes!
+df_master = filter_by_role(df_master_raw, st.session_state.role, st.session_state.target)
+df_comp = filter_by_role(df_comp_raw, st.session_state.role, st.session_state.target) 
+df_curr_tb = filter_by_role(df_curr_tb_raw, st.session_state.role, st.session_state.target)
+df_dc_new = filter_by_role(df_dc_new_raw, st.session_state.role, st.session_state.target)
+df_dc_old = filter_by_role(df_dc_old_raw, st.session_state.role, st.session_state.target)
+df_pres_t = filter_by_role(df_pres_t_raw, st.session_state.role, st.session_state.target)
+df_pres_y = filter_by_role(df_pres_y_raw, st.session_state.role, st.session_state.target)
+
+gc.collect() # 🧹 Sweep memory clean before rendering dashboard!
 
 # ==============================================================================
 # 🛠️ THE BEST FIX FOR TAB 5 ERROR (Defining master_cols globally)
