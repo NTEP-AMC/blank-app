@@ -96,7 +96,7 @@ if not st.session_state.auth:
             uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
             pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
             
-            # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+            # 🟢 FIXED: Replaced width="stretch" with width="stretch"
             if st.button("Sign In Securely", width="stretch"):
                 user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
                 if not user_match.empty: 
@@ -133,7 +133,7 @@ with st.expander("⚙️ Account Settings & Change Password"):
     with c_p2: conf_pwd = st.text_input("Confirm Password", type="password", key="p2")
     with c_p3:
         st.write(""); st.write("")
-        # 🟢 FIXED: Replaced use_container_width=True with width="stretch"
+        # 🟢 FIXED: Replaced width="stretch" with width="stretch"
         if st.button("Update", width="stretch"):
             current_actual_pwd = df_users.loc[df_users['Username'] == st.session_state.current_user, 'Password'].values[0]
             if old_pwd != current_actual_pwd: st.error("⚠️ Old Password is incorrect!")
@@ -148,11 +148,11 @@ if st.session_state.role == "ADMIN":
     with st.expander("🛡️ Admin Panel: View Passwords & Activity Logs"):
         a_tab1, a_tab2 = st.tabs(["🔑 Manage Users", "📝 Activity Logs"])
         with a_tab1:
-            st.dataframe(df_users, use_container_width=True, hide_index=True)
+            st.dataframe(df_users, width="stretch", hide_index=True)
         with a_tab2:
             try:
                 df_logs = pd.read_csv(LOG_FILE)
-                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
+                st.dataframe(df_logs.iloc[::-1], width="stretch", hide_index=True)
             except: st.write("No logs available yet.")
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
@@ -522,7 +522,7 @@ with tab1:
     # 👆👆👆 END PERFECT CLINICAL STATUS ENGINE 👆👆👆
 
     st.markdown(f"<div style='color: #2E86C1; margin-bottom: 10px; font-weight: bold;'>Found {len(df_disp)} Patient(s)</div>", unsafe_allow_html=True)
-    st.dataframe(df_disp, use_container_width=True, hide_index=True)
+    st.dataframe(df_disp, width="stretch", hide_index=True)
     if not df_disp.empty:
         st.download_button("📥 Download Master Excel", convert_df_to_excel(df_disp, "Master_Report"), "Master_Report.xlsx", key='dl1')                
 
@@ -587,7 +587,7 @@ with tab2:
     
     # 🎯 FIX: Removing dates from Tab 2 UI display
     df_c_display = df_c.drop(columns=['Diagnosis Date', 'Initiation Date', 'Outcome Date'], errors='ignore')
-    st.dataframe(df_c_display, use_container_width=True, hide_index=True)
+    st.dataframe(df_c_display, width="stretch", hide_index=True)
     if not df_c_display.empty:
         st.download_button("📥 Download Comparison Matrix", convert_df_to_excel(df_c_display, "Comparison_Matrix"), "Comparison.xlsx", key='dl2')
 
@@ -625,7 +625,7 @@ with tab2:
                 cmap='Reds' 
             ).format(precision=0)
             
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_df, width="stretch", hide_index=True)
 
 
 # ==========================================
@@ -1448,7 +1448,7 @@ with tab5:
         sum_disp['% Completed'] = sum_disp['% Completed'].astype(str) + '%'
         
         styled_df = sum_disp.style.apply(color_table, axis=None)
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, width="stretch", hide_index=True)
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         
@@ -1461,7 +1461,7 @@ with tab5:
         if not df_ll.empty:
             ll_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
             df_ll_display = df_ll[ll_cols].rename(columns={'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'})
-            st.dataframe(df_ll_display, use_container_width=True, hide_index=True)
+            st.dataframe(df_ll_display, width="stretch", hide_index=True)
         else:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
@@ -1610,7 +1610,7 @@ with tab5:
                 styler.map(color_rule, subset=[col_name])
             return styler
         
-        st.dataframe(df_matrix_final.style.pipe(style_matrix), use_container_width=True, hide_index=True)
+        st.dataframe(df_matrix_final.style.pipe(style_matrix), width="stretch", hide_index=True)
 
         # -------------------------------------------------------------
         # 🎯 🔄 DIFF CARE COMPARISON ENGINE (BOTTOM)
@@ -1639,7 +1639,7 @@ with tab5:
         with cc3:
             comp_dates = st.date_input("Select Diagnosis Date Range", value=[], key="dc_comp_dates")
             
-        run_comp = st.button("🚀 Generate Comparison Matrix", use_container_width=True)
+        run_comp = st.button("🚀 Generate Comparison Matrix", width="stretch")
 
         def parse_comp_date(dt_series):
             return pd.to_datetime(dt_series, format='%d-%m-%Y', errors='coerce').combine_first(pd.to_datetime(dt_series, errors='coerce'))
@@ -1772,7 +1772,7 @@ with tab5:
                         df_final_comp = df_final_comp[front + other]
                         
                         st.success(f"✅ Comparison Generated Successfully for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}!")
-                        st.dataframe(df_final_comp, use_container_width=True, hide_index=True)
+                        st.dataframe(df_final_comp, width="stretch", hide_index=True)
                         
                         # 🟢 MAGIC HAPPENS HERE: Triggering the Custom Multi-Sheet Excel Engine!
                         excel_bytes = generate_diff_care_excel(df_final_comp)
@@ -2149,7 +2149,7 @@ with tab6:
             display_table['Residence Address'] = display_table['Residence Address'].astype(str).replace(["N/A", "NAN", "NONE", "nan", ""], "Not Provided")
             display_table['PHI/UHC/CHC'] = display_table['PHI/UHC/CHC'].replace(["N/A", "NAN", "NONE", "nan"], "")
 
-            st.dataframe(display_table, use_container_width=True, hide_index=True)
+            st.dataframe(display_table, width="stretch", hide_index=True)
             
             st.download_button(
                 label="📥 Download Staff Directory Excel",
@@ -2448,7 +2448,7 @@ with tab8:
     
     master_cols = ['ADVERSE DATE', 'ZONE', 'TB Unit', 'PHI', 'Facility Type', 'Patient Name', 'Episode ID', 'Age', 'Type_of_TB_regimen', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment Outcome', 'On Treatment Days']
     display_cols = [c for c in master_cols if c in df_f.columns]
-    st.dataframe(df_f[display_cols], use_container_width=True, hide_index=True)
+    st.dataframe(df_f[display_cols], width="stretch", hide_index=True)
     
     if not df_combined_master.empty:
         st.download_button(
@@ -2611,7 +2611,7 @@ with tab9:
         st.markdown(f"<div style='color: #555; margin-bottom: 10px; font-weight: bold;'>Showing {len(df_epi)} Entries</div>", unsafe_allow_html=True)
         
         # 6. Display Table
-        st.dataframe(df_epi, column_config=col_config, use_container_width=True, hide_index=True)
+        st.dataframe(df_epi, column_config=col_config, width="stretch", hide_index=True)
         
         st.download_button(
             label=f"📥 Download {sel_proj_name} Data (Excel)",
@@ -2703,7 +2703,7 @@ with tab10:
         selected_month = st.selectbox("Month", list(MONTH_CONFIGS.keys()), label_visibility="collapsed")
     with c2:
         st.write("")
-        btn_generate_ptfu = st.button("🚀 Generate Comprehensive PTFU Report", use_container_width=True)
+        btn_generate_ptfu = st.button("🚀 Generate Comprehensive PTFU Report", width="stretch")
 
     def get_pct_color(pct):
         if pct == 0: return "#fca5a5"       
@@ -2967,5 +2967,5 @@ with tab10:
             if f_stat != "All": df_display = df_display[df_display['Status'] == f_stat]
             if f_zone != "All": df_display = df_display[df_display['Zone'] == f_zone]
             
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            st.dataframe(df_display, width="stretch", hide_index=True)
             st.download_button("📥 Download PTFU Line List (CSV)", df_display.to_csv(index=False).encode('utf-8'), f"PTFU_Line_List_{selected_month}.csv", "text/csv")
