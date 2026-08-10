@@ -147,11 +147,11 @@ if st.session_state.role == "ADMIN":
     with st.expander("🛡️ Admin Panel: View Passwords & Activity Logs"):
         a_tab1, a_tab2 = st.tabs(["🔑 Manage Users", "📝 Activity Logs"])
         with a_tab1:
-            st.dataframe(df_users, width="stretch", hide_index=True)
+            st.dataframe(df_users, use_container_width=True, hide_index=True)
         with a_tab2:
             try:
                 df_logs = pd.read_csv(LOG_FILE)
-                st.dataframe(df_logs.iloc[::-1], width="stretch", hide_index=True)
+                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
             except: st.write("No logs available yet.")
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
@@ -176,11 +176,10 @@ def convert_df_to_excel(df, sheet_name="Data"):
     return output.getvalue()
 
 
-# 🚀 THE SOLID RAM SOLUTION: max_entries=1 prevents OOM crashes!
+# 🚀 THE SOLID RAM SOLUTION: Unused Presumptive datasets completely removed!
 @st.cache_data(ttl=900, max_entries=1, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
 def load_all_data():
     try:
-        # 🛡️ Removed low_memory=False to save 60% of RAM during parsing!
         m = pd.read_csv("Master_Line_List.csv", dtype={'Episode ID': str})
         for c in ['Diagnosis Date', 'Initiation Date', 'Outcome Date']:
             if c in m.columns: m[c] = pd.to_datetime(m[c], errors='coerce') 
@@ -190,22 +189,17 @@ def load_all_data():
             c_mat = c_mat.merge(dates_df, on='Episode ID', how='left')
         curr = pd.read_csv("Current_TB_Patients.csv", dtype={'Episode ID': str})
         t_df = pd.read_csv("Update_Timestamps.csv")
-        try:
-            p_today = pd.read_csv("Presumptive_Today.csv", dtype={'Episode_ID': str})
-            p_yest = pd.read_csv("Presumptive_Yest.csv", dtype={'Episode_ID': str})
-        except:
-            p_today, p_yest = pd.DataFrame(), pd.DataFrame()
             
         gc.collect() # Sweep RAM instantly
-        return m, c_mat, curr, t_df, p_today, p_yest
-    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return m, c_mat, curr, t_df
+    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # 🚀 CACHED DIFFERENTIATED CARE (RAM Saver)
 @st.cache_data(ttl=900, max_entries=1, show_spinner="🔄 Synchronizing real-time field reports and external tracking sheets...") 
 def get_live_dc():
     def fetch_sheet(url):
         try:
-            df = pd.read_csv(url, header=None, dtype=str) # Removed low_memory=False
+            df = pd.read_csv(url, header=None, dtype=str)
             header_row = -1
             for i in range(min(20, len(df))):
                 row_str = " ".join(df.iloc[i].fillna("").astype(str).str.upper())
@@ -300,7 +294,8 @@ def get_live_dc():
     except:
         return pd.DataFrame(), pd.DataFrame()
 
-df_master_raw, df_comp_raw, df_curr_tb_raw, df_time, df_pres_t_raw, df_pres_y_raw = load_all_data()
+# 🛡️ Stripped Presumptive arrays to save RAM!
+df_master_raw, df_comp_raw, df_curr_tb_raw, df_time = load_all_data()
 df_dc_new_raw, df_dc_old_raw = get_live_dc()
 
 def filter_by_role(df, role, target):
@@ -334,8 +329,6 @@ df_comp = filter_by_role(df_comp_raw, st.session_state.role, st.session_state.ta
 df_curr_tb = filter_by_role(df_curr_tb_raw, st.session_state.role, st.session_state.target)
 df_dc_new = filter_by_role(df_dc_new_raw, st.session_state.role, st.session_state.target)
 df_dc_old = filter_by_role(df_dc_old_raw, st.session_state.role, st.session_state.target)
-df_pres_t = filter_by_role(df_pres_t_raw, st.session_state.role, st.session_state.target)
-df_pres_y = filter_by_role(df_pres_y_raw, st.session_state.role, st.session_state.target)
 
 gc.collect() # 🧹 Sweep memory clean before rendering dashboard!
 
