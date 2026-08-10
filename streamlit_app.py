@@ -665,7 +665,6 @@ with tab4:
             if compare_mode: color_target = st.radio("Apply Color Formatting On:", [p1_name, p2_name, "Grand Total"])
             else: color_target = p1_name
 
-    # 🛡️ BULLETPROOF DATE FINDER (Used by Corporate Deck)
     def find_date_columns(df_raw, date_list):
         import re
         target_patterns = set()
@@ -687,7 +686,6 @@ with tab4:
             for idx, cell_val in enumerate(row_raw):
                 val_clean = str(cell_val).strip()
                 if not val_clean or val_clean.lower() == 'nan': continue
-                
                 try:
                     if pd.to_datetime(val_clean, dayfirst=False).date() in date_list:
                         matched.append(idx); continue
@@ -696,11 +694,9 @@ with tab4:
                     if pd.to_datetime(val_clean, dayfirst=True).date() in date_list:
                         matched.append(idx); continue
                 except: pass
-                
                 val_stripped = re.sub(r'[^A-Z0-9]', '', val_clean.upper())
                 if val_stripped in target_patterns:
                     matched.append(idx)
-                    
             if matched: return i, list(set(matched))
         return -1, []
 
@@ -874,6 +870,9 @@ with tab4:
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
             import re
+            import urllib.request
+            import io
+            import gc
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -937,13 +936,15 @@ with tab4:
             ]
 
             # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS 
+            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (RAM SAVER)
             # ----------------------------------------------------
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
             
             for url in zone_urls:
                 try:
-                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    # Restricted to 130 columns max to stop memory explosion
+                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
+                    df_sheet1.dropna(how='all', inplace=True)
                     h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
                             
                     if h_idx1 != -1 and col_indices1:
@@ -952,6 +953,9 @@ with tab4:
                             if z_name in zone_achievements:
                                 ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
                                 zone_achievements[z_name] += ach_total
+                    
+                    del df_sheet1
+                    gc.collect()
                 except Exception as e: continue
 
             # Build Zone Table
@@ -989,13 +993,14 @@ with tab4:
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
 
             # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS 
+            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (RAM SAVER)
             # ----------------------------------------------------
             fac_achievements = {}
 
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None, names=list(range(150)), dtype=str, low_memory=False)
+                    df_fac = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
+                    df_fac.dropna(how='all', inplace=True)
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
                     if h_idx2 != -1 and col_indices_fac:
@@ -1014,6 +1019,9 @@ with tab4:
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
+                    
+                    del df_fac
+                    gc.collect()
                 except Exception as e: continue
 
             # Build Facility Tables
@@ -1138,6 +1146,9 @@ with tab4:
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
             import re
+            import urllib.request
+            import io
+            import gc
             
             def add_corporate_slide(prs_obj, title_text):
                 slide = prs_obj.slides.add_slide(prs_obj.slide_layouts[5])
@@ -1189,8 +1200,6 @@ with tab4:
                 if target_month not in naat_urls: continue 
                     
                 try:
-                    import urllib.request
-                    import io
                     url = naat_urls[target_month]
                     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                     with urllib.request.urlopen(req, timeout=30) as response:
@@ -1199,10 +1208,10 @@ with tab4:
                         if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
                             return None, f"⚠️ The Google Sheet for Month {target_month} is LOCKED. Please change its permissions to 'Anyone with the link can view'."
                         
-                        # 🛡️ THE FIX: Removed quoting=3 to prevent commas from breaking the CSV structure!
-                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, engine='python', on_bad_lines='skip')
+                        # 🛡️ THE FIX: Strictly restricted to 130 columns and engine='python' to save memory and bypass buffer overflow.
+                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
                     
-                    # Forward-fill NAAT sites in Column 0 to merge empty rows
+                    df_naat.dropna(how='all', inplace=True)
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
                     tested_cols = []
@@ -1231,10 +1240,14 @@ with tab4:
                     for _, row in grouped_temp.iterrows():
                         s_name = str(row[0]).strip()
                         site_totals[s_name] = site_totals.get(s_name, 0) + row['Tested_Sum']
+                        
+                    # 🧹 Aggressive Garbage Collection to prevent OOM
+                    del df_naat
+                    gc.collect()
 
                 except Exception as e: return None, f"⚠️ Fetch Error on Month {target_month}: {str(e)}"
 
-            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, July, or August sheets."
+            if not found_any_date: return None, "⚠️ Could not find data for selected dates. Ensure you didn't pick dates in the future."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
@@ -1242,7 +1255,6 @@ with tab4:
             grouped['Tested'] = grouped['Tested'].astype(int)
             grouped['Average'] = (grouped['Tested'] / w_days).apply(format_avg)
             
-            import re
             def clean_site(s):
                 c = str(s).upper().replace("CBNAAT", "").replace("TRUNAAT", "").strip(" -,")
                 return c if c not in ["NAN", "NONE", ""] else ""
