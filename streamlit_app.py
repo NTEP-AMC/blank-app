@@ -2885,7 +2885,7 @@ with tab10:
             st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
 
             # --------------------------------=============================
-            # 🎯 NEW ADDITION: TOP 20 HIGH PENDENCY FACILITIES (UHC/CHC/HOSP)
+            # 🎯 TOP 20 HIGH PENDENCY FACILITIES (UHC/CHC/HOSP)
             # --------------------------------=============================
             phi_rows = []
             for phi, p_data in phi_counts.items():
@@ -2961,6 +2961,26 @@ with tab10:
                 st.markdown(html_phi_table, unsafe_allow_html=True)
                 st.download_button("📥 Download Top 20 High-Pendency Facilities (CSV)", df_phi_top20.drop(columns=["Pending_Count"]).to_csv(index=False).encode('utf-8'), f"PTFU_Top20_Facilities_{selected_month}.csv", "text/csv")
 
+
+            # --------------------------------=============================
+            # 🎯 NEW ADDITION: FULL UHC (PHI) WISE REPORT
+            # --------------------------------=============================
+            if not df_phi_all.empty:
+                st.markdown("<h4 style='color: #0f4a8a; margin-top: 30px; font-weight: 700;'>🏥 Comprehensive UHC / Facility-wise Report</h4>", unsafe_allow_html=True)
+                df_phi_full = df_phi_all.sort_values(by=["Zone", "Facility Name (UHC/CHC/Hosp)"]).reset_index(drop=True)
+                
+                ph_z_col, _ = st.columns([1, 2])
+                with ph_z_col:
+                    filter_uhc_zone = st.selectbox("Filter UHCs by Zone", ["All"] + zones_order, key="uhc_zone_filter")
+                
+                df_phi_display = df_phi_full.copy()
+                if filter_uhc_zone != "All":
+                    df_phi_display = df_phi_display[df_phi_display['Zone'] == filter_uhc_zone]
+                
+                st.dataframe(df_phi_display.drop(columns=["Pending_Count"]), use_container_width=True, hide_index=True)
+                st.download_button("📥 Download Full UHC Report (CSV)", df_phi_display.drop(columns=["Pending_Count"]).to_csv(index=False).encode('utf-8'), f"PTFU_Full_UHC_Report_{selected_month}.csv", "text/csv")
+
+
             # 7. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
             st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
@@ -2975,5 +2995,5 @@ with tab10:
             if f_stat != "All": df_display = df_display[df_display['Status'] == f_stat]
             if f_zone != "All": df_display = df_display[df_display['Zone'] == f_zone]
             
-            st.dataframe(df_display, width="stretch", hide_index=True)
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
             st.download_button("📥 Download PTFU Line List (CSV)", df_display.to_csv(index=False).encode('utf-8'), f"PTFU_Line_List_{selected_month}.csv", "text/csv")
