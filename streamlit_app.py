@@ -2801,7 +2801,7 @@ with tab10:
                         "Status": "✅ DONE" if is_done else "❌ PENDING"
                     })
 
-            # 5. Generate Summary DataFrame
+            # 5. Generate Summary DataFrames
             summary_rows = []
             tot_6e=0; tot_6d=0; tot_12e=0; tot_12d=0; tot_18e=0; tot_18d=0; tot_24e=0; tot_24d=0
             
@@ -2836,8 +2836,18 @@ with tab10:
             
             df_summary = pd.DataFrame(summary_rows)
 
-            # 6. HTML Table Generator (Zone View)
-            html_table = f"""<div style="overflow-x:auto;">
+            # --------------------------------=============================
+            # 🎛️ DYNAMIC VIEW TOGGLE: ZONE VS PHI (NEW ADDITION)
+            # --------------------------------=============================
+            st.markdown("<br><hr style='border: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
+            
+            c_view1, c_view2 = st.columns([1.5, 2])
+            with c_view1:
+                view_mode = st.radio("📊 Select Summary Level:", ["🌍 Zone-Wise Summary", "🏥 UHC / PHI-Wise Summary"], horizontal=True)
+            
+            if "Zone-Wise" in view_mode:
+                # 6. HTML Table Generator (Zone View)
+                html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
 <tr style="background-color: #0f4a8a; color: white; text-align: center;">
@@ -2859,30 +2869,105 @@ with tab10:
 </tr>
 </thead>
 <tbody>"""
-            
-            for idx, row in df_summary.iterrows():
-                is_total = (row['Zone'] == 'TOTAL')
-                bg = "#0f4a8a" if is_total else ("#f8fafc" if idx % 2 == 0 else "#ffffff")
-                txt_color = "white" if is_total else "#333"
-                z_bg = "#1a73e8" if is_total else "#3b82f6"
                 
-                c6 = "#1a73e8" if is_total else get_pct_color(int(row['6M %'].replace('%','')))
-                c12 = "#1a73e8" if is_total else get_pct_color(int(row['12M %'].replace('%','')))
-                c18 = "#1a73e8" if is_total else get_pct_color(int(row['18M %'].replace('%','')))
-                c24 = "#1a73e8" if is_total else get_pct_color(int(row['24M %'].replace('%','')))
-                txt_pct = "white" if is_total else "#111"
+                for idx, row in df_summary.iterrows():
+                    is_total = (row['Zone'] == 'TOTAL')
+                    bg = "#0f4a8a" if is_total else ("#f8fafc" if idx % 2 == 0 else "#ffffff")
+                    txt_color = "white" if is_total else "#333"
+                    z_bg = "#1a73e8" if is_total else "#3b82f6"
+                    
+                    c6 = "#1a73e8" if is_total else get_pct_color(int(row['6M %'].replace('%','')))
+                    c12 = "#1a73e8" if is_total else get_pct_color(int(row['12M %'].replace('%','')))
+                    c18 = "#1a73e8" if is_total else get_pct_color(int(row['18M %'].replace('%','')))
+                    c24 = "#1a73e8" if is_total else get_pct_color(int(row['24M %'].replace('%','')))
+                    txt_pct = "white" if is_total else "#111"
 
-                html_table += f"""<tr style="background-color: {bg}; text-align: center; color: {txt_color}; font-size: 13px;">
+                    html_table += f"""<tr style="background-color: {bg}; text-align: center; color: {txt_color}; font-size: 13px;">
 <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; background-color: {z_bg}; color: white;">{row['Zone']}</td>
 <td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c6}; color: {txt_pct}; font-weight: bold;">{row['6M %']}</td>
 <td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c12}; color: {txt_pct}; font-weight: bold;">{row['12M %']}</td>
 <td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c18}; color: {txt_pct}; font-weight: bold;">{row['18M %']}</td>
 <td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c24}; color: {txt_pct}; font-weight: bold;">{row['24M %']}</td>
 </tr>"""
+                    
+                html_table += "</tbody></table></div><br>"
+                st.markdown(html_table, unsafe_allow_html=True)
+                st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Zone_Summary_{selected_month}.csv", "text/csv")
+
+            else:
+                # 7. HTML Table Generator (PHI View)
+                with c_view2:
+                    filter_uhc_zone = st.selectbox("🔍 Filter UHCs by Zone", ["All"] + zones_order, key="uhc_zone_filter", label_visibility="collapsed")
                 
-            html_table += "</tbody></table></div><br>"
-            st.markdown(html_table, unsafe_allow_html=True)
-            st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Summary_{selected_month}.csv", "text/csv")
+                # Build the granular DataFrame for the HTML table
+                phi_sum_rows = []
+                for phi, p_data in phi_counts.items():
+                    z = p_data["ZONE"]
+                    e6 = p_data["6M"]["elig"]; d6 = p_data["6M"]["done"]; pct6 = int((d6/e6)*100) if e6>0 else 0
+                    e12 = p_data["12M"]["elig"]; d12 = p_data["12M"]["done"]; pct12 = int((d12/e12)*100) if e12>0 else 0
+                    e18 = p_data["18M"]["elig"]; d18 = p_data["18M"]["done"]; pct18 = int((d18/e18)*100) if e18>0 else 0
+                    e24 = p_data["24M"]["elig"]; d24 = p_data["24M"]["done"]; pct24 = int((d24/e24)*100) if e24>0 else 0
+                    
+                    phi_sum_rows.append({
+                        "Zone": z, "Facility Name": phi,
+                        "6M Eligible": e6, "6M Done": d6, "6M %": f"{pct6}%",
+                        "12M Eligible": e12, "12M Done": d12, "12M %": f"{pct12}%",
+                        "18M Eligible": e18, "18M Done": d18, "18M %": f"{pct18}%",
+                        "24M Eligible": e24, "24M Done": d24, "24M %": f"{pct24}%"
+                    })
+                
+                df_phi_full_sum = pd.DataFrame(phi_sum_rows).sort_values(by=["Zone", "Facility Name"]).reset_index(drop=True)
+                
+                df_phi_display = df_phi_full_sum.copy()
+                if filter_uhc_zone != "All":
+                    df_phi_display = df_phi_display[df_phi_display['Zone'] == filter_uhc_zone]
+
+                html_phi_full = f"""<div style="overflow-x:auto; max-height: 600px; overflow-y: auto;">
+<table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+<thead style="position: sticky; top: 0; z-index: 1;">
+<tr style="background-color: #0f4a8a; color: white; text-align: center;">
+<th colspan="14" style="padding: 12px; font-size: 16px; border: 1px solid #1a73e8;">AMC NTEP — Facility-wise PTFU Pendancy Summary ({selected_month})</th>
+</tr>
+<tr style="background-color: #1a73e8; color: white; text-align: center; font-size: 14px;">
+<th style="padding: 10px; border: 1px solid #60a5fa; width: 8%;">Zone</th>
+<th style="padding: 10px; border: 1px solid #60a5fa; width: 16%;">Facility (PHI)</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">6th Month PTFU ({configs["6M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">12th Month PTFU ({configs["12M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">18th Month PTFU ({configs["18M"]["name"].split(' - ')[0]})</th>
+<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">24th Month PTFU ({configs["24M"]["name"].split(' - ')[0]})</th>
+</tr>
+<tr style="background-color: #3b82f6; color: white; text-align: center; font-size: 12px;">
+<th style="padding: 8px; border: 1px solid #93c5fd;"></th>
+<th style="padding: 8px; border: 1px solid #93c5fd;"></th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
+</tr>
+</thead>
+<tbody>"""
+
+                for idx, row in df_phi_display.iterrows():
+                    bg = "#f8fafc" if idx % 2 == 0 else "#ffffff"
+                    
+                    c6 = get_pct_color(int(row['6M %'].replace('%','')))
+                    c12 = get_pct_color(int(row['12M %'].replace('%','')))
+                    c18 = get_pct_color(int(row['18M %'].replace('%','')))
+                    c24 = get_pct_color(int(row['24M %'].replace('%','')))
+
+                    html_phi_full += f"""<tr style="background-color: {bg}; text-align: center; color: #333; font-size: 13px;">
+<td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; color: #0f4a8a; background-color: #e2e8f0;">{row['Zone']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; color: #1e293b;">{row['Facility Name']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c6}; color: #111; font-weight: bold;">{row['6M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c12}; color: #111; font-weight: bold;">{row['12M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c18}; color: #111; font-weight: bold;">{row['18M %']}</td>
+<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c24}; color: #111; font-weight: bold;">{row['24M %']}</td>
+</tr>"""
+
+                html_phi_full += "</tbody></table></div><br>"
+                st.markdown(html_phi_full, unsafe_allow_html=True)
+                st.download_button("📥 Download Full UHC Summary (CSV)", df_phi_display.to_csv(index=False).encode('utf-8'), f"PTFU_PHI_Summary_{selected_month}.csv", "text/csv")
+
 
             # --------------------------------=============================
             # 🎯 TOP 20 HIGH PENDENCY FACILITIES (UHC/CHC/HOSP)
@@ -2962,90 +3047,10 @@ with tab10:
                 st.download_button("📥 Download Top 20 High-Pendency Facilities (CSV)", df_phi_top20.drop(columns=["Pending_Count"]).to_csv(index=False).encode('utf-8'), f"PTFU_Top20_Facilities_{selected_month}.csv", "text/csv")
 
 
-            # --------------------------------=============================
-            # 🎯 NEW ADDITION: FULL UHC (PHI) WISE HTML REPORT
-            # --------------------------------=============================
-            if not df_phi_all.empty:
-                st.markdown("<h4 style='color: #0f4a8a; margin-top: 30px; font-weight: 700;'>🏥 Comprehensive UHC / Facility-wise Report</h4>", unsafe_allow_html=True)
-                
-                ph_z_col, _ = st.columns([1, 2])
-                with ph_z_col:
-                    filter_uhc_zone = st.selectbox("Filter UHCs by Zone", ["All"] + zones_order, key="uhc_zone_filter")
-                
-                # Build the granular DataFrame for the HTML table
-                phi_sum_rows = []
-                for phi, p_data in phi_counts.items():
-                    z = p_data["ZONE"]
-                    e6 = p_data["6M"]["elig"]; d6 = p_data["6M"]["done"]; pct6 = int((d6/e6)*100) if e6>0 else 0
-                    e12 = p_data["12M"]["elig"]; d12 = p_data["12M"]["done"]; pct12 = int((d12/e12)*100) if e12>0 else 0
-                    e18 = p_data["18M"]["elig"]; d18 = p_data["18M"]["done"]; pct18 = int((d18/e18)*100) if e18>0 else 0
-                    e24 = p_data["24M"]["elig"]; d24 = p_data["24M"]["done"]; pct24 = int((d24/e24)*100) if e24>0 else 0
-                    
-                    phi_sum_rows.append({
-                        "Zone": z, "Facility Name": phi,
-                        "6M Eligible": e6, "6M Done": d6, "6M %": f"{pct6}%",
-                        "12M Eligible": e12, "12M Done": d12, "12M %": f"{pct12}%",
-                        "18M Eligible": e18, "18M Done": d18, "18M %": f"{pct18}%",
-                        "24M Eligible": e24, "24M Done": d24, "24M %": f"{pct24}%"
-                    })
-                
-                df_phi_full_sum = pd.DataFrame(phi_sum_rows).sort_values(by=["Zone", "Facility Name"]).reset_index(drop=True)
-                
-                df_phi_display = df_phi_full_sum.copy()
-                if filter_uhc_zone != "All":
-                    df_phi_display = df_phi_display[df_phi_display['Zone'] == filter_uhc_zone]
-
-                # Generate exact replica of the Zone HTML Table structure for PHIs
-                html_phi_full = f"""<div style="overflow-x:auto; max-height: 600px; overflow-y: auto;">
-<table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-<thead style="position: sticky; top: 0; z-index: 1;">
-<tr style="background-color: #0f4a8a; color: white; text-align: center;">
-<th colspan="14" style="padding: 12px; font-size: 16px; border: 1px solid #1a73e8;">AMC NTEP — Facility-wise PTFU Pendancy Summary ({selected_month})</th>
-</tr>
-<tr style="background-color: #1a73e8; color: white; text-align: center; font-size: 14px;">
-<th style="padding: 10px; border: 1px solid #60a5fa; width: 8%;">Zone</th>
-<th style="padding: 10px; border: 1px solid #60a5fa; width: 16%;">Facility (PHI)</th>
-<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">6th Month PTFU ({configs["6M"]["name"].split(' - ')[0]})</th>
-<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">12th Month PTFU ({configs["12M"]["name"].split(' - ')[0]})</th>
-<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">18th Month PTFU ({configs["18M"]["name"].split(' - ')[0]})</th>
-<th colspan="3" style="padding: 10px; border: 1px solid #60a5fa;">24th Month PTFU ({configs["24M"]["name"].split(' - ')[0]})</th>
-</tr>
-<tr style="background-color: #3b82f6; color: white; text-align: center; font-size: 12px;">
-<th style="padding: 8px; border: 1px solid #93c5fd;"></th>
-<th style="padding: 8px; border: 1px solid #93c5fd;"></th>
-<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-<th style="padding: 8px; border: 1px solid #93c5fd;">Eligible<br>Patients</th><th style="padding: 8px; border: 1px solid #93c5fd;">Entry<br>Done</th><th style="padding: 8px; border: 1px solid #93c5fd;">%</th>
-</tr>
-</thead>
-<tbody>"""
-
-                for idx, row in df_phi_display.iterrows():
-                    bg = "#f8fafc" if idx % 2 == 0 else "#ffffff"
-                    
-                    c6 = get_pct_color(int(row['6M %'].replace('%','')))
-                    c12 = get_pct_color(int(row['12M %'].replace('%','')))
-                    c18 = get_pct_color(int(row['18M %'].replace('%','')))
-                    c24 = get_pct_color(int(row['24M %'].replace('%','')))
-
-                    html_phi_full += f"""<tr style="background-color: {bg}; text-align: center; color: #333; font-size: 13px;">
-<td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; color: #0f4a8a; background-color: #e2e8f0;">{row['Zone']}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1; text-align: left; font-weight: bold; color: #1e293b;">{row['Facility Name']}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['6M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c6}; color: #111; font-weight: bold;">{row['6M %']}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['12M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c12}; color: #111; font-weight: bold;">{row['12M %']}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['18M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c18}; color: #111; font-weight: bold;">{row['18M %']}</td>
-<td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Eligible']}</td><td style="padding: 8px; border: 1px solid #cbd5e1;">{row['24M Done']}</td><td style="padding: 8px; border: 1px solid #cbd5e1; background-color: {c24}; color: #111; font-weight: bold;">{row['24M %']}</td>
-</tr>"""
-
-                html_phi_full += "</tbody></table></div><br>"
-                st.markdown(html_phi_full, unsafe_allow_html=True)
-                st.download_button("📥 Download Full UHC Summary (CSV)", df_phi_display.to_csv(index=False).encode('utf-8'), f"PTFU_Full_UHC_Summary_{selected_month}.csv", "text/csv", key="dl_phi_full_csv")
-
-
-            # 7. Interactive Line List
+            # 8. Interactive Line List
             df_line_list = pd.DataFrame(line_list_rows)
-            st.markdown("<h4 style='color: #333; margin-top: 20px;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
+            st.markdown("<br><hr style='border: 1.5px solid #0f4a8a;'>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color: #0f4a8a; margin-top: 10px; font-weight: 700;'>📋 Complete Patient Line List (Eligible vs Done)</h4>", unsafe_allow_html=True)
             
             fc1, fc2, fc3 = st.columns(3)
             with fc1: f_period = st.selectbox("Filter by Period", ["All", configs["6M"]["name"], configs["12M"]["name"], configs["18M"]["name"], configs["24M"]["name"]])
