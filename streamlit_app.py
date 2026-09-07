@@ -791,7 +791,7 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
-        except ImportError: return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
+        except ImportError: return None, "⚠️ PPTX library is not installed."
 
         prs = Presentation()
         m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
@@ -999,7 +999,7 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 STRICTLY THE 4 REQUIRED SHEETS (No double counting!)
+            # 🚀 STRICTLY THE 4 REQUIRED SHEETS (Zero Double-Counting)
             fac_url_configs = [
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", "type": "MAIN"},
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", "type": "HWC"},
@@ -1007,18 +1007,20 @@ with tab4:
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", "type": "HWC"}
             ]
 
-            # 🚀 FLAWLESS WEST ZONE WILDCARD MAPPING
+            # 🚀 FLAWLESS MULTILINGUAL MAPPING (Perfect West Zone catch)
             def map_zone(z_raw):
-                if not isinstance(z_raw, str): return None
-                z_str = z_raw.upper().replace(' ', '').replace('\u200B', '').replace('\u200D', '')
-                if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or "NWZ" in z_str: return "North West"
-                if "દક્ષિણપશ્ચિમ" in z_str or "SOUTHWEST" in z_str or "SWZ" in z_str: return "South West"
+                z_str = str(z_raw).upper()
+                if "NORTH" in z_str and "WEST" in z_str: return "North West"
+                if "SOUTH" in z_str and "WEST" in z_str: return "South West"
+                if "ઉત્તર" in z_str and "પશ્" in z_str: return "North West"
+                if "દક્ષિણ" in z_str and "પશ્" in z_str: return "South West"
                 if "મધ્ય" in z_str or "CENTRAL" in z_str or "CZ" in z_str: return "Central"
+                if "પૂર્વ" in z_str or "EAST" in z_str or "EZ" in z_str: return "East"
                 if "ઉત્તર" in z_str or "NORTH" in z_str or "NZ" in z_str: return "North"
                 if "દક્ષિણ" in z_str or "SOUTH" in z_str or "SZ" in z_str: return "South"
-                if "પૂર્વ" in z_str or "EAST" in z_str or "EZ" in z_str: return "East"
-                # This explicitly catches ALL Gujarati typing errors for West Zone (પશ્ચિમ, પશ્વિમ, પશ્ર્ચિમ)
                 if "પશ્" in z_str or "WEST" in z_str or "WZ" in z_str: return "West"
+                # Ultimate fallback for West Zone
+                if "ઝોન" in z_str and "પ" in z_str: return "West"
                 return None
 
             fac_achievements = {}
@@ -1036,7 +1038,10 @@ with tab4:
                         df_fac = pd.read_csv(io.BytesIO(content), header=None, names=list(range(60)), dtype=str, engine='python', on_bad_lines='skip')
                     
                     df_fac.dropna(how='all', inplace=True)
-                    df_fac[0] = df_fac[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    
+                    # 🛡️ Bulletproof Forward Fill for merged Zone names
+                    df_fac[0] = df_fac[0].astype(str).replace(r'^\s*$', 'NAN', regex=True).replace(['nan', 'NaN', 'None', ''], 'NAN')
+                    df_fac[0] = df_fac[0].replace('NAN', pd.NA).ffill()
                     
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
@@ -1045,15 +1050,14 @@ with tab4:
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                             
-                            # Disregard pre-aggregated total rows
-                            if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or "TOTAL" in zone_guj.upper() or fac_name in ["", "nan", "None"]:
+                            if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or "TOTAL" in zone_guj.upper() or fac_name in ["", "nan", "None", "NAN"]:
                                 continue
                                 
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             mapped_z = map_zone(zone_guj)
                             
                             f_upper = fac_name.upper()
-                            fac_type = "OTHER"
+                            fac_type = "IGNORE"
                             
                             # 🚀 STRICT FACILITY IDENTIFICATION
                             if config["type"] == "HWC":
@@ -1066,7 +1070,7 @@ with tab4:
                                 elif any(x in f_upper for x in ["અર્બન", "UHC", "URBAN"]):
                                     fac_type = "UHC"
                                 else:
-                                    fac_type = "UHC" # If it's in the Main Sheet and not a Hosp/CHC, it defaults to UHC to catch misnamed facilities!
+                                    fac_type = "IGNORE" # Safely ignore anything bizarre
                                 
                             # 🚀 ZONE TOTAL SLIDE: Strictly UHC + CHC + HWC. (Hospitals mathematically excluded!)
                             if fac_type in ["UHC", "CHC", "HWC"]:
@@ -1411,7 +1415,7 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-    
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
