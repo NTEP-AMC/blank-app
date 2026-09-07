@@ -981,7 +981,7 @@ with tab4:
 
             def extract_num(val):
                 if pd.isna(val) or str(val).lower() == 'nan': return 0
-                clean_str = str(val).split('(')[0].strip()
+                clean_str = str(val).split('(')[0].replace(',', '').strip()
                 nums = re.findall(r'\d+', clean_str)
                 return int(nums[0]) if nums else 0
 
@@ -999,15 +999,15 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 NEW: Integrated your exact August and September URLs
+            # 🚀 NEW: Dynamically processing all granular facility URLs directly (Auto-sums Zone Totals)
             fac_urls = [
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # Sept UHC/Hosp
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", # Sept HWC
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2038437224", # Aug UHC/Hosp
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", # Aug HWC
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", 
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", 
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", # Older
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", # Older
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"   # Older
             ]
 
             def map_zone(z_raw):
@@ -1033,13 +1033,14 @@ with tab4:
                     with urllib.request.urlopen(req, timeout=30) as response:
                         content = response.read()
                         
-                        # Prevent locked sheets from crashing
                         if b"<html" in content[:50].lower(): continue
                         
-                        # 🛡️ THE FIX: Force 60 columns so Pandas doesn't drop your data rows because of the merged header in Row 1!
                         df_fac = pd.read_csv(io.BytesIO(content), header=None, names=list(range(60)), dtype=str, engine='python', on_bad_lines='skip')
                     
                     df_fac.dropna(how='all', inplace=True)
+                    # 🛡️ BULLETPROOF: Forward-fill the Zone column to fix Merged Cells!
+                    df_fac[0] = df_fac[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
+                    
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
                     if h_idx2 != -1 and col_indices_fac:
@@ -1047,25 +1048,24 @@ with tab4:
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                             
-                            # Safely skip completely empty rows and totals
+                            # 🛡️ Skip pre-calculated totals to avoid double counting!
                             if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or fac_name in ["", "nan", "None"]: continue
                                 
-                            # Safe numeric extraction, ignores text like 'Independence day'
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             
-                            # 🚀 Auto-calculate Zone Totals directly from Facility sheets (including HWCs!)
+                            # 🚀 Auto-calculate Zone Totals directly from granular Facility sheets
                             mapped_z = map_zone(zone_guj)
                             if mapped_z and mapped_z in zone_achievements:
                                 zone_achievements[mapped_z] += achieved_total
                             
                             fac_type = "OTHER"
                             f_upper = fac_name.upper()
-                            # 🚀 Fixed identification for English UHCs so they map to the correct slide!
-                            if "અર્બન હેલ્થ સેન્ટર" in fac_name or "UHC" in f_upper or "URBAN HEALTH" in f_upper: 
+                            # 🚀 Multilingual detection: Guj & Eng
+                            if "અર્બન" in f_upper or "UHC" in f_upper or "URBAN" in f_upper or "U-HWC" in f_upper or "-1" in f_upper or "-2" in f_upper or "-3" in f_upper: 
                                 fac_type = "UHC"
-                            elif "સામુહીક" in fac_name or "સામુહિક" in fac_name or "CHC" in f_upper: 
+                            elif "સામુહીક" in f_upper or "CHC" in f_upper: 
                                 fac_type = "CHC"
-                            elif "હોસ્પિટલ" in fac_name or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper: 
+                            elif "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper: 
                                 fac_type = "HOSPITAL"
                             
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
@@ -1127,7 +1127,6 @@ with tab4:
 
                 # --- 📉 UHC SLIDES ---
                 if not df_fac_processed.empty:
-                    # 🚀 Fix for "< 75% UHC": Rebuilt precisely to filter properly based on calculated targets
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
                     df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
