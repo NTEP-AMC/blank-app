@@ -64,24 +64,20 @@ if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
     if not b64_amc: b64_amc = img_to_b64("amc.png")
 
-    JALI_CANDIDATES = [
-        "banner_sidi-saiyyad-jali_902.png", "banner_sidi-saiyyad-jali_902.jpg", "banner_sidi-saiyyad-jali_902.jpeg",
-        "sidi-saiyyad-jali.png", "sidi-saiyyad-jali.jpg", "sidi_saiyyad_jali.png", "sidi_saiyyad_jali.jpg"
-    ]
-    RIVERFRONT_CANDIDATES = [
-        "ahmedabad_riverfront.png", "ahmedabad_riverfront.jpg", "ahmedabad_riverfront.jpeg",
-        "riverfront.png", "riverfront.jpg", "sabarmati_riverfront.png", "sabarmati_riverfront.jpg"
-    ]
+    # 🎯 FIX: Explicitly targeting your GitHub file names
+    JALI_CANDIDATES = ["h1.jpg"]
+    RIVERFRONT_CANDIDATES = ["h2.jpg"]
     
     b64_jali = first_existing_b64(JALI_CANDIDATES)
     b64_riverfront = first_existing_b64(RIVERFRONT_CANDIDATES)
 
+    # 🎯 FIX: Using image/jpeg for jpg files to ensure they render properly
     riverfront_layer = (
-        f"linear-gradient(180deg, rgba(244,247,251,0.85) 0%, rgba(244,247,251,0.97) 100%), url('data:image/png;base64,{b64_riverfront}')"
+        f"linear-gradient(180deg, rgba(244,247,251,0.85) 0%, rgba(244,247,251,0.97) 100%), url('data:image/jpeg;base64,{b64_riverfront}')"
         if b64_riverfront else "none"
     )
     jali_layer = (
-        f"linear-gradient(160deg, rgba(10,58,110,0.90) 0%, rgba(18,74,138,0.80) 55%, rgba(10,58,110,0.92) 100%), url('data:image/png;base64,{b64_jali}')"
+        f"linear-gradient(160deg, rgba(10,58,110,0.90) 0%, rgba(18,74,138,0.80) 55%, rgba(10,58,110,0.92) 100%), url('data:image/jpeg;base64,{b64_jali}')"
         if b64_jali else "linear-gradient(160deg, #0A3A6E 0%, #124a8a 60%, #1a5aa8 100%)"
     )
 
@@ -160,16 +156,19 @@ if not st.session_state.auth:
         }}
         .stButton>button:hover {{ transform: translateY(-1px); box-shadow: 0 10px 20px rgba(10,58,110,0.3); }}
     </style>
-    <div class="gov-topbar">Government of Gujarat &nbsp;·&nbsp; Ahmedabad Municipal Corporation &nbsp;·&nbsp; National TB Elimination Programme</div>
+    
+    <!-- 🎯 FIX: Updated the top bar text -->
+    <div class="gov-topbar">Ahmedabad Municipal Corporation &nbsp;·&nbsp; NTEP</div>
     """, unsafe_allow_html=True)
     
     outer_l, outer_r = st.columns([4, 5], gap="small")
     with outer_l:
+        # 🎯 FIX: Updated the professional sub-text
         st.markdown(f"""
         <div class="brand-panel">
             <img src="data:image/png;base64,{b64_amc}" width="62">
             <h2>AMC · NTEP</h2>
-            <p>Adverse Outcomes &amp; Field Entry Module</p>
+            <p>Pendency Reports, Differentiated TB Care &amp; Post-Treatment Follow-Up Module</p>
             <div class="brand-tag">Ahmedabad Municipal Corporation<br>National TB Elimination Programme</div>
         </div>
         """, unsafe_allow_html=True)
@@ -229,11 +228,11 @@ if st.session_state.role == "ADMIN":
     with st.expander("🛡️ Admin Panel: View Passwords & Activity Logs"):
         a_tab1, a_tab2 = st.tabs(["🔑 Manage Users", "📝 Activity Logs"])
         with a_tab1:
-            st.dataframe(df_users, width="stretch", hide_index=True)
+            st.dataframe(df_users, use_container_width=True, hide_index=True)
         with a_tab2:
             try:
                 df_logs = pd.read_csv(LOG_FILE)
-                st.dataframe(df_logs.iloc[::-1], width="stretch", hide_index=True)
+                st.dataframe(df_logs.iloc[::-1], use_container_width=True, hide_index=True)
             except: st.write("No logs available yet.")
 
 st.markdown("<hr style='margin-top: 5px; margin-bottom: 15px;'>", unsafe_allow_html=True)
