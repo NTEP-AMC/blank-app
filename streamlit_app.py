@@ -999,7 +999,6 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 NEW: Assigned "type" natively to the URLs so the script NEVER guesses wrong!
             fac_url_configs = [
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", "type": "MAIN"},
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", "type": "HWC"},
@@ -1010,16 +1009,18 @@ with tab4:
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721", "type": "MAIN"}
             ]
 
-            # 🚀 ROBUST MAPPING: Strips spaces completely to prevent "પશ્ચિમ ઝોન" vs "પશ્ચિમઝોન" errors
+            # 🚀 ROBUST MAPPING: Strips all weird Gujarati spaces to completely fix West Zone mismatch!
             def map_zone(z_raw):
-                z_str = str(z_raw).upper().replace(' ', '')
-                if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or z_str == "NWZ": return "North West"
-                if "દક્ષિણપશ્ચિમ" in z_str or "SOUTHWEST" in z_str or z_str == "SWZ": return "South West"
-                if "મધ્ય" in z_str or "CENTRAL" in z_str or z_str == "CZ": return "Central"
-                if "ઉત્તર" in z_str or "NORTH" in z_str or z_str == "NZ": return "North"
-                if "દક્ષિણ" in z_str or "SOUTH" in z_str or z_str == "SZ": return "South"
-                if "પૂર્વ" in z_str or "EAST" in z_str or z_str == "EZ": return "East"
-                if "પશ્ચિમ" in z_str or "WEST" in z_str or z_str == "WZ": return "West"
+                if not isinstance(z_raw, str): return None
+                z_str = z_raw.upper().replace(' ', '').replace('\u200B', '').replace('\u200D', '')
+                if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or "NWZ" in z_str: return "North West"
+                if "દક્ષિણપશ્ચિમ" in z_str or "SOUTHWEST" in z_str or "SWZ" in z_str: return "South West"
+                if "મધ્ય" in z_str or "CENTRAL" in z_str or "CZ" in z_str: return "Central"
+                if "ઉત્તર" in z_str or "NORTH" in z_str or "NZ" in z_str: return "North"
+                if "દક્ષિણ" in z_str or "SOUTH" in z_str or "SZ" in z_str: return "South"
+                if "પૂર્વ" in z_str or "EAST" in z_str or "EZ" in z_str: return "East"
+                # 🚀 The ultimate catcher for West Zone spelling variations
+                if "પશ્ચિમ" in z_str or "WEST" in z_str or "WZ" in z_str or "પશ્ચીમ" in z_str or "પશ્ર્ચિમ" in z_str: return "West"
                 return None
 
             fac_achievements = {}
@@ -1054,28 +1055,29 @@ with tab4:
                             
                             mapped_z = map_zone(zone_guj)
                             
-                            # 🚀 THE FIX: Categorize perfectly using strict Source Type assignments!
-                            fac_type = "OTHER"
+                            # 🚀 THE ULTIMATE FIX: Categorizing facilities with strict precision
                             f_upper = fac_name.upper()
+                            fac_type = "IGNORE"
                             
                             if config["type"] == "HWC":
                                 fac_type = "HWC"
                             else:
-                                if "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper or "CIVIL" in f_upper or "એસ.સી.એલ" in f_upper or "એસ.વી.પી" in f_upper: 
+                                if any(x in f_upper for x in ["હોસ્પિટલ", "HOSPITAL", "HOSP", "MEDICAL", "GMERS", "CIVIL", "એસ.સી.એલ", "એસ.વી.પી"]):
                                     fac_type = "HOSPITAL"
-                                elif "સામુહીક" in f_upper or "સામુહિક" in f_upper or "CHC" in f_upper: 
+                                elif any(x in f_upper for x in ["સામુહીક", "સામુહિક", "CHC"]):
                                     fac_type = "CHC"
+                                elif any(x in f_upper for x in ["અર્બન", "UHC", "URBAN"]):
+                                    fac_type = "UHC" # Strictly verified UHCs
                                 else:
-                                    # 🚀 If it's in the MAIN sheet and it's NOT a Hospital/CHC, it is mathematically guaranteed to be a UHC! (Fixes missing English names instantly)
-                                    fac_type = "UHC"
+                                    fac_type = "OTHER_UHC" # Generic/Private UHCs
                                 
-                            # 🚀 THE FIX: Zone Total Slide ONLY adds UHC + CHC + HWC (Hospitals explicitly excluded!)
-                            if fac_type in ["UHC", "CHC", "HWC"]:
+                            # 🚀 Slide 1 (Zone Total) Logic: UHC + CHC + HWC + OTHER_UHC. (Hospitals strictly excluded!)
+                            if fac_type in ["UHC", "CHC", "HWC", "OTHER_UHC"]:
                                 if mapped_z and mapped_z in zone_achievements:
                                     zone_achievements[mapped_z] += achieved_total
                             
-                            # 🚀 THE FIX: Facility Slides ONLY record UHC, CHC, and Hospital (HWCs are safely banned from the < 75% slides!)
-                            if fac_type in ["UHC", "CHC", "HOSPITAL"]:
+                            # 🚀 Facility Slide Data: HWCs safely banned!
+                            if fac_type in ["UHC", "CHC", "HOSPITAL", "OTHER_UHC"]:
                                 dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
                     
@@ -1122,7 +1124,7 @@ with tab4:
                 fac_data = []
                 for (zone_guj, fac_name, fac_type), achieved_total in fac_achievements.items():
                     
-                    if fac_type == "UHC": target_daily = 4
+                    if fac_type in ["UHC", "OTHER_UHC"]: target_daily = 4
                     elif fac_type == "CHC": target_daily = 16
                     elif fac_type == "HOSPITAL": target_daily = 30 
                     
@@ -1134,6 +1136,7 @@ with tab4:
 
                 # --- 📉 UHC SLIDES ---
                 if not df_fac_processed.empty:
+                    # 🚀 THE ULTIMATE FIX: This absolutely forces the script to ONLY look at strict UHCs (અર્બન હેલ્થ સેન્ટર)!
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
                     df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
@@ -1412,6 +1415,7 @@ with tab4:
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
 
+    
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
