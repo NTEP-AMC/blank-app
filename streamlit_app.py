@@ -371,7 +371,7 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab4, tab5, tab6, tab8, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "🚨 Adverse Outcomes", "📱 Live Field Data", "📞 Post Follow Up"])
+tab1, tab2, tab4, tab5, tab6, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "📱 Live Field Data", "📞 Post Follow Up"])
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
@@ -2641,6 +2641,12 @@ with tab10:
     SHEET_BASE_URL = "https://docs.google.com/spreadsheets/d/1n9SjV0Hg7hOnynWKr7KEi4uGgAoAw5kHC37BFVUeeKY/export?format=csv&gid="
     
     MONTH_CONFIGS = {
+        "SEPTEMBER 2026": {
+            "6M": {"name": "March 26 - 6th month PTFU", "gid": "376168460"},
+            "12M": {"name": "Sep 25 - 12 month PTFU", "gid": "995792299"},
+            "18M": {"name": "March 25 - 18 month PTFU", "gid": "1495775432"},
+            "24M": {"name": "Sep 24 - 24 month PTFU", "gid": "708097304"}
+        },
         "AUGUST 2026": {
             "6M": {"name": "Feb 26 - 6th month PTFU", "gid": "1698354779"},
             "12M": {"name": "Aug 25 - 12 month PTFU", "gid": "595580210"},
@@ -2775,7 +2781,7 @@ with tab10:
                     
                     is_done = 1 if (raw_id and raw_id not in ["", "NAN", "NONE"] and raw_id in done_ids) else 0
                     
-                    # Core Zone Aggregations (Untouched!)
+                    # Core Zone Aggregations
                     period_data[p_key]["data"][z_match]['elig'] += 1
                     period_data[p_key]["data"][z_match]['done'] += is_done
                     
@@ -2837,7 +2843,7 @@ with tab10:
             df_summary = pd.DataFrame(summary_rows)
 
             # --------------------------------=============================
-            # 🎛️ DYNAMIC VIEW TOGGLE: ZONE VS PHI (NEW ADDITION)
+            # 🎛️ DYNAMIC VIEW TOGGLE: ZONE VS PHI
             # --------------------------------=============================
             st.markdown("<br><hr style='border: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
             
@@ -2846,7 +2852,6 @@ with tab10:
                 view_mode = st.radio("📊 Select Summary Level:", ["🌍 Zone-Wise Summary", "🏥 UHC / PHI-Wise Summary"], horizontal=True)
             
             if "Zone-Wise" in view_mode:
-                # 6. HTML Table Generator (Zone View)
                 html_table = f"""<div style="overflow-x:auto;">
 <table style="width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <thead>
@@ -2895,11 +2900,9 @@ with tab10:
                 st.download_button("📥 Download Zone Summary (CSV)", df_summary.to_csv(index=False).encode('utf-8'), f"PTFU_Zone_Summary_{selected_month}.csv", "text/csv")
 
             else:
-                # 7. HTML Table Generator (PHI View)
                 with c_view2:
                     filter_uhc_zone = st.selectbox("🔍 Filter UHCs by Zone", ["All"] + zones_order, key="uhc_zone_filter", label_visibility="collapsed")
                 
-                # Build the granular DataFrame for the HTML table
                 phi_sum_rows = []
                 for phi, p_data in phi_counts.items():
                     z = p_data["ZONE"]
