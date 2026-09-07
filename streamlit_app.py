@@ -999,40 +999,68 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            zone_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=972568835",  
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1989403449", 
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1902029689", 
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=470337901"   
-            ]
-            
+            # 🚀 NEW: Dynamically processing all facility URLs (UHC/CHC/Hosp & HWC) directly
             fac_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0",          
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # Sept UHC/Hosp
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", # Sept HWC
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2038437224", # Aug UHC/Hosp
+                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", # Aug HWC
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", 
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", 
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"  
             ]
 
-            # ----------------------------------------------------
-            # 1️⃣ AGGREGATE ZONE DATA ACROSS ALL SHEETS (RAM SAVER)
-            # ----------------------------------------------------
+            def map_zone(z_raw):
+                z_str = str(z_raw).upper().strip()
+                if "ઉત્તર પશ્ચિમ" in z_str or "NORTH WEST" in z_str or z_str == "NWZ": return "North West"
+                if "દક્ષિણ પશ્ચિમ" in z_str or "SOUTH WEST" in z_str or z_str == "SWZ": return "South West"
+                if "મધ્ય" in z_str or "CENTRAL" in z_str or z_str == "CZ": return "Central"
+                if "ઉત્તર" in z_str or "NORTH" in z_str or z_str == "NZ": return "North"
+                if "દક્ષિણ" in z_str or "SOUTH" in z_str or z_str == "SZ": return "South"
+                if "પૂર્વ" in z_str or "EAST" in z_str or z_str == "EZ": return "East"
+                if "પશ્ચિમ" in z_str or "WEST" in z_str or z_str == "WZ": return "West"
+                return None
+
+            fac_achievements = {}
             zone_achievements = {z: 0 for z in fixed_targets.keys() if z != "AMC"}
-            
-            for url in zone_urls:
+
+            # ----------------------------------------------------
+            # 1️⃣ AGGREGATE FACILITY & AUTO-CALCULATE ZONE DATA
+            # ----------------------------------------------------
+            for url in fac_urls:
                 try:
-                    # Restricted to 130 columns max to stop memory explosion
-                    df_sheet1 = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
-                    df_sheet1.dropna(how='all', inplace=True)
-                    h_idx1, col_indices1 = find_date_columns(df_sheet1, date_list)
+                    df_fac = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
+                    df_fac.dropna(how='all', inplace=True)
+                    h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
-                    if h_idx1 != -1 and col_indices1:
-                        for row_idx in range(h_idx1 + 1, len(df_sheet1)):
-                            z_name = re.sub(r'\s+', ' ', str(df_sheet1.iloc[row_idx, 0])).strip().title()
-                            if z_name in zone_achievements:
-                                ach_total = sum([extract_num(df_sheet1.iloc[row_idx, c]) for c in col_indices1])
-                                zone_achievements[z_name] += ach_total
+                    if h_idx2 != -1 and col_indices_fac:
+                        for row_idx in range(h_idx2 + 1, len(df_fac)):
+                            zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
+                            fac_name = str(df_fac.iloc[row_idx, 1]).strip()
+                            if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or fac_name in ["", "nan", "None"]: continue
+                                
+                            achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
+                            
+                            # 🚀 Auto-calculate Zone Totals directly from Facility sheets (including HWCs!)
+                            mapped_z = map_zone(zone_guj)
+                            if mapped_z and mapped_z in zone_achievements:
+                                zone_achievements[mapped_z] += achieved_total
+                            
+                            # 🚀 FIXED: Better parsing to correctly catch English "UHC" and not throw them into "OTHER"
+                            fac_type = "OTHER"
+                            f_upper = fac_name.upper()
+                            if "અર્બન હેલ્થ સેન્ટર" in fac_name or "UHC" in f_upper or "URBAN HEALTH" in f_upper: 
+                                fac_type = "UHC"
+                            elif "સામુહીક" in fac_name or "સામુહિક" in fac_name or "CHC" in f_upper: 
+                                fac_type = "CHC"
+                            elif "હોસ્પિટલ" in fac_name or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper: 
+                                fac_type = "HOSPITAL"
+                            
+                            if fac_type in ["UHC", "CHC", "HOSPITAL"]:
+                                dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
+                                fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
                     
-                    del df_sheet1
+                    del df_fac
                     gc.collect()
                 except Exception as e: continue
 
@@ -1069,38 +1097,6 @@ with tab4:
                         if j == 4 and row['ZONE'].upper() != "AMC":
                             pct_val = float(str(row.iloc[j]).replace('%', ''))
                             cell.fill.solid(); cell.fill.fore_color.rgb = get_multi_color(pct_val)
-
-            # ----------------------------------------------------
-            # 2️⃣ AGGREGATE FACILITY DATA ACROSS ALL SHEETS (RAM SAVER)
-            # ----------------------------------------------------
-            fac_achievements = {}
-
-            for url in fac_urls:
-                try:
-                    df_fac = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
-                    df_fac.dropna(how='all', inplace=True)
-                    h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
-                            
-                    if h_idx2 != -1 and col_indices_fac:
-                        for row_idx in range(h_idx2 + 1, len(df_fac)):
-                            zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
-                            fac_name = str(df_fac.iloc[row_idx, 1]).strip()
-                            if "કુલ" in fac_name or "કુલ" in zone_guj or fac_name in ["", "nan", "None"]: continue
-                                
-                            achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
-                            fac_type = "OTHER"
-                            
-                            if "અર્બન હેલ્થ સેન્ટર" in fac_name: fac_type = "UHC"
-                            elif "સામુહીક" in fac_name or "સામુહિક" in fac_name: fac_type = "CHC"
-                            elif "હોસ્પિટલ" in fac_name: fac_type = "HOSPITAL"
-                            
-                            if fac_type in ["UHC", "CHC", "HOSPITAL"]:
-                                dict_key = (zone_guj, fac_name, fac_type)
-                                fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
-                    
-                    del df_fac
-                    gc.collect()
-                except Exception as e: continue
 
             # Build Facility Tables
             if fac_achievements:
@@ -1286,24 +1282,27 @@ with tab4:
                         if b"<html" in content[:50].lower() or b"<!doctype html>" in content[:50].lower():
                             return None, f"⚠️ The Google Sheet for Month {target_month} is LOCKED. Please change its permissions to 'Anyone with the link can view'."
                         
-                        # 🛡️ THE FIX: Strictly restricted to 130 columns and engine='python' to save memory and bypass buffer overflow.
-                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
+                        df_naat = pd.read_csv(io.BytesIO(content), header=None, names=list(range(200)), dtype=str, engine='python', on_bad_lines='skip', quoting=3)
                     
-                    df_naat.dropna(how='all', inplace=True)
+                    df_naat = df_naat.replace('"', '', regex=True)
                     df_naat[0] = df_naat[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
+                    h_idx, match_indices = find_date_columns(df_naat, m_dates)
+                    
                     tested_cols = []
-                    for d in m_dates:
-                        # 🚀 THE GENIUS MATH FIX: Day 1 is Col G (Index 6), Day 2 is Col K (Index 10)
-                        # Formula: (Day * 4) + 2
-                        col_idx = (d.day * 4) + 2
-                        tested_cols.append(col_idx)
-                        
+                    if h_idx != -1 and match_indices:
+                        header_row = df_naat.iloc[h_idx + 1].fillna("").astype(str).str.upper()
+                        for idx in match_indices:
+                            for offset in range(6):
+                                check_idx = idx + offset
+                                if check_idx < len(header_row) and "TESTED" in header_row.iloc[check_idx]:
+                                    tested_cols.append(check_idx)
+                                    break
+                                    
                     if not tested_cols: continue
                     found_any_date = True
                     
-                    # Data starts at Row 3 (Index 2)
-                    df_valid = df_naat.iloc[2:].copy()
+                    df_valid = df_naat.iloc[h_idx + 2:].copy()
                     mask_tot = (df_valid[0].astype(str).str.upper().str.contains("TOTAL", na=False) | 
                                 df_valid[1].astype(str).str.upper().str.contains("TOTAL", na=False) | 
                                 df_valid[2].astype(str).str.upper().str.contains("TOTAL", na=False))
@@ -1318,14 +1317,10 @@ with tab4:
                     for _, row in grouped_temp.iterrows():
                         s_name = str(row[0]).strip()
                         site_totals[s_name] = site_totals.get(s_name, 0) + row['Tested_Sum']
-                        
-                    # 🧹 Aggressive Garbage Collection to prevent OOM
-                    del df_naat
-                    gc.collect()
 
                 except Exception as e: return None, f"⚠️ Fetch Error on Month {target_month}: {str(e)}"
 
-            if not found_any_date: return None, "⚠️ Could not find data for selected dates. Ensure you didn't pick dates in the future."
+            if not found_any_date: return None, "⚠️ Could not find 'NAAT TESTED' columns for selected dates in either May, June, July, or August sheets."
             
             grouped = pd.DataFrame(list(site_totals.items()), columns=['NAAT Site', 'Tested'])
             
