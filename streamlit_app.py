@@ -999,7 +999,6 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 NEW: Dynamically processing all granular facility URLs directly (Auto-sums Zone Totals)
             fac_urls = [
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # Sept UHC/Hosp
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", # Sept HWC
@@ -1038,7 +1037,6 @@ with tab4:
                         df_fac = pd.read_csv(io.BytesIO(content), header=None, names=list(range(60)), dtype=str, engine='python', on_bad_lines='skip')
                     
                     df_fac.dropna(how='all', inplace=True)
-                    # 🛡️ BULLETPROOF: Forward-fill the Zone column to fix Merged Cells!
                     df_fac[0] = df_fac[0].replace(r'^\s*$', pd.NA, regex=True).replace(["", "nan", "NaN", "None"], pd.NA).ffill()
                     
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
@@ -1048,26 +1046,31 @@ with tab4:
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                             
-                            # 🛡️ Skip pre-calculated totals to avoid double counting!
                             if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or fac_name in ["", "nan", "None"]: continue
                                 
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             
-                            # 🚀 Auto-calculate Zone Totals directly from granular Facility sheets
-                            mapped_z = map_zone(zone_guj)
-                            if mapped_z and mapped_z in zone_achievements:
-                                zone_achievements[mapped_z] += achieved_total
-                            
+                            # 🚀 THE FIX: Categorize perfectly into Hosp, CHC, HWC, UHC
                             fac_type = "OTHER"
                             f_upper = fac_name.upper()
-                            # 🚀 Multilingual detection: Guj & Eng
-                            if "અર્બન" in f_upper or "UHC" in f_upper or "URBAN" in f_upper or "U-HWC" in f_upper or "-1" in f_upper or "-2" in f_upper or "-3" in f_upper: 
-                                fac_type = "UHC"
-                            elif "સામુહીક" in f_upper or "CHC" in f_upper: 
-                                fac_type = "CHC"
-                            elif "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper: 
-                                fac_type = "HOSPITAL"
                             
+                            if "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper or "CIVIL" in f_upper: 
+                                fac_type = "HOSPITAL"
+                            elif "સામુહીક" in f_upper or "સામુહિક" in f_upper or "CHC" in f_upper: 
+                                fac_type = "CHC"
+                            elif "HWC" in f_upper or "-1" in f_upper or "-2" in f_upper or "-3" in f_upper or "- 1" in f_upper or "- 2" in f_upper: 
+                                fac_type = "HWC"
+                            elif "અર્બન" in f_upper or "UHC" in f_upper or "URBAN" in f_upper: 
+                                fac_type = "UHC"
+                                
+                            mapped_z = map_zone(zone_guj)
+                            
+                            # 🚀 THE FIX: Zone Total ONLY includes UHC + CHC + HWC (Hospitals explicitly excluded!)
+                            if fac_type in ["UHC", "CHC", "HWC"]:
+                                if mapped_z and mapped_z in zone_achievements:
+                                    zone_achievements[mapped_z] += achieved_total
+                            
+                            # 🚀 THE FIX: Facility Slides ONLY record UHC, CHC, and Hospital (HWCs safely excluded from <75% slides)
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
