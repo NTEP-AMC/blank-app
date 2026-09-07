@@ -999,20 +999,22 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            fac_urls = [
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # Sept UHC/Hosp
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", # Sept HWC
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2038437224", # Aug UHC/Hosp
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", # Aug HWC
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", # Older
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", # Older
-                "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721"   # Older
+            # 🚀 NEW: Assigned "type" natively to the URLs so the script NEVER guesses wrong!
+            fac_url_configs = [
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", "type": "MAIN"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", "type": "HWC"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2038437224", "type": "MAIN"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", "type": "HWC"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", "type": "MAIN"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", "type": "MAIN"},
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721", "type": "MAIN"}
             ]
 
+            # 🚀 ROBUST MAPPING: Strips spaces completely to prevent "પશ્ચિમ ઝોન" vs "પશ્ચિમઝોન" errors
             def map_zone(z_raw):
-                z_str = str(z_raw).upper().strip()
-                if "ઉત્તર પશ્ચિમ" in z_str or "NORTH WEST" in z_str or z_str == "NWZ": return "North West"
-                if "દક્ષિણ પશ્ચિમ" in z_str or "SOUTH WEST" in z_str or z_str == "SWZ": return "South West"
+                z_str = str(z_raw).upper().replace(' ', '')
+                if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or z_str == "NWZ": return "North West"
+                if "દક્ષિણપશ્ચિમ" in z_str or "SOUTHWEST" in z_str or z_str == "SWZ": return "South West"
                 if "મધ્ય" in z_str or "CENTRAL" in z_str or z_str == "CZ": return "Central"
                 if "ઉત્તર" in z_str or "NORTH" in z_str or z_str == "NZ": return "North"
                 if "દક્ષિણ" in z_str or "SOUTH" in z_str or z_str == "SZ": return "South"
@@ -1026,9 +1028,9 @@ with tab4:
             # ----------------------------------------------------
             # 1️⃣ AGGREGATE FACILITY & AUTO-CALCULATE ZONE DATA
             # ----------------------------------------------------
-            for url in fac_urls:
+            for config in fac_url_configs:
                 try:
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    req = urllib.request.Request(config["url"], headers={'User-Agent': 'Mozilla/5.0'})
                     with urllib.request.urlopen(req, timeout=30) as response:
                         content = response.read()
                         
@@ -1050,27 +1052,29 @@ with tab4:
                                 
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             
-                            # 🚀 THE FIX: Categorize perfectly into Hosp, CHC, HWC, UHC
+                            mapped_z = map_zone(zone_guj)
+                            
+                            # 🚀 THE FIX: Categorize perfectly using strict Source Type assignments!
                             fac_type = "OTHER"
                             f_upper = fac_name.upper()
                             
-                            if "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper or "CIVIL" in f_upper: 
-                                fac_type = "HOSPITAL"
-                            elif "સામુહીક" in f_upper or "સામુહિક" in f_upper or "CHC" in f_upper: 
-                                fac_type = "CHC"
-                            elif "HWC" in f_upper or "-1" in f_upper or "-2" in f_upper or "-3" in f_upper or "- 1" in f_upper or "- 2" in f_upper: 
+                            if config["type"] == "HWC":
                                 fac_type = "HWC"
-                            elif "અર્બન" in f_upper or "UHC" in f_upper or "URBAN" in f_upper: 
-                                fac_type = "UHC"
+                            else:
+                                if "હોસ્પિટલ" in f_upper or "HOSPITAL" in f_upper or "HOSP" in f_upper or "MEDICAL" in f_upper or "GMERS" in f_upper or "CIVIL" in f_upper or "એસ.સી.એલ" in f_upper or "એસ.વી.પી" in f_upper: 
+                                    fac_type = "HOSPITAL"
+                                elif "સામુહીક" in f_upper or "સામુહિક" in f_upper or "CHC" in f_upper: 
+                                    fac_type = "CHC"
+                                else:
+                                    # 🚀 If it's in the MAIN sheet and it's NOT a Hospital/CHC, it is mathematically guaranteed to be a UHC! (Fixes missing English names instantly)
+                                    fac_type = "UHC"
                                 
-                            mapped_z = map_zone(zone_guj)
-                            
-                            # 🚀 THE FIX: Zone Total ONLY includes UHC + CHC + HWC (Hospitals explicitly excluded!)
+                            # 🚀 THE FIX: Zone Total Slide ONLY adds UHC + CHC + HWC (Hospitals explicitly excluded!)
                             if fac_type in ["UHC", "CHC", "HWC"]:
                                 if mapped_z and mapped_z in zone_achievements:
                                     zone_achievements[mapped_z] += achieved_total
                             
-                            # 🚀 THE FIX: Facility Slides ONLY record UHC, CHC, and Hospital (HWCs safely excluded from <75% slides)
+                            # 🚀 THE FIX: Facility Slides ONLY record UHC, CHC, and Hospital (HWCs are safely banned from the < 75% slides!)
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
