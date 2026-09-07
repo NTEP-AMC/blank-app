@@ -791,7 +791,7 @@ with tab4:
             from pptx.util import Inches, Pt
             from pptx.dml.color import RGBColor
             from pptx.enum.text import PP_ALIGN
-        except ImportError: return None, "⚠️ PPTX library is not installed."
+        except ImportError: return None, "⚠️ PPTX લાઈબ્રેરી ઇન્સ્ટોલ નથી!"
 
         prs = Presentation()
         m1 = apply_date_filters(df, p1_diag, p1_init, p1_out)
@@ -999,7 +999,7 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 STRICTLY THE 4 REQUIRED SHEETS (Zero Double-Counting)
+            # 🚀 STRICTLY THE 4 REQUIRED SHEETS (No double counting!)
             fac_url_configs = [
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", "type": "MAIN"},
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", "type": "HWC"},
@@ -1007,8 +1007,8 @@ with tab4:
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", "type": "HWC"}
             ]
 
-            # 🚀 FLAWLESS MULTILINGUAL MAPPING (Perfect West Zone catch)
-            def map_zone(z_raw, f_name=""):
+            # 🚀 FLAWLESS WEST ZONE WILDCARD MAPPING
+            def map_zone(z_raw):
                 if not isinstance(z_raw, str): return None
                 z_str = z_raw.upper().replace(' ', '').replace('\u200B', '').replace('\u200D', '')
                 if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or "NWZ" in z_str: return "North West"
@@ -1017,7 +1017,8 @@ with tab4:
                 if "ઉત્તર" in z_str or "NORTH" in z_str or "NZ" in z_str: return "North"
                 if "દક્ષિણ" in z_str or "SOUTH" in z_str or "SZ" in z_str: return "South"
                 if "પૂર્વ" in z_str or "EAST" in z_str or "EZ" in z_str: return "East"
-                if "પશ્ચિમ" in z_str or "WEST" in z_str or "WZ" in z_str or "પશ્ચીમ" in z_str or "પશ્ર્ચિમ" in z_str: return "West"
+                # This explicitly catches ALL Gujarati typing errors for West Zone (પશ્ચિમ, પશ્વિમ, પશ્ર્ચિમ)
+                if "પશ્" in z_str or "WEST" in z_str or "WZ" in z_str: return "West"
                 return None
 
             fac_achievements = {}
@@ -1044,16 +1045,17 @@ with tab4:
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                             
+                            # Disregard pre-aggregated total rows
                             if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or "TOTAL" in zone_guj.upper() or fac_name in ["", "nan", "None"]:
                                 continue
                                 
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
-                            mapped_z = map_zone(zone_guj, fac_name)
+                            mapped_z = map_zone(zone_guj)
                             
                             f_upper = fac_name.upper()
                             fac_type = "OTHER"
                             
-                            # 🚀 STRICT UHC IDENTIFICATION: If it doesn't have these exact words, it's not a UHC!
+                            # 🚀 STRICT FACILITY IDENTIFICATION
                             if config["type"] == "HWC":
                                 fac_type = "HWC"
                             else:
@@ -1064,14 +1066,14 @@ with tab4:
                                 elif any(x in f_upper for x in ["અર્બન", "UHC", "URBAN"]):
                                     fac_type = "UHC"
                                 else:
-                                    fac_type = "OTHER"
+                                    fac_type = "UHC" # If it's in the Main Sheet and not a Hosp/CHC, it defaults to UHC to catch misnamed facilities!
                                 
-                            # 🚀 ZONE MASTER SLIDE: Sums UHC + CHC + HWC + OTHER (Hospitals explicitly banned!)
-                            if fac_type in ["UHC", "CHC", "HWC", "OTHER"]:
+                            # 🚀 ZONE TOTAL SLIDE: Strictly UHC + CHC + HWC. (Hospitals mathematically excluded!)
+                            if fac_type in ["UHC", "CHC", "HWC"]:
                                 if mapped_z and mapped_z in zone_achievements:
                                     zone_achievements[mapped_z] += achieved_total
                             
-                            # 🚀 FACILITY SLIDES: Stores UHC, CHC, and Hospital
+                            # 🚀 FACILITY ARRAYS: HWCs are blocked from entering the UHC/CHC/Hosp slides!
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
@@ -1130,7 +1132,7 @@ with tab4:
 
                 # --- 📉 UHC SLIDES (< 75%) ---
                 if not df_fac_processed.empty:
-                    # 🚀 ABSOLUTE FIREWALL: Only strictly confirmed UHCs that fall below 75% are included!
+                    # 🚀 ABSOLUTE FIREWALL: Only strictly typed UHCs that fall below 75% are included!
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75.0)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
                     df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
