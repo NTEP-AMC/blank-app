@@ -999,7 +999,7 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # 🚀 NEW: Dynamically processing all facility URLs (UHC/CHC/Hosp & HWC) directly
+            # 🚀 NEW: Integrated your exact August and September URLs
             fac_urls = [
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", # Sept UHC/Hosp
                 "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", # Sept HWC
@@ -1029,7 +1029,16 @@ with tab4:
             # ----------------------------------------------------
             for url in fac_urls:
                 try:
-                    df_fac = pd.read_csv(url, header=None, names=list(range(130)), dtype=str, engine='python', on_bad_lines='skip')
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        content = response.read()
+                        
+                        # Prevent locked sheets from crashing
+                        if b"<html" in content[:50].lower(): continue
+                        
+                        # 🛡️ THE FIX: Force 60 columns so Pandas doesn't drop your data rows because of the merged header in Row 1!
+                        df_fac = pd.read_csv(io.BytesIO(content), header=None, names=list(range(60)), dtype=str, engine='python', on_bad_lines='skip')
+                    
                     df_fac.dropna(how='all', inplace=True)
                     h_idx2, col_indices_fac = find_date_columns(df_fac, date_list)
                             
@@ -1037,8 +1046,11 @@ with tab4:
                         for row_idx in range(h_idx2 + 1, len(df_fac)):
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
+                            
+                            # Safely skip completely empty rows and totals
                             if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or fac_name in ["", "nan", "None"]: continue
                                 
+                            # Safe numeric extraction, ignores text like 'Independence day'
                             achieved_total = sum([extract_num(df_fac.iloc[row_idx, c]) for c in col_indices_fac])
                             
                             # 🚀 Auto-calculate Zone Totals directly from Facility sheets (including HWCs!)
@@ -1046,9 +1058,9 @@ with tab4:
                             if mapped_z and mapped_z in zone_achievements:
                                 zone_achievements[mapped_z] += achieved_total
                             
-                            # 🚀 FIXED: Better parsing to correctly catch English "UHC" and not throw them into "OTHER"
                             fac_type = "OTHER"
                             f_upper = fac_name.upper()
+                            # 🚀 Fixed identification for English UHCs so they map to the correct slide!
                             if "અર્બન હેલ્થ સેન્ટર" in fac_name or "UHC" in f_upper or "URBAN HEALTH" in f_upper: 
                                 fac_type = "UHC"
                             elif "સામુહીક" in fac_name or "સામુહિક" in fac_name or "CHC" in f_upper: 
@@ -1115,6 +1127,7 @@ with tab4:
 
                 # --- 📉 UHC SLIDES ---
                 if not df_fac_processed.empty:
+                    # 🚀 Fix for "< 75% UHC": Rebuilt precisely to filter properly based on calculated targets
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
                     df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
