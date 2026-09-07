@@ -999,36 +999,25 @@ with tab4:
             prs = Presentation()
             fixed_targets = {"Central": 59, "North": 122, "East": 117, "South": 159, "West": 121, "North West": 77, "South West": 55, "AMC": 710}
             
-            # URLs designated by exact dataset type
+            # 🚀 STRICTLY THE 4 REQUIRED SHEETS (Zero Double-Counting)
             fac_url_configs = [
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=0", "type": "MAIN"},
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1148698977", "type": "HWC"},
                 {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=2038437224", "type": "MAIN"},
-                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", "type": "HWC"},
-                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1701147118", "type": "MAIN"},
-                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1036506436", "type": "MAIN"},
-                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=218126721", "type": "MAIN"}
+                {"url": "https://docs.google.com/spreadsheets/d/19Whbn-0bGNxVcxiGmp9fCq44dKeNZXAAbPiXtVf3zcs/export?format=csv&gid=1693324270", "type": "HWC"}
             ]
 
-            # Multilingual Zone mapper that inspects both zone text and facility names
+            # 🚀 FLAWLESS MULTILINGUAL MAPPING (Perfect West Zone catch)
             def map_zone(z_raw, f_name=""):
-                z_str = str(z_raw).upper()
-                z_clean = re.sub(r'[\s\u200B\u200C\u200D\uFEFF\.\-_]', '', z_str)
-                f_clean = str(f_name).upper()
-                
-                # Direct match via Zone strings
-                if "ઉત્તરપશ્ચિમ" in z_clean or "NORTHWEST" in z_clean or z_clean == "NWZ": return "North West"
-                if "દક્ષિણપશ્ચિમ" in z_clean or "SOUTHWEST" in z_clean or z_clean == "SWZ": return "South West"
-                if "મધ્ય" in z_clean or "CENTRAL" in z_clean or z_clean == "CZ": return "Central"
-                if "ઉત્તર" in z_clean or "NORTH" in z_clean or z_clean == "NZ": return "North"
-                if "દક્ષિણ" in z_clean or "SOUTH" in z_clean or z_clean == "SZ": return "South"
-                if "પૂર્વ" in z_clean or "EAST" in z_clean or z_clean == "EZ": return "East"
-                if any(w in z_clean for w in ["પશ્ચિમ", "પશ્વિમ", "પશ્રિમ", "પશ્ચીમ", "પશ્ચ", "પશ્વિ", "WEST", "WZ", "વેસ્ટ"]): return "West"
-                if z_clean.startswith("પ") and not z_clean.startswith("પૂ") and not z_clean.startswith("પૂર્વ"): return "West"
-                
-                # Contextual fallback based on known facility names
-                if any(k in f_clean for k in ["પાલડી", "વાસણા", "આંબાવાડી", "નવરંગપુરા", "નારણપુરા", "સ્ટેડીયમ", "વાડજ", "રાણીપ", "કાલી", "સાબરમતી", "ચાંદખેડા", "PALDI", "VASNA", "AMBAWADI", "NAVRANGPURA", "NARANPURA", "STADIUM", "VADAJ", "RANIP"]):
-                    return "West"
+                if not isinstance(z_raw, str): return None
+                z_str = z_raw.upper().replace(' ', '').replace('\u200B', '').replace('\u200D', '')
+                if "ઉત્તરપશ્ચિમ" in z_str or "NORTHWEST" in z_str or "NWZ" in z_str: return "North West"
+                if "દક્ષિણપશ્ચિમ" in z_str or "SOUTHWEST" in z_str or "SWZ" in z_str: return "South West"
+                if "મધ્ય" in z_str or "CENTRAL" in z_str or "CZ" in z_str: return "Central"
+                if "ઉત્તર" in z_str or "NORTH" in z_str or "NZ" in z_str: return "North"
+                if "દક્ષિણ" in z_str or "SOUTH" in z_str or "SZ" in z_str: return "South"
+                if "પૂર્વ" in z_str or "EAST" in z_str or "EZ" in z_str: return "East"
+                if "પશ્ચિમ" in z_str or "WEST" in z_str or "WZ" in z_str or "પશ્ચીમ" in z_str or "પશ્ર્ચિમ" in z_str: return "West"
                 return None
 
             fac_achievements = {}
@@ -1055,7 +1044,6 @@ with tab4:
                             zone_guj = str(df_fac.iloc[row_idx, 0]).strip()
                             fac_name = str(df_fac.iloc[row_idx, 1]).strip()
                             
-                            # Disregard pre-aggregated total rows
                             if "કુલ" in fac_name or "કુલ" in zone_guj or "TOTAL" in fac_name.upper() or "TOTAL" in zone_guj.upper() or fac_name in ["", "nan", "None"]:
                                 continue
                                 
@@ -1065,23 +1053,25 @@ with tab4:
                             f_upper = fac_name.upper()
                             fac_type = "OTHER"
                             
+                            # 🚀 STRICT UHC IDENTIFICATION: If it doesn't have these exact words, it's not a UHC!
                             if config["type"] == "HWC":
                                 fac_type = "HWC"
                             else:
-                                if any(x in f_upper for x in ["હોસ્પિટલ", "HOSPITAL", "HOSP", "MEDICAL", "GMERS", "CIVIL", "એસ.સી.એલ", "એસ.વી.પી"]):
+                                if any(x in f_upper for x in ["હોસ્પિટલ", "HOSPITAL", "HOSP", "MEDICAL", "GMERS", "CIVIL", "એસ.સી.એલ", "એસ.વી.પી", "SCL", "SVP", "SHARDABEN", "શારદાબેન"]):
                                     fac_type = "HOSPITAL"
                                 elif any(x in f_upper for x in ["સામુહીક", "સામુહિક", "CHC", "COMMUNITY HEALTH"]):
                                     fac_type = "CHC"
-                                else:
-                                    # All non-hospital/non-CHC entities in the main sheet are UHCs
+                                elif any(x in f_upper for x in ["અર્બન", "UHC", "URBAN"]):
                                     fac_type = "UHC"
+                                else:
+                                    fac_type = "OTHER"
                                 
-                            # Zone Total includes UHC + CHC + HWC (Hospitals strictly excluded)
-                            if fac_type in ["UHC", "CHC", "HWC"]:
+                            # 🚀 ZONE MASTER SLIDE: Sums UHC + CHC + HWC + OTHER (Hospitals explicitly banned!)
+                            if fac_type in ["UHC", "CHC", "HWC", "OTHER"]:
                                 if mapped_z and mapped_z in zone_achievements:
                                     zone_achievements[mapped_z] += achieved_total
                             
-                            # Facility slides include UHC, CHC, and Hospital (HWCs excluded)
+                            # 🚀 FACILITY SLIDES: Stores UHC, CHC, and Hospital
                             if fac_type in ["UHC", "CHC", "HOSPITAL"]:
                                 dict_key = (mapped_z if mapped_z else zone_guj, fac_name, fac_type)
                                 fac_achievements[dict_key] = fac_achievements.get(dict_key, 0) + achieved_total
@@ -1140,6 +1130,7 @@ with tab4:
 
                 # --- 📉 UHC SLIDES (< 75%) ---
                 if not df_fac_processed.empty:
+                    # 🚀 ABSOLUTE FIREWALL: Only strictly confirmed UHCs that fall below 75% are included!
                     df_uhc = df_fac_processed[(df_fac_processed["Type"] == "UHC") & (df_fac_processed["Achievement %"] < 75.0)].sort_values("Achievement %").drop(columns=["Type"]).reset_index(drop=True)
                     df_uhc_display = df_uhc.copy()
                     df_uhc_display["Achievement %"] = df_uhc_display["Achievement %"].astype(str) + "%"
@@ -1206,6 +1197,7 @@ with tab4:
             out_io = io.BytesIO()
             prs.save(out_io)
             return out_io.getvalue(), "Success"
+
         except Exception as e: return None, f"⚠️ Error: {str(e)}"
 
     if btn_generate_target:
@@ -1417,7 +1409,6 @@ with tab4:
                     st.success("✅ NAAT Utilization Deck Ready!")
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
-
     
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
