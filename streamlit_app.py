@@ -12,13 +12,25 @@ import gc  # 🛡️ Imported Garbage Collector for RAM management
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore") # Catch-all for any lingering pandas warnings
 
 st.set_page_config(page_title="AMC NTEP Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
+# ==========================================
+# 🖼️ IMAGE HANDLERS FOR NEW LOGIN UI
+# ==========================================
 def img_to_b64(img_path):
     try:
         with open(img_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode('utf-8')
     except: return ""
+
+def first_existing_b64(candidates):
+    for name in candidates:
+        # Check in images folder first, then root folder
+        b64 = img_to_b64(f"images/{name}")
+        if not b64: b64 = img_to_b64(name)
+        if b64: return b64
+    return ""
 
 LOG_FILE = "activity_log.csv"
 india_tz = pytz.timezone('Asia/Kolkata')
@@ -46,70 +58,140 @@ except:
     st.stop()
 
 # ==========================================
-# 🔐 ENTERPRISE LOGIN PAGE
+# 🔐 ENTERPRISE LOGIN PAGE (NEW PREMIUM UI)
 # ==========================================
 if not st.session_state.auth:
     b64_amc = img_to_b64("images/amc.png")
+    if not b64_amc: b64_amc = img_to_b64("amc.png")
+
+    JALI_CANDIDATES = [
+        "banner_sidi-saiyyad-jali_902.png", "banner_sidi-saiyyad-jali_902.jpg", "banner_sidi-saiyyad-jali_902.jpeg",
+        "sidi-saiyyad-jali.png", "sidi-saiyyad-jali.jpg", "sidi_saiyyad_jali.png", "sidi_saiyyad_jali.jpg"
+    ]
+    RIVERFRONT_CANDIDATES = [
+        "ahmedabad_riverfront.png", "ahmedabad_riverfront.jpg", "ahmedabad_riverfront.jpeg",
+        "riverfront.png", "riverfront.jpg", "sabarmati_riverfront.png", "sabarmati_riverfront.jpg"
+    ]
     
-    st.markdown("""
+    b64_jali = first_existing_b64(JALI_CANDIDATES)
+    b64_riverfront = first_existing_b64(RIVERFRONT_CANDIDATES)
+
+    riverfront_layer = (
+        f"linear-gradient(180deg, rgba(244,247,251,0.85) 0%, rgba(244,247,251,0.97) 100%), url('data:image/png;base64,{b64_riverfront}')"
+        if b64_riverfront else "none"
+    )
+    jali_layer = (
+        f"linear-gradient(160deg, rgba(10,58,110,0.90) 0%, rgba(18,74,138,0.80) 55%, rgba(10,58,110,0.92) 100%), url('data:image/png;base64,{b64_jali}')"
+        if b64_jali else "linear-gradient(160deg, #0A3A6E 0%, #124a8a 60%, #1a5aa8 100%)"
+    )
+
+    st.markdown(f"""
     <style>
-    .left-panel { background: #0A3A6E; color: white; padding: 40px 30px; border-radius: 15px 0 0 15px; height: 100%; text-align: center; position: relative; overflow: hidden; }
-    .right-panel { padding: 40px; background: white; border-radius: 0 15px 15px 0; border: 1px solid #e2e8f0; border-left: none; height: 100%; display: flex; flex-direction: column; justify-content: center;}
-    .stTextInput>div>div>input { background-color: #f8fafc; border-radius: 8px; border: 1px solid #cbd5e1; padding: 12px; }
-    .stButton>button { background-color: #0A3A6E; color: white; border-radius: 8px; width: 100%; font-weight: 600; padding: 10px; margin-top: 15px; }
-    .stButton>button:hover { background-color: #185FA5; color: white; border-color: #185FA5; }
+        #MainMenu, footer, header {{visibility: hidden;}}
+        html, body, [data-testid="stAppViewContainer"] {{
+            background: {riverfront_layer};
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+        .gov-topbar {{
+            background: #0A3A6E; color: #dbeafe; text-align:center;
+            font-size: 12.5px; letter-spacing: 0.6px; font-weight: 600;
+            padding: 8px 0; text-transform: uppercase;
+            border-bottom: 3px solid #c9a227;
+        }}
+        div[data-testid="stHorizontalBlock"] {{
+            max-width: 900px;
+            margin: 5vh auto 0 auto;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(15,23,42,0.18);
+            border: 1px solid #e2e8f0;
+        }}
+        .brand-panel {{
+            background: {jali_layer};
+            background-size: cover;
+            background-position: center;
+            filter: saturate(1.02);
+            color: #fff;
+            padding: 48px 32px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 480px;
+        }}
+        .brand-panel img {{
+            background: #fff;
+            border-radius: 50%;
+            padding: 8px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            margin-bottom: 22px;
+        }}
+        .brand-panel h2 {{ font-size: 23px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: 0.5px; }}
+        .brand-panel p {{ font-size: 13px; color: #dbe9fb; line-height: 1.5; margin: 0; }}
+        .brand-tag {{
+            margin-top: 26px; font-size: 11.5px; color: #cfe1f7; border-top: 1px solid rgba(255,255,255,0.35);
+            padding-top: 14px; width: 100%;
+        }}
+        [data-testid="column"]:has(.form-panel-marker) {{
+            background: #ffffff;
+        }}
+        [data-testid="column"]:has(.form-panel-marker) [data-testid="stVerticalBlock"] {{
+            padding: 52px 46px;
+        }}
+        .form-panel-marker {{ display: none; }}
+        .form-panel-heading h3 {{ color: #0f172a !important; font-weight: 800; font-size: 24px; margin-bottom: 4px; }}
+        .form-panel-heading .sub {{ color: #475569 !important; font-size: 13.5px; margin-bottom: 26px; }}
+        [data-testid="stTextInput"] label, [data-testid="stTextInput"] label p {{
+            color: #1e293b !important; font-weight: 700 !important; font-size: 13.5px !important;
+        }}
+        .stTextInput>div>div>input {{
+            border-radius: 10px; border: 1.5px solid #cbd5e1; padding: 11px 14px; font-size: 14px;
+            color: #0f172a !important; background: #fff !important;
+        }}
+        .stTextInput>div>div>input:focus {{ border-color: #0A3A6E; box-shadow: 0 0 0 3px rgba(10,58,110,0.12); }}
+        .stButton>button {{
+            background: linear-gradient(135deg, #0A3A6E 0%, #1a5aa8 100%);
+            color: white !important; border: none; border-radius: 10px; width: 100%;
+            font-weight: 700; padding: 12px; margin-top: 8px; letter-spacing: 0.3px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }}
+        .stButton>button:hover {{ transform: translateY(-1px); box-shadow: 0 10px 20px rgba(10,58,110,0.3); }}
     </style>
+    <div class="gov-topbar">Government of Gujarat &nbsp;·&nbsp; Ahmedabad Municipal Corporation &nbsp;·&nbsp; National TB Elimination Programme</div>
     """, unsafe_allow_html=True)
     
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    sp1, login_box, sp2 = st.columns([1, 6, 1])
-    
-    with login_box:
-        l_col, r_col = st.columns([4, 5], gap="small")
+    outer_l, outer_r = st.columns([4, 5], gap="small")
+    with outer_l:
+        st.markdown(f"""
+        <div class="brand-panel">
+            <img src="data:image/png;base64,{b64_amc}" width="62">
+            <h2>AMC · NTEP</h2>
+            <p>Adverse Outcomes &amp; Field Entry Module</p>
+            <div class="brand-tag">Ahmedabad Municipal Corporation<br>National TB Elimination Programme</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with l_col:
-            st.markdown(f"""
-<div class="left-panel">
-<div style="background: #F0F6FF; width: 85px; height: 85px; border-radius: 50%; margin: 0 auto 20px auto; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.25);">
-<img src="data:image/png;base64,{b64_amc}" width="65">
-</div>
-<div style="display:inline-block; background:rgba(255,255,255,0.1); padding: 5px 13px; border-radius: 20px; font-size: 10px; letter-spacing: 1.8px; margin-bottom: 20px; border: 0.5px solid rgba(255,255,255,0.2);">
-<span style="color:#5DCAA5;">●</span> <span style="color:#9FC8F0; font-weight:600;">AMC · NTEP</span>
-</div>
-<h2 style="font-family: serif; margin-bottom: 12px; font-size: 24px; font-weight: 600;">National TB Elimination Programme</h2>
-<p style="font-size: 13px; color: #85B7EB; line-height: 1.6; margin-bottom:30px;">Ahmedabad Municipal Corporation's centralised surveillance & management platform for TB programme monitoring.</p>
-<div style="border-top: 1px solid rgba(255,255,255,0.14); padding-top: 15px; display: flex; justify-content: space-around;">
-<div><b style="font-size: 18px;">7</b><br><span style="font-size: 10px; color: #85B7EB;">ZONES</span></div>
-<div><b style="font-size: 18px;">23</b><br><span style="font-size: 10px; color: #85B7EB;">TB UNITS</span></div>
-<div><b style="font-size: 18px;">Live</b><br><span style="font-size: 10px; color: #85B7EB;">REPORTING</span></div>
-</div>
-</div>
-            """, unsafe_allow_html=True)
-            
-        with r_col:
-            st.markdown("""
-<div style="padding: 10px 10px 20px 10px;">
-<h3 style="color: #1e293b; margin-bottom: 5px; font-weight: 600;">Sign in to your account</h3>
-<p style="color: #64748b; font-size: 13px;">Access restricted to authorised Zone & TB Unit personnel only.</p>
-</div>
-            """, unsafe_allow_html=True)
-            
-            uname = st.text_input("User ID / Zone Code", placeholder="e.g. AMC-Z3-001").strip().upper()
-            pwd = st.text_input("Password", type="password", placeholder="Enter your password").strip()
-            
-            if st.button("Sign In Securely", width="stretch"):
-                user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
-                if not user_match.empty: 
-                    st.session_state.auth = True
-                    st.session_state.current_user = uname
-                    st.session_state.role = user_match.iloc[0]['Role']
-                    st.session_state.target = user_match.iloc[0]['Target']
-                    log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged In")
-                    st.rerun()
-                else: 
-                    st.error("⚠️ Invalid User ID or Password")
-                    
-            st.markdown("<p style='text-align: right; color: #378ADD; font-size: 12px; margin-top: 15px; cursor: pointer;'>Forgot password?</p>", unsafe_allow_html=True)
+    with outer_r:
+        st.markdown('<span class="form-panel-marker"></span>', unsafe_allow_html=True)
+        st.markdown("<div class='form-panel-heading'><h3>Sign in</h3><div class='sub'>Enter your assigned credentials to continue</div></div>", unsafe_allow_html=True)
+        
+        uname = st.text_input("User ID / Zone Code").strip().upper()
+        pwd = st.text_input("Password", type="password").strip()
+        
+        if st.button("Sign In Securely", width="stretch"):
+            user_match = df_users[(df_users['Username'] == uname) & (df_users['Password'] == pwd)]
+            if not user_match.empty: 
+                st.session_state.auth = True
+                st.session_state.current_user = uname
+                st.session_state.role = user_match.iloc[0]['Role']
+                st.session_state.target = user_match.iloc[0]['Target']
+                log_activity(st.session_state.current_user, st.session_state.role, st.session_state.target, "Logged In")
+                st.rerun()
+            else: 
+                st.error("⚠️ Invalid User ID or Password")
 
     st.stop()
 
@@ -174,7 +256,6 @@ def convert_df_to_excel(df, sheet_name="Data"):
             if column_len > 30: column_len = 30 
             worksheet.set_column(i, i, int(column_len), cell_format)
     return output.getvalue()
-
 
 # 🚀 THE SOLID RAM SOLUTION: Unused Presumptive datasets completely removed!
 @st.cache_data(ttl=900, max_entries=1, show_spinner="🔄 Initializing database engine and loading core NTEP registers...")
@@ -371,7 +452,9 @@ if not df_time.empty:
             with t_cols[i % 6]: 
                 st.markdown(f"<div style='font-size:13px; color:#333;'><b>{row['Register']}</b><br><span style='color:{color}; font-weight:bold;'>{row['Last Updated']}</span></div>", unsafe_allow_html=True)
 
+# 🚨 Tab 8 Removed entirely!
 tab1, tab2, tab4, tab5, tab6, tab9, tab10 = st.tabs(["📊 Master Dashboard", "🔄 Daily Comparison", "🚀 Smart PPT", "🏥 Diff. Care", "👥 Staff Directory", "📱 Live Field Data", "📞 Post Follow Up"])
+
 
 # ==========================================
 # 🟢 TAB 1: MASTER DASHBOARD
