@@ -1561,7 +1561,7 @@ with tab5:
             st.success(f"🎉 No pending patients for {sel_period} in the selected criteria!")
 
         # -------------------------------------------------------------
-        # 🎯 DYNAMIC COHORT MATRIX 
+        # 🎯 DYNAMIC COHORT MATRIX (Upgraded to Multi-Level Matrix Layout)
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
@@ -1632,6 +1632,7 @@ with tab5:
             entity_df = df_mat[df_mat['Entity_Col'] == entity]
             row = {entity_label: entity}
             
+            t_elig, t_pend = 0, 0
             for label, rx, elig_col, m_offset in mat_periods:
                 target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
                 target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
@@ -1643,21 +1644,26 @@ with tab5:
                 due = cohort['Due_Status'].fillna('').astype(str).str.upper()
                 not_comp = ~due.str.contains("COMPLETED", na=False)
                 
-                # 🛡️ THE FIX FOR MATRIX: Trust Due_Status completely
                 is_pending = not_comp & due.str.contains(rx, na=False)
                 pend_cnt = is_pending.sum()
                 
-                # Force Eligible to be >= Pending
                 elig_cnt = max(elig_cnt, pend_cnt)
-                
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
                 
                 row[f'Ep_{label}'] = elig_cnt
                 row[f'{label}'] = pend_cnt
                 row[f'% {label}'] = f"{pct}%"
+                
+                t_elig += elig_cnt
+                t_pend += pend_cnt
+                
+            row['OVERALL ELIGIBLE'] = t_elig
+            row['OVERALL PENDING'] = t_pend
+            row['OVERALL %'] = f"{round((t_pend/t_elig*100) if t_elig>0 else 0)}%"
             mat_rows.append(row)
             
         amc_row = {entity_label: 'AMC TOTAL'}
+        t_elig_amc, t_pend_amc = 0, 0
         for label, rx, elig_col, m_offset in mat_periods:
             target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
             target_end = (target_start + relativedelta(months=1)) - datetime.timedelta(days=1)
@@ -1669,43 +1675,77 @@ with tab5:
             due = amc_cohort['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
-            # 🛡️ THE FIX FOR AMC MATRIX ROW: Trust Due_Status completely
             is_pending = not_comp & due.str.contains(rx, na=False)
             pend_cnt = is_pending.sum()
             
-            # Force Eligible to be >= Pending
             elig_cnt = max(elig_cnt, pend_cnt)
-            
             pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
             
             amc_row[f'Ep_{label}'] = elig_cnt
             amc_row[f'{label}'] = pend_cnt
             amc_row[f'% {label}'] = f"{pct}%"
             
+            t_elig_amc += elig_cnt
+            t_pend_amc += pend_cnt
+            
+        amc_row['OVERALL ELIGIBLE'] = t_elig_amc
+        amc_row['OVERALL PENDING'] = t_pend_amc
+        amc_row['OVERALL %'] = f"{round((t_pend_amc/t_elig_amc*100) if t_elig_amc>0 else 0)}%"
         mat_rows.append(amc_row)
+        
         df_matrix_final = pd.DataFrame(mat_rows)
         
-        rename_dict = {}
-        for i, (label, _, _, _) in enumerate(mat_periods):
-            rename_dict[f'Ep_{label}'] = "Episode ID" + (" " * i)
-        df_matrix_final = df_matrix_final.rename(columns=rename_dict)
+        # 🚀 Build MultiIndex Columns matching exact image layout
+        col_tuples = [("", entity_label)]
+        flat_cols = [entity_label] 
+        
+        for label, rx, elig_col, m_offset in mat_periods:
+            target_start = ref_date.replace(day=1) - relativedelta(months=m_offset)
+            m_name = target_start.strftime('%B').upper()
+            
+            col_tuples.extend([
+                (m_name, "Episode ID"),
+                (m_name, label.upper()),
+                (m_name, f"% {label.upper()}")
+            ])
+            flat_cols.extend([f'Ep_{label}', f'{label}', f'% {label}'])
+            
+        col_tuples.extend([
+            ("TOTAL PENDING WORK", "OVERALL ELIGIBLE"),
+            ("TOTAL PENDING WORK", "OVERALL PENDING"),
+            ("TOTAL PENDING WORK", "%")
+        ])
+        flat_cols.extend(['OVERALL ELIGIBLE', 'OVERALL PENDING', 'OVERALL %'])
+        
+        df_matrix_final = df_matrix_final[flat_cols]
+        df_matrix_final.columns = pd.MultiIndex.from_tuples(col_tuples)
         
         def style_matrix(styler):
-            styler.set_properties(**{'text-align': 'center'})
-            styler.set_properties(subset=[entity_label], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
-            for label, _, _, _ in mat_periods:
-                col_name = f'% {label}'
-                def color_rule(val):
-                    try:
-                        v = float(val.replace('%', '').strip())
-                        if v >= 10: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' 
-                        elif v >= 5: return 'background-color: #F9E79F; color: #856404; font-weight: bold;'
-                        else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;'
-                    except: return ''
-                styler.map(color_rule, subset=[col_name])
+            styler.set_properties(**{'text-align': 'center', 'border': '1px solid #cbd5e1'})
+            styler.set_properties(subset=[("", entity_label)], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
+            
+            pct_cols = [c for c in df_matrix_final.columns if '%' in c[1] or c[1] == '%']
+            
+            # 🚀 Exact color coding from image (Red >=25, Yellow >=15, Green <15)
+            def color_rule(val):
+                try:
+                    v = float(str(val).replace('%', '').strip())
+                    if v >= 25: return 'background-color: #F1948A; color: #721c24; font-weight: bold;' 
+                    elif v >= 15: return 'background-color: #F9E79F; color: #856404; font-weight: bold;'
+                    else: return 'background-color: #ABEBC6; color: #155724; font-weight: bold;'
+                except: return ''
+            
+            if pct_cols:
+                styler.map(color_rule, subset=pct_cols)
             return styler
-        
+
         st.dataframe(df_matrix_final.style.pipe(style_matrix), width="stretch", hide_index=True)
+        
+        # 📥 Download button logic for MultiIndex CSV
+        df_csv = df_matrix_final.copy()
+        df_csv.columns = ['_'.join(col).strip('_') for col in df_csv.columns.values]
+        st.download_button("📥 Download Pending Matrix (CSV)", df_csv.to_csv(index=False).encode('utf-8'), f"DiffCare_Pending_Matrix.csv", "text/csv")
+
 
         # -------------------------------------------------------------
         # 🎯 🔄 DIFF CARE COMPARISON ENGINE (BOTTOM)
