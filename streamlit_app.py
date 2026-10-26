@@ -1403,6 +1403,7 @@ with tab4:
                     st.download_button(label="📥 Download NAAT_Report.pptx", data=naat_ppt_bytes, file_name="NAAT_Utilization_Report.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", key="dl_naat_ppt")
                 else: st.error(n_status)
 
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
@@ -1478,13 +1479,11 @@ with tab5:
             due = df['Due_Status'].fillna('').astype(str).str.upper()
             not_comp = ~due.str.contains("COMPLETED", na=False)
             
-            # 🛡️ THE FIX: Trust the Due_Status column 100%. Removed `is_elig &` to stop double-filtering.
             is_pending = not_comp & due.str.contains(p_regex, na=False)
             pending_pts = df[is_pending].groupby(group_col).size()
             
             summary = pd.DataFrame({'Total Patient': total_pts, 'Eligible': eligible_pts, 'Pending': pending_pts}).fillna(0).astype(int)
             
-            # 🛡️ THE FIX: Ensure Eligible is never lower than Pending (stops negative Completed counts)
             summary['Eligible'] = summary[['Eligible', 'Pending']].max(axis=1)
             summary['Completed'] = summary['Eligible'] - summary['Pending']
             
@@ -1547,7 +1546,6 @@ with tab5:
 
         st.markdown(f"##### 📋 {sel_period} Pending Line List")
         
-        # 🛡️ THE FIX FOR LINE LIST: Trust Due_Status completely
         due_ll = df_dc['Due_Status'].fillna('').astype(str).str.upper()
         not_comp_ll = ~due_ll.str.contains("COMPLETED", na=False)
         is_pending_ll = not_comp_ll & due_ll.str.contains(p_regex, na=False)
@@ -1565,6 +1563,7 @@ with tab5:
         # -------------------------------------------------------------
         import datetime
         from dateutil.relativedelta import relativedelta
+        import io
         
         st.markdown("<br><hr style='border: 1.5px solid #2C3E50;'>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #2C3E50;'>📊 Consolidated Monthly Pending Matrix (Dynamic Cohorts)</h4>", unsafe_allow_html=True)
@@ -1696,7 +1695,7 @@ with tab5:
         df_matrix_final = pd.DataFrame(mat_rows)
         
         # 🚀 Build MultiIndex Columns matching exact image layout
-        col_tuples = [("", entity_label)]
+        col_tuples = [("", entity_label.upper())]
         flat_cols = [entity_label] 
         
         for label, rx, elig_col, m_offset in mat_periods:
@@ -1722,11 +1721,10 @@ with tab5:
         
         def style_matrix(styler):
             styler.set_properties(**{'text-align': 'center', 'border': '1px solid #cbd5e1'})
-            styler.set_properties(subset=[("", entity_label)], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
+            styler.set_properties(subset=[("", entity_label.upper())], **{'text-align': 'left', 'font-weight': 'bold', 'background-color': '#f8f9fa'})
             
             pct_cols = [c for c in df_matrix_final.columns if '%' in c[1] or c[1] == '%']
             
-            # 🚀 Exact color coding from image (Red >=25, Yellow >=15, Green <15)
             def color_rule(val):
                 try:
                     v = float(str(val).replace('%', '').strip())
@@ -1740,17 +1738,65 @@ with tab5:
             return styler
 
         st.dataframe(df_matrix_final.style.pipe(style_matrix), width="stretch", hide_index=True)
-        
-        # 📥 Download button logic for MultiIndex CSV
-        df_csv = df_matrix_final.copy()
-        df_csv.columns = ['_'.join(col).strip('_') for col in df_csv.columns.values]
-        st.download_button("📥 Download Pending Matrix (CSV)", df_csv.to_csv(index=False).encode('utf-8'), f"DiffCare_Pending_Matrix.csv", "text/csv")
+
+        # 📥 🚀 GENERATE PERFECT EXCEL FILE WITH MULTI-LEVEL HEADERS & COLORS
+        def generate_matrix_excel(df):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='Pending Matrix', index=False)
+                
+                workbook  = writer.book
+                worksheet = writer.sheets['Pending Matrix']
+                
+                # Setup formats
+                red_fmt = workbook.add_format({'bg_color': '#F1948A', 'font_color': '#721c24', 'bold': True, 'align': 'center', 'border': 1})
+                yellow_fmt = workbook.add_format({'bg_color': '#F9E79F', 'font_color': '#856404', 'bold': True, 'align': 'center', 'border': 1})
+                green_fmt = workbook.add_format({'bg_color': '#ABEBC6', 'font_color': '#155724', 'bold': True, 'align': 'center', 'border': 1})
+                default_fmt = workbook.add_format({'align': 'center', 'border': 1})
+                zone_fmt = workbook.add_format({'align': 'left', 'bold': True, 'border': 1})
+                
+                # Auto-adjust column widths so they aren't squished
+                worksheet.set_column(0, 0, 18) 
+                worksheet.set_column(1, len(df.columns), 12)
+                
+                # Apply cell colors to the body
+                for row_idx in range(len(df)):
+                    excel_row = row_idx + 2 # MultiIndex header uses top 2 rows
+                    for col_idx, col in enumerate(df.columns):
+                        val = df.iloc[row_idx, col_idx]
+                        
+                        if col_idx == 0:
+                            worksheet.write(excel_row, col_idx, val, zone_fmt)
+                            continue
+                            
+                        # If the column name contains "%", apply conditional coloring
+                        if '%' in col[1] or col[1] == '%':
+                            try:
+                                v = float(str(val).replace('%', '').strip())
+                                if v >= 25: worksheet.write(excel_row, col_idx, val, red_fmt)
+                                elif v >= 15: worksheet.write(excel_row, col_idx, val, yellow_fmt)
+                                else: worksheet.write(excel_row, col_idx, val, green_fmt)
+                            except:
+                                worksheet.write(excel_row, col_idx, val, default_fmt)
+                        else:
+                            worksheet.write(excel_row, col_idx, val, default_fmt)
+                            
+            return output.getvalue()
+
+        # The new Download Excel button
+        excel_matrix_bytes = generate_matrix_excel(df_matrix_final)
+        st.download_button(
+            label="📥 Download Pending Matrix (Excel)", 
+            data=excel_matrix_bytes, 
+            file_name=f"DiffCare_Pending_Matrix_{ref_date.strftime('%b_%Y')}.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_matrix_excel"
+        )
 
 
         # -------------------------------------------------------------
         # 🎯 🔄 DIFF CARE COMPARISON ENGINE (BOTTOM)
         # -------------------------------------------------------------
-        import io
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #E67E22;'>🔄 Diff Care Comparison Engine (Old vs New Sheet)</h4>", unsafe_allow_html=True)
         
@@ -1909,7 +1955,6 @@ with tab5:
                         st.success(f"✅ Comparison Generated Successfully for {comp_dates[0].strftime('%d-%b-%Y')} to {comp_dates[1].strftime('%d-%b-%Y')}!")
                         st.dataframe(df_final_comp, width="stretch", hide_index=True)
                         
-                        # 🟢 MAGIC HAPPENS HERE: Triggering the Custom Multi-Sheet Excel Engine!
                         excel_bytes = generate_diff_care_excel(df_final_comp)
                         st.download_button("📥 Download Comparison Matrix & Summary", excel_bytes, f"DiffCare_Comparison_{comp_dates[0]}_to_{comp_dates[1]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key='dl_dc_comp')
                     else:
