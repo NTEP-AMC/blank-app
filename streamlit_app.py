@@ -1743,7 +1743,11 @@ with tab5:
         def generate_matrix_excel(df):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Pending Matrix', index=False)
+                # 🛑 THE FIX: Pandas blocks index=False with MultiIndex. 
+                # So we drop the MultiIndex, write pure data, and manually draw the beautiful headers!
+                df_export = df.copy()
+                df_export.columns = range(len(df.columns)) 
+                df_export.to_excel(writer, sheet_name='Pending Matrix', index=False, header=False, startrow=2)
                 
                 workbook  = writer.book
                 worksheet = writer.sheets['Pending Matrix']
@@ -1755,13 +1759,32 @@ with tab5:
                 default_fmt = workbook.add_format({'align': 'center', 'border': 1})
                 zone_fmt = workbook.add_format({'align': 'left', 'bold': True, 'border': 1})
                 
-                # Auto-adjust column widths so they aren't squished
+                header_top_fmt = workbook.add_format({'bg_color': '#1f497d', 'font_color': 'white', 'bold': True, 'align': 'center', 'valign': 'vcenter', 'border': 1})
+                header_bot_fmt = workbook.add_format({'bg_color': '#1f497d', 'font_color': 'white', 'bold': True, 'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True})
+
                 worksheet.set_column(0, 0, 18) 
-                worksheet.set_column(1, len(df.columns), 12)
+                worksheet.set_column(1, len(df.columns) - 1, 12)
+                
+                # Draw Level 0 (Top Header: e.g. "SEPTEMBER", "TOTAL PENDING WORK")
+                col_idx = 0
+                while col_idx < len(df.columns):
+                    top_val = df.columns[col_idx][0]
+                    span = 1
+                    while col_idx + span < len(df.columns) and df.columns[col_idx + span][0] == top_val:
+                        span += 1
+                    if span > 1 and top_val != "":
+                        worksheet.merge_range(0, col_idx, 0, col_idx + span - 1, top_val, header_top_fmt)
+                    else:
+                        worksheet.write(0, col_idx, top_val, header_top_fmt)
+                    col_idx += span
+
+                # Draw Level 1 (Bottom Header: e.g. "Episode ID", "BASELINE", "% BASELINE")
+                for c_idx, col_tuple in enumerate(df.columns):
+                    worksheet.write(1, c_idx, col_tuple[1], header_bot_fmt)
                 
                 # Apply cell colors to the body
                 for row_idx in range(len(df)):
-                    excel_row = row_idx + 2 # MultiIndex header uses top 2 rows
+                    excel_row = row_idx + 2
                     for col_idx, col in enumerate(df.columns):
                         val = df.iloc[row_idx, col_idx]
                         
@@ -1769,7 +1792,6 @@ with tab5:
                             worksheet.write(excel_row, col_idx, val, zone_fmt)
                             continue
                             
-                        # If the column name contains "%", apply conditional coloring
                         if '%' in col[1] or col[1] == '%':
                             try:
                                 v = float(str(val).replace('%', '').strip())
@@ -1783,7 +1805,6 @@ with tab5:
                             
             return output.getvalue()
 
-        # The new Download Excel button
         excel_matrix_bytes = generate_matrix_excel(df_matrix_final)
         st.download_button(
             label="📥 Download Pending Matrix (Excel)", 
