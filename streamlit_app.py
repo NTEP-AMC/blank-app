@@ -1404,6 +1404,7 @@ with tab4:
                 else: st.error(n_status)
 
 
+
 # ==========================================
 # 🟢 TAB 5: DIFFERENTIATED CARE (MINI BOXES, DYNAMIC MATRIX & COMPARISON ENGINE)
 # ==========================================
@@ -1627,6 +1628,10 @@ with tab5:
             df_mat['Entity_Col'] = df_mat['PHI'].astype(str).str.strip().str.upper()
         
         mat_rows = []
+        
+        # 🚀 Store the line lists for the Excel export
+        matrix_line_lists = {}
+        
         for entity in display_entities:
             entity_df = df_mat[df_mat['Entity_Col'] == entity]
             row = {entity_label: entity}
@@ -1645,6 +1650,13 @@ with tab5:
                 
                 is_pending = not_comp & due.str.contains(rx, na=False)
                 pend_cnt = is_pending.sum()
+                
+                # Capture the line list data for this specific period
+                if pend_cnt > 0:
+                    pending_df = cohort[is_pending].copy()
+                    if label not in matrix_line_lists:
+                        matrix_line_lists[label] = []
+                    matrix_line_lists[label].append(pending_df)
                 
                 elig_cnt = max(elig_cnt, pend_cnt)
                 pct = round((pend_cnt/elig_cnt*100) if elig_cnt>0 else 0)
@@ -1694,7 +1706,6 @@ with tab5:
         
         df_matrix_final = pd.DataFrame(mat_rows)
         
-        # 🚀 Build MultiIndex Columns matching exact image layout
         col_tuples = [("", entity_label.upper())]
         flat_cols = [entity_label] 
         
@@ -1739,20 +1750,19 @@ with tab5:
 
         st.dataframe(df_matrix_final.style.pipe(style_matrix), width="stretch", hide_index=True)
 
-        # 📥 🚀 GENERATE PERFECT EXCEL FILE WITH MULTI-LEVEL HEADERS & COLORS
-        def generate_matrix_excel(df):
+        # 📥 🚀 EXCEL WITH MATRIX AND INDIVIDUAL PENDING LINE LIST TABS
+        def generate_matrix_excel_with_linelists(df_matrix, linelists_dict):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # 🛑 THE FIX: Pandas blocks index=False with MultiIndex. 
-                # So we drop the MultiIndex, write pure data, and manually draw the beautiful headers!
-                df_export = df.copy()
-                df_export.columns = range(len(df.columns)) 
+                
+                # --- 1. Draw the Matrix Sheet ---
+                df_export = df_matrix.copy()
+                df_export.columns = range(len(df_matrix.columns)) 
                 df_export.to_excel(writer, sheet_name='Pending Matrix', index=False, header=False, startrow=2)
                 
                 workbook  = writer.book
                 worksheet = writer.sheets['Pending Matrix']
                 
-                # Setup formats
                 red_fmt = workbook.add_format({'bg_color': '#F1948A', 'font_color': '#721c24', 'bold': True, 'align': 'center', 'border': 1})
                 yellow_fmt = workbook.add_format({'bg_color': '#F9E79F', 'font_color': '#856404', 'bold': True, 'align': 'center', 'border': 1})
                 green_fmt = workbook.add_format({'bg_color': '#ABEBC6', 'font_color': '#155724', 'bold': True, 'align': 'center', 'border': 1})
@@ -1763,14 +1773,13 @@ with tab5:
                 header_bot_fmt = workbook.add_format({'bg_color': '#1f497d', 'font_color': 'white', 'bold': True, 'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True})
 
                 worksheet.set_column(0, 0, 18) 
-                worksheet.set_column(1, len(df.columns) - 1, 12)
+                worksheet.set_column(1, len(df_matrix.columns) - 1, 12)
                 
-                # Draw Level 0 (Top Header: e.g. "SEPTEMBER", "TOTAL PENDING WORK")
                 col_idx = 0
-                while col_idx < len(df.columns):
-                    top_val = df.columns[col_idx][0]
+                while col_idx < len(df_matrix.columns):
+                    top_val = df_matrix.columns[col_idx][0]
                     span = 1
-                    while col_idx + span < len(df.columns) and df.columns[col_idx + span][0] == top_val:
+                    while col_idx + span < len(df_matrix.columns) and df_matrix.columns[col_idx + span][0] == top_val:
                         span += 1
                     if span > 1 and top_val != "":
                         worksheet.merge_range(0, col_idx, 0, col_idx + span - 1, top_val, header_top_fmt)
@@ -1778,20 +1787,16 @@ with tab5:
                         worksheet.write(0, col_idx, top_val, header_top_fmt)
                     col_idx += span
 
-                # Draw Level 1 (Bottom Header: e.g. "Episode ID", "BASELINE", "% BASELINE")
-                for c_idx, col_tuple in enumerate(df.columns):
+                for c_idx, col_tuple in enumerate(df_matrix.columns):
                     worksheet.write(1, c_idx, col_tuple[1], header_bot_fmt)
                 
-                # Apply cell colors to the body
-                for row_idx in range(len(df)):
+                for row_idx in range(len(df_matrix)):
                     excel_row = row_idx + 2
-                    for col_idx, col in enumerate(df.columns):
-                        val = df.iloc[row_idx, col_idx]
-                        
+                    for col_idx, col in enumerate(df_matrix.columns):
+                        val = df_matrix.iloc[row_idx, col_idx]
                         if col_idx == 0:
                             worksheet.write(excel_row, col_idx, val, zone_fmt)
                             continue
-                            
                         if '%' in col[1] or col[1] == '%':
                             try:
                                 v = float(str(val).replace('%', '').strip())
@@ -1802,14 +1807,52 @@ with tab5:
                                 worksheet.write(excel_row, col_idx, val, default_fmt)
                         else:
                             worksheet.write(excel_row, col_idx, val, default_fmt)
-                            
+                
+                # --- 2. Draw the Individual Line List Sheets ---
+                ll_display_cols = ['ZONE', 'TB Unit', 'PHI', 'Type_of_Case', 'Episode ID', 'Patient Name', 'Diagnosis Date', 'Initiation Date', 'Outcome Date', 'Treatment_Outcome', 'Due_Status']
+                ll_rename_dict = {'Type_of_Case': 'Patient Type', 'Treatment_Outcome': 'Outcome', 'Due_Status': 'Pending Status'}
+                
+                ll_hdr_fmt = workbook.add_format({'bold': True, 'bg_color': '#f2f2f2', 'border': 1, 'align': 'center'})
+                ll_cell_fmt = workbook.add_format({'border': 1, 'align': 'left'})
+                
+                for label in [p[0] for p in mat_periods]: # Assures order: Baseline, 1 Month, 2 Month...
+                    if label in linelists_dict and len(linelists_dict[label]) > 0:
+                        df_period_ll = pd.concat(linelists_dict[label])
+                        
+                        # Apply column filter and rename to match exact image structure
+                        df_period_ll = df_period_ll[ll_display_cols].rename(columns=ll_rename_dict)
+                        
+                        # Sort neatly by Zone and TB Unit
+                        df_period_ll = df_period_ll.sort_values(by=['ZONE', 'TB Unit', 'PHI'])
+                        
+                        sheet_name = f"{label} Pending"
+                        df_period_ll.to_excel(writer, sheet_name=sheet_name, index=False, header=False, startrow=1)
+                        
+                        ws = writer.sheets[sheet_name]
+                        ws.set_column('A:B', 15)
+                        ws.set_column('C:C', 35)
+                        ws.set_column('D:D', 15)
+                        ws.set_column('E:E', 15)
+                        ws.set_column('F:F', 30)
+                        ws.set_column('G:I', 15)
+                        ws.set_column('J:J', 20)
+                        ws.set_column('K:K', 40)
+                        
+                        for col_num, value in enumerate(df_period_ll.columns.values):
+                            ws.write(0, col_num, value, ll_hdr_fmt)
+                        
+                        for row_num in range(len(df_period_ll)):
+                            for col_num in range(len(df_period_ll.columns)):
+                                ws.write(row_num + 1, col_num, str(df_period_ll.iloc[row_num, col_num]), ll_cell_fmt)
+
             return output.getvalue()
 
-        excel_matrix_bytes = generate_matrix_excel(df_matrix_final)
+        # The new Download Excel button
+        excel_matrix_bytes = generate_matrix_excel_with_linelists(df_matrix_final, matrix_line_lists)
         st.download_button(
-            label="📥 Download Pending Matrix (Excel)", 
+            label="📥 Download Pending Matrix & Line Lists (Excel)", 
             data=excel_matrix_bytes, 
-            file_name=f"DiffCare_Pending_Matrix_{ref_date.strftime('%b_%Y')}.xlsx", 
+            file_name=f"DiffCare_Matrix_and_LineLists_{ref_date.strftime('%b_%Y')}.xlsx", 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="dl_matrix_excel"
         )
